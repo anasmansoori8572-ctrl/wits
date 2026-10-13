@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import crypto from 'crypto';
-import { whatsappCloudApiService } from '../../src/services/whatsappCloudApiService';
-import { whatsappNotificationService } from '../../src/services/whatsappNotificationService';
-import { studentSupportService } from '../../src/services/studentSupportService';
+import { whatsappCloudApiService } from '../../services/whatsappCloudApiService';
+import { whatsappNotificationService } from '../../services/whatsappNotificationService';
+import { studentSupportService } from '../../services/studentSupportService';
 
 // Disable Vercel's default body parser so we can capture the exact raw byte buffer for HMAC signature verification
 export const config = {
