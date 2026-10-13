@@ -25,9 +25,11 @@ import { AdminLoginPage } from './components/AdminLoginPage';
 import { GalleryPage } from './components/GalleryPage';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { SystemReportModal } from './components/SystemReportModal';
+import { CheckoutModal } from './components/CheckoutModal';
+import { PaymentStatusModal } from './components/PaymentStatusModal';
 import { WITS_LINGO_CONFIG } from './config/witsLingoConfig';
 
-type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings';
+type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings' | 'orders-payments' | 'whatsapp-notifications' | 'support-tickets' | 'knowledge-base';
 
 function parseAdminSubroute(path: string, hash: string): AdminTabType | undefined {
   const p = path.toLowerCase();
@@ -47,6 +49,10 @@ function parseAdminSubroute(path: string, hash: string): AdminTabType | undefine
   if (sub === 'testimonials' || sub === 'reviews') return 'testimonials';
   if (sub === 'announcements' || sub === 'notices') return 'announcements';
   if (sub === 'settings' || sub === 'logo' || sub === 'cms') return 'settings';
+  if (sub === 'orders' || sub === 'payments' || sub === 'orders-payments') return 'orders-payments';
+  if (sub === 'whatsapp' || sub === 'notifications' || sub === 'whatsapp-notifications') return 'whatsapp-notifications';
+  if (sub === 'tickets' || sub === 'support' || sub === 'support-tickets') return 'support-tickets';
+  if (sub === 'knowledge' || sub === 'knowledge-base' || sub === 'faqs' || sub === 'faq') return 'knowledge-base';
   return undefined;
 }
 
@@ -119,6 +125,18 @@ export default function App() {
   const [authRole, setAuthRole] = useState<'student' | 'admin'>('student');
   const [selectedCourseForAdmission, setSelectedCourseForAdmission] = useState<string | undefined>();
   const [selectedBatchForAdmission, setSelectedBatchForAdmission] = useState<string | undefined>();
+
+  // Automated Checkout & Payment Status Modals
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [selectedCourseForCheckout, setSelectedCourseForCheckout] = useState<string | undefined>();
+  const [isPaymentStatusOpen, setIsPaymentStatusOpen] = useState(false);
+  const [paymentStatusOrderId, setPaymentStatusOrderId] = useState<string | undefined>();
+  const [paymentStatusData, setPaymentStatusData] = useState<any>(null);
+
+  const handleOpenCheckout = (courseId?: string) => {
+    setSelectedCourseForCheckout(courseId || courses[0]?.id || 'course-spoken-english');
+    setIsCheckoutOpen(true);
+  };
 
   // Live CMS Course, Batch, Testimonial, and Site Settings State with LocalStorage Caching
   const [courses, setCourses] = useState<CourseData[]>(() => {
@@ -382,6 +400,21 @@ export default function App() {
       } else if (hash === '#home' || path === '/') {
         setCurrentView(prev => (prev === 'gallery' || prev === 'admin-login' ? 'home' : prev));
       }
+
+      // Check URL query parameters for instant checkout and payment confirmation
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const checkoutCourse = urlParams.get('checkout') || urlParams.get('buy') || urlParams.get('course');
+        if (checkoutCourse) {
+          setSelectedCourseForCheckout(checkoutCourse);
+          setIsCheckoutOpen(true);
+        }
+        const orderParam = urlParams.get('orderId') || urlParams.get('payment-success') || urlParams.get('order');
+        if (orderParam) {
+          setPaymentStatusOrderId(orderParam);
+          setIsPaymentStatusOpen(true);
+        }
+      } catch (e) {}
     };
 
     handleUrlChange();
@@ -584,6 +617,7 @@ export default function App() {
           <CoursesSection
             courses={courses}
             onEnroll={(courseId) => handleOpenAdmission(courseId)}
+            onBuyNow={(courseId) => handleOpenCheckout(courseId)}
           />
 
           {/* 2b. Batches & Seat Capacity */}
@@ -658,6 +692,40 @@ export default function App() {
           localStorage.setItem('wits_lingo_user', JSON.stringify(user));
           localStorage.setItem('wits_lingo_token', token);
           setCurrentView('student-dashboard');
+        }}
+      />
+
+      {/* Express Checkout Modal */}
+      <CheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        courses={courses}
+        initialCourseId={selectedCourseForCheckout}
+        onPaymentVerified={(data) => {
+          setIsCheckoutOpen(false);
+          setPaymentStatusData(data);
+          setPaymentStatusOrderId(data.order?.id);
+          setIsPaymentStatusOpen(true);
+          if (data.studentUser) {
+            setCurrentUser(data.studentUser);
+            localStorage.setItem('wits_lingo_user', JSON.stringify(data.studentUser));
+          }
+        }}
+      />
+
+      {/* Verified Payment Success & Status Modal */}
+      <PaymentStatusModal
+        isOpen={isPaymentStatusOpen}
+        onClose={() => setIsPaymentStatusOpen(false)}
+        orderId={paymentStatusOrderId}
+        initialData={paymentStatusData}
+        onGoToCourse={() => {
+          setIsPaymentStatusOpen(false);
+          setCurrentView('student-dashboard');
+        }}
+        onRetryPayment={(courseId) => {
+          setIsPaymentStatusOpen(false);
+          handleOpenCheckout(courseId);
         }}
       />
 

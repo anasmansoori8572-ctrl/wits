@@ -7,8 +7,10 @@ import {
   X, Check, AlertTriangle, Phone, Mail, MapPin, Eye, EyeOff, RefreshCw,
   Megaphone, Pin, Clock, Calendar, Tag, Lock, Sparkles, Link as LinkIcon, BookOpen, Bell,
   Landmark, CreditCard, Cloud, Film, UploadCloud, Copy, PlayCircle,
-  Image as ImageIcon, Images, ArrowUp, ArrowDown, FolderPlus, Youtube
+  Image as ImageIcon, Images, ArrowUp, ArrowDown, FolderPlus, Youtube,
+  AlertCircle
 } from 'lucide-react';
+import { AdminAutomationTabs } from './AdminAutomationTabs';
 import { AnnouncementModal } from './AnnouncementModal';
 import { ProtectedPdfViewer } from './ProtectedPdfViewer';
 import { PdfUploadInput } from './PdfUploadInput';
@@ -17,6 +19,8 @@ import { useScrollLock } from '../hooks/useScrollLock';
 import { CountryCodePhoneInput } from './CountryCodePhoneInput';
 import { CountryPhoneCode, DEFAULT_COUNTRY_CODE, ALL_COUNTRY_PHONE_CODES } from '../data/countryPhoneCodes';
 import { AddressHierarchySelector } from './AddressHierarchySelector';
+
+export type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings' | 'orders-payments' | 'whatsapp-notifications' | 'support-tickets' | 'knowledge-base';
 
 function extractYouTubeVideoId(url?: string): string {
   if (!url) return '';
@@ -42,7 +46,7 @@ interface AdminPanelProps {
   onUpdateAnnouncements?: (announcements: Announcement[]) => void;
   materials?: StudyMaterial[];
   onUpdateMaterials?: (materials: StudyMaterial[]) => void;
-  initialTab?: 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings';
+  initialTab?: AdminTabType;
   onTabChange?: (tab: string) => void;
 }
 
@@ -67,7 +71,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   initialTab,
   onTabChange
 }) => {
-  const [activeTab, setActiveTab] = useState<'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings'>(initialTab || 'students');
+  const [activeTab, setActiveTab] = useState<AdminTabType>(initialTab || 'students');
 
   useEffect(() => {
     if (initialTab && initialTab !== activeTab) {
@@ -2061,6 +2065,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             { id: 'students', label: `Admissions & Students (${students.length})`, icon: Users },
             { id: 'courses', label: `Courses & Pricing (${courses.length})`, icon: Layers },
             { id: 'batches', label: `Batches & Capacity (${batches.length})`, icon: RefreshCw },
+            { id: 'orders-payments', label: 'Orders & Payments', icon: CreditCard },
+            { id: 'whatsapp-notifications', label: 'WhatsApp Logs', icon: MessageSquare },
+            { id: 'support-tickets', label: 'Support Tickets & AI', icon: AlertCircle },
+            { id: 'knowledge-base', label: 'AI Knowledge & FAQs', icon: BookOpen },
             { id: 'classes', label: 'Live Classes Scheduler', icon: Video },
             { id: 'recordings', label: 'Class Recordings', icon: Play },
             { id: 'materials', label: `Study Notes & PDFs (${materials.filter(m => m.resourceType !== 'youtube' && m.fileType !== 'youtube').length})`, icon: FileText },
@@ -5325,6 +5333,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </form>
           </div>
+        )}
+
+        {/* ==================================================================== */}
+        {/* AUTOMATION TABS: ORDERS & PAYMENTS, WHATSAPP, TICKETS, KNOWLEDGE BASE */}
+        {/* ==================================================================== */}
+        {(activeTab === 'orders-payments' || 
+          activeTab === 'whatsapp-notifications' || 
+          activeTab === 'support-tickets' || 
+          activeTab === 'knowledge-base') && (
+          <AdminAutomationTabs activeTab={activeTab} token={token} />
         )}
 
         {/* ==================================================================== */}

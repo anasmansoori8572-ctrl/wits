@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+uploads/data/whatsapp-session*/
+uploads/data/isolated-recipient-sessions*/
+uploads/data/whatsapp-message-store.json
+uploads/data/archive-baileys-backup/
+uploads/data/conversations.json
+uploads/data/messages.json
+uploads/data/support-tickets.json
+

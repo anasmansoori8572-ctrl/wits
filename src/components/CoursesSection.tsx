@@ -5,9 +5,10 @@ import { Clock, BookOpen, CheckCircle, ArrowRight, ShieldCheck, Sparkles, Filter
 interface CoursesSectionProps {
   courses: CourseData[];
   onEnroll: (courseId: string) => void;
+  onBuyNow?: (courseId: string) => void;
 }
 
-export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnroll }) => {
+export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnroll, onBuyNow }) => {
   const [selectedLevel, setSelectedLevel] = useState<string>('All');
 
   const levels = ['All', 'Beginner', 'Beginner to Intermediate', 'Intermediate', 'Advanced'];
@@ -143,14 +144,24 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
                   </div>
                 </div>
 
-                <button
-                  onClick={() => onEnroll(course.id)}
-                  id={`course-enroll-${course.id}`}
-                  className="px-5 py-2.5 rounded-full bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold tracking-wide shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span>Enroll Now</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => (onBuyNow ? onBuyNow(course.id) : onEnroll(course.id))}
+                    id={`course-buy-${course.id}`}
+                    className="px-4 py-2.5 rounded-full bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold tracking-wide shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Buy Now</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onEnroll(course.id)}
+                    id={`course-enroll-${course.id}`}
+                    className="px-3 py-2 rounded-full bg-white hover:bg-purple-50 text-[#4A1D96] border border-purple-200 text-xs font-semibold transition-all cursor-pointer"
+                    title="Open Detailed Admission Form"
+                  >
+                    <span>Form</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -171,12 +182,20 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
               </p>
             </div>
           </div>
-          <button
-            onClick={() => onEnroll(courses[0]?.id || 'course-spoken-english')}
-            className="px-4.5 py-2.5 bg-purple-50 hover:bg-purple-100 text-[#4A1D96] font-bold rounded-xl border border-purple-200 transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
-          >
-            Open Admission Form →
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => (onBuyNow ? onBuyNow(courses[0]?.id || 'course-spoken-english') : onEnroll(courses[0]?.id || 'course-spoken-english'))}
+              className="px-4 py-2.5 bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold rounded-xl transition-colors whitespace-nowrap cursor-pointer shadow-xs"
+            >
+              Instant Checkout →
+            </button>
+            <button
+              onClick={() => onEnroll(courses[0]?.id || 'course-spoken-english')}
+              className="px-3.5 py-2.5 bg-purple-50 hover:bg-purple-100 text-[#4A1D96] font-bold rounded-xl border border-purple-200 transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
+            >
+              Admission Form
+            </button>
+          </div>
         </div>
 
       </div>

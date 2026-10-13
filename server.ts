@@ -5,6 +5,11 @@ import crypto from "crypto";
 import fs from "fs";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { WITS_LINGO_CONFIG } from "./src/config/witsLingoConfig";
+import { whatsappCloudApiService } from "./src/services/whatsappCloudApiService";
+import { whatsappNotificationService } from "./src/services/whatsappNotificationService";
+import { studentSupportService } from "./src/services/studentSupportService";
+import { supportTicketService } from "./src/services/supportTicketService";
+import { getAiSupportService } from "./src/services/aiSupportService";
 
 let s3ClientInstance: S3Client | null = null;
 
@@ -439,6 +444,8 @@ interface DBPayment {
   id: string;
   orderId: string;
   paymentId: string;
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
   signature?: string;
   amount: number;
   currency: string;
@@ -632,6 +639,87 @@ interface DBGalleryItem {
   uploadedAt: string;
   uploadedBy?: string;
   fileSize?: string;
+}
+
+export interface DBOrder {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentPhone: string;
+  studentEmail: string;
+  courseId: string;
+  courseName: string;
+  batchId?: string;
+  batchName?: string;
+  coursePrice: number;
+  discountAmount: number;
+  discountCode?: string;
+  expectedAmount: number;
+  currency: string;
+  orderStatus: "pending" | "paid" | "failed" | "cancelled";
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DBNotification {
+  id: string;
+  orderId?: string;
+  studentId?: string;
+  recipientPhone: string;
+  channel: "whatsapp";
+  templateName: string;
+  messageStatus: "pending" | "accepted" | "sent" | "delivered" | "read" | "failed";
+  provider: "meta_cloud_api" | "none";
+  providerMessageId?: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  errorDetails?: string;
+  messageBody?: string;
+  createdAt: string;
+}
+
+export interface DBConversation {
+  id: string;
+  studentId?: string;
+  studentName?: string;
+  whatsappNumber: string;
+  status: "active" | "escalated" | "resolved";
+  lastMessageAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DBMessageItem {
+  id: string;
+  conversationId: string;
+  direction: "inbound" | "outbound";
+  messageText: string;
+  provider: "meta_cloud_api" | "webhook" | "admin" | "ai" | "chat_ui";
+  providerMessageId?: string;
+  createdAt: string;
+  aiGenerated?: boolean;
+}
+
+export interface DBSupportTicket {
+  id: string;
+  ticketNumber: string;
+  studentId?: string;
+  studentName?: string;
+  studentPhone: string;
+  orderId?: string;
+  category: "payment_dispute" | "refund_request" | "course_access" | "joining_link" | "syllabus_query" | "human_handover" | "general_query" | "other";
+  priority: "low" | "medium" | "high" | "urgent";
+  status: "Open" | "Assigned" | "In Progress" | "Waiting for Student" | "Resolved" | "Closed";
+  assignedAgentId?: string;
+  assignedAgentName?: string;
+  originalQuestion: string;
+  conversationId?: string;
+  resolutionNotes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Initial Data
@@ -1399,7 +1487,7 @@ let cmsContent: any = {
   settings: {
     youtubeUrl: "https://www.youtube.com/@witslingoeng"
   },
-  phoneNumbers: ["7310952271", "8576897694"],
+  phoneNumbers: ["7310952271", "8791287575"],
   email: "Witslingo@gmail.com",
   location: "Wits Lingo Academy, Dhakka, Amroha, Uttar Pradesh, India",
   whatsappChannel: "https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k",
@@ -1710,8 +1798,18 @@ const CMS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "cms-content.json");
 const ANNOUNCEMENTS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "announcements.json");
 const MATERIALS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "materials.json");
 const GALLERY_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "gallery.json");
+const ORDERS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "orders.json");
+const NOTIFICATIONS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "notifications.json");
+const CONVERSATIONS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "conversations.json");
+const MESSAGES_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "messages.json");
+const SUPPORT_TICKETS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "support-tickets.json");
 
 const payments: DBPayment[] = [];
+const orders: DBOrder[] = [];
+const notifications: DBNotification[] = [];
+const conversations: DBConversation[] = [];
+const messages: DBMessageItem[] = [];
+const supportTickets: DBSupportTicket[] = [];
 const galleryItems: DBGalleryItem[] = [
   {
     id: "gal-01",
@@ -1947,6 +2045,70 @@ function loadAllPersistedData(): void {
         savePersistedGallery();
       }
     }
+
+    // 9. Orders
+    if (fs.existsSync(ORDERS_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(ORDERS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data)) {
+          orders.length = 0;
+          orders.push(...data);
+          console.log(`[Persistence] Loaded ${orders.length} student orders.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse orders.json:", e);
+      }
+    }
+
+    // 10. Notifications
+    if (fs.existsSync(NOTIFICATIONS_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(NOTIFICATIONS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data)) {
+          notifications.length = 0;
+          notifications.push(...data);
+          console.log(`[Persistence] Loaded ${notifications.length} WhatsApp notifications.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse notifications.json:", e);
+      }
+    }
+
+    // 11. Conversations
+    if (fs.existsSync(CONVERSATIONS_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(CONVERSATIONS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data)) {
+          conversations.length = 0;
+          conversations.push(...data);
+        }
+      } catch (e) {}
+    }
+
+    // 12. Messages
+    if (fs.existsSync(MESSAGES_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(MESSAGES_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data)) {
+          messages.length = 0;
+          messages.push(...data);
+        }
+      } catch (e) {}
+    }
+
+    // 13. Support Tickets
+    if (fs.existsSync(SUPPORT_TICKETS_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(SUPPORT_TICKETS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data)) {
+          supportTickets.length = 0;
+          supportTickets.push(...data);
+          console.log(`[Persistence] Loaded ${supportTickets.length} support tickets.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse support-tickets.json:", e);
+      }
+    }
   } catch (err) {
     console.warn("[Persistence] Error loading persisted data from disk:", err);
   }
@@ -2013,6 +2175,46 @@ function savePersistedMaterials(): void {
     fs.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
   } catch (e) {
     console.warn("[Persistence] Could not save materials:", e);
+  }
+}
+
+function saveOrders(): void {
+  try {
+    fs.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save orders:", e);
+  }
+}
+
+function saveNotifications(): void {
+  try {
+    fs.writeFileSync(NOTIFICATIONS_STORAGE_FILE, JSON.stringify(notifications, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save notifications:", e);
+  }
+}
+
+function saveConversations(): void {
+  try {
+    fs.writeFileSync(CONVERSATIONS_STORAGE_FILE, JSON.stringify(conversations, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save conversations:", e);
+  }
+}
+
+function saveMessages(): void {
+  try {
+    fs.writeFileSync(MESSAGES_STORAGE_FILE, JSON.stringify(messages, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save messages:", e);
+  }
+}
+
+function saveSupportTickets(): void {
+  try {
+    fs.writeFileSync(SUPPORT_TICKETS_STORAGE_FILE, JSON.stringify(supportTickets, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save support tickets:", e);
   }
 }
 
@@ -2178,6 +2380,178 @@ async function sendWhatsAppEnrollmentMessage(data: {
   }
 }
 
+// =========================================================================
+// AUTOMATED TRANSACTIONAL PAYMENT CONFIRMATION VIA WHATSAPP
+// =========================================================================
+async function sendPaymentConfirmationWhatsApp(
+  order: DBOrder,
+  payment: DBPayment,
+  forceResend: boolean = false
+): Promise<{ success: boolean; messageId?: string; error?: string; skipped?: boolean }> {
+  return whatsappNotificationService.sendPaymentConfirmation({
+    orderId: order.id,
+    studentId: order.studentId,
+    studentName: order.studentName || "Student",
+    studentPhone: order.studentPhone,
+    courseName: order.courseName || "Wits Lingo Course",
+    amount: payment.amount || order.expectedAmount,
+    razorpayPaymentId: payment.razorpayPaymentId || payment.paymentId || "Verified",
+    startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
+    scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME,
+    meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK
+  }, forceResend);
+}
+
+// =========================================================================
+// INBOUND STUDENT WHATSAPP MESSAGE HANDLER (AI BOT & HUMAN ESCALATION)
+// =========================================================================
+async function handleInboundStudentMessage(
+  recipientPhone: string,
+  messageText: string,
+  provider: "meta_cloud_api" | "webhook" | "chat_ui",
+  providerMsgId?: string
+): Promise<{ replyText: string; ticketCreated?: boolean; ticketNumber?: string }> {
+  let cleanPhone = whatsappCloudApiService.normalizePhone(recipientPhone || "");
+  if (!cleanPhone) cleanPhone = "unknown";
+
+  // 1. Identify Student Context from DB
+  const matchedReg = registrations.find(r => {
+    const p1 = (r.phone || "").replace(/\D/g, "");
+    const p2 = (r.whatsapp || "").replace(/\D/g, "");
+    return cleanPhone.endsWith(p1) || cleanPhone.endsWith(p2) || p1.endsWith(cleanPhone);
+  });
+
+  const matchedOrder = orders.find(o => {
+    const op = (o.studentPhone || "").replace(/\D/g, "");
+    return cleanPhone.endsWith(op) || op.endsWith(cleanPhone);
+  });
+
+  const studentName = matchedReg?.name || matchedOrder?.studentName || "Student";
+  const studentEmail = matchedReg?.email || matchedOrder?.studentEmail;
+
+  // Find enrolled courses & payments
+  const studentEnrollments: any[] = [];
+  for (const r of registrations) {
+    const p1 = (r.phone || "").replace(/\D/g, "");
+    const p2 = (r.whatsapp || "").replace(/\D/g, "");
+    if (cleanPhone.endsWith(p1) || cleanPhone.endsWith(p2) || p1.endsWith(cleanPhone)) {
+      studentEnrollments.push({
+        courseId: r.courseId,
+        courseName: r.courseName,
+        batchName: r.batchName,
+        startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
+        meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,
+        paymentStatus: r.paymentStatus,
+        transactionId: r.paymentTxnId,
+        amountPaid: r.feeAmount
+      });
+    }
+  }
+
+  // 2. Find or Create Conversation
+  const convId = `conv_${cleanPhone}`;
+  let conv = conversations.find(c => c.id === convId);
+  if (!conv) {
+    conv = {
+      id: convId,
+      studentId: matchedReg?.id || matchedOrder?.studentId,
+      studentName,
+      whatsappNumber: cleanPhone,
+      status: "active",
+      lastMessageAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    conversations.unshift(conv);
+  } else {
+    conv.lastMessageAt = new Date().toISOString();
+    conv.updatedAt = new Date().toISOString();
+  }
+
+  // 3. Save Inbound Message
+  const inMsgId = `msg_in_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  messages.push({
+    id: inMsgId,
+    conversationId: convId,
+    direction: "inbound",
+    messageText,
+    provider,
+    providerMessageId: providerMsgId,
+    createdAt: new Date().toISOString()
+  });
+
+  // 4. Query AI Support Service
+  const aiService = getAiSupportService();
+  const aiResult = await aiService.answerInquiry(messageText, {
+    studentId: matchedReg?.id || matchedOrder?.studentId,
+    name: studentName,
+    phone: cleanPhone,
+    email: studentEmail,
+    enrolledCourses: studentEnrollments
+  });
+
+  let finalReply = aiResult.replyText;
+  let ticketNumber: string | undefined;
+
+  // 5. Handle Human Escalation / Support Ticket Creation
+  if (aiResult.shouldEscalate) {
+    const tktId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
+    ticketNumber = `TKT-${Math.floor(1000 + Math.random() * 9000)}`;
+    const ticket: DBSupportTicket = {
+      id: tktId,
+      ticketNumber,
+      studentId: matchedReg?.id || matchedOrder?.studentId,
+      studentName,
+      studentPhone: cleanPhone,
+      orderId: matchedOrder?.id,
+      category: (aiResult.escalationCategory as any) || "general_query",
+      priority: aiResult.escalationPriority || "medium",
+      status: "Open",
+      originalQuestion: messageText,
+      conversationId: convId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    supportTickets.unshift(ticket);
+    saveSupportTickets();
+    conv.status = "escalated";
+
+    if (!finalReply.includes(ticketNumber)) {
+      finalReply += `\n\n📌 Support Ticket Reference: #${ticketNumber}`;
+    }
+  }
+
+  // 6. Send Reply to Student via Official Meta WhatsApp Cloud API
+  if (provider === "meta_cloud_api" || provider === "webhook") {
+    try {
+      await whatsappCloudApiService.sendTextMessage(cleanPhone, finalReply);
+    } catch (e) {
+      console.warn("[WhatsApp AI] Meta reply dispatch exception:", e);
+    }
+  }
+
+  // 7. Save Outbound Message
+  const outMsgId = `msg_out_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  messages.push({
+    id: outMsgId,
+    conversationId: convId,
+    direction: "outbound",
+    messageText: finalReply,
+    provider: "ai",
+    aiGenerated: true,
+    createdAt: new Date().toISOString()
+  });
+
+  saveConversations();
+  saveMessages();
+
+  return {
+    replyText: finalReply,
+    ticketCreated: aiResult.shouldEscalate,
+    ticketNumber
+  };
+}
+
 export const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
@@ -2203,8 +2577,13 @@ try {
     b2Url?: string;
   }>();
 
-  // Allow larger payloads for PDF file uploads from files/gallery (up to 50MB)
-  app.use(express.json({ limit: "50mb" }));
+  // Allow larger payloads for PDF file uploads from files/gallery (up to 50MB) + capture rawBody for webhook signatures
+  app.use(express.json({
+    limit: "50mb",
+    verify: (req: any, _res: any, buf: Buffer) => {
+      req.rawBody = buf;
+    }
+  }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // CORS / headers
@@ -2219,8 +2598,46 @@ try {
   });
 
   // Health check
-  app.get("/api/health", (req, res) => {
+  app.get(["/api/health", "/health"], (req, res) => {
     res.json({ status: "ok", app: "Wits Lingo Academy Server", timestamp: new Date().toISOString() });
+  });
+
+  // =========================================================================
+  // OFFICIAL META WHATSAPP BUSINESS PLATFORM CLOUD API ENDPOINTS
+  // =========================================================================
+
+  // 1. Get Official Meta WhatsApp Cloud API Diagnostics & Status
+  app.get("/api/whatsapp/status", (_req, res) => {
+    res.json(whatsappCloudApiService.getDiagnostics());
+  });
+
+  // 2. Official Meta WhatsApp Cloud API Diagnostics
+  app.get("/api/whatsapp/diagnostic", (_req, res) => {
+    res.json(whatsappCloudApiService.getDiagnostics());
+  });
+
+  // 3. Send Official WhatsApp Test Message
+  app.post("/api/whatsapp/test-message", async (req, res) => {
+    try {
+      const phone = req.body?.phone?.trim() || process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "918791287575";
+      const message = req.body?.message?.trim() || "This is a test message from Wits Lingo official WhatsApp Cloud API.";
+
+      if (!phone) {
+        return res.status(400).json({
+          success: false,
+          error: "Recipient phone number is required."
+        });
+      }
+
+      const result = await whatsappCloudApiService.sendTextMessage(phone, message);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[WhatsApp Cloud API] Test message error:", err);
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Internal error sending WhatsApp Cloud API test message."
+      });
+    }
   });
 
   // 1. AUTH: Login (Supports Username, Email, Admission ID, and server-side ADMIN_USERNAME/ADMIN_PASSWORD)
@@ -3109,14 +3526,15 @@ www.witslingo.com`;
     }
   });
 
-  // 3. Webhook Listener for Asynchronous Payment Confirmations
+  // 3. Webhook Listener for Asynchronous Payment Confirmations (Hardened & Idempotent)
   app.post("/api/webhooks/razorpay", (req, res) => {
     try {
       const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
       const signature = req.headers["x-razorpay-signature"] as string;
 
       if (webhookSecret && signature) {
-        const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+        // Use exact raw body buffer for HMAC SHA256 signature verification
+        const rawBody = (req as any).rawBody || (typeof req.body === "string" ? req.body : JSON.stringify(req.body));
         const expectedSignature = crypto
           .createHmac("sha256", webhookSecret)
           .update(rawBody)
@@ -3139,35 +3557,103 @@ www.witslingo.com`;
           const paymentId = paymentEntity.id;
           const amount = paymentEntity.amount ? paymentEntity.amount / 100 : 0;
 
-          const reg = registrations.find(r => r.razorpayOrderId === orderId);
+          // 1. Check idempotency: If payment already recorded, acknowledge and return
+          const existingPayment = payments.find(p => p.paymentId === paymentId);
+          if (existingPayment) {
+            console.log(`[Razorpay Webhook] Payment ${paymentId} already recorded. Idempotent return.`);
+            return res.json({ status: "already_processed" });
+          }
+
+          // 2. Resolve matching Order
+          const matchedOrder = orders.find(o => o.razorpayOrderId === orderId || o.id === paymentEntity.notes?.orderId);
+          if (matchedOrder) {
+            matchedOrder.orderStatus = "paid";
+            matchedOrder.razorpayPaymentId = paymentId;
+            matchedOrder.updatedAt = new Date().toISOString();
+            saveOrders();
+          }
+
+          // 3. Resolve matching student registration
+          const reg = registrations.find(r => r.razorpayOrderId === orderId || (matchedOrder && r.phone === matchedOrder.studentPhone));
           if (reg) {
             reg.paymentStatus = "Paid";
             reg.razorpayPaymentId = paymentId;
             saveRegistrations();
           }
 
-          const existingPayment = payments.find(p => p.paymentId === paymentId);
-          if (!existingPayment) {
-            payments.unshift({
-              id: `pay-${Date.now()}`,
-              orderId: orderId || "",
-              paymentId: paymentId || "",
-              amount,
-              currency: paymentEntity.currency || "INR",
-              status: "Paid",
-              studentName: reg?.name || paymentEntity.notes?.studentName || "Student",
-              studentEmail: reg?.email || paymentEntity.email || "",
-              studentPhone: reg?.phone || paymentEntity.contact || "",
-              courseId: reg?.courseId || paymentEntity.notes?.courseId || "",
-              courseName: reg?.courseName || paymentEntity.notes?.courseName || "",
-              batchId: reg?.batchId || paymentEntity.notes?.batchId || "",
-              batchName: reg?.batchName || paymentEntity.notes?.batchName || "",
-              admissionId: reg?.admissionId || "",
-              method: paymentEntity.method || "Razorpay",
-              createdAt: new Date().toISOString(),
-              source: "razorpay_webhook"
+          const studentName = reg?.name || matchedOrder?.studentName || paymentEntity.notes?.studentName || "Student";
+          const studentEmail = reg?.email || matchedOrder?.studentEmail || paymentEntity.email || "";
+          const studentPhone = reg?.phone || matchedOrder?.studentPhone || paymentEntity.contact || "";
+          const courseId = reg?.courseId || matchedOrder?.courseId || paymentEntity.notes?.courseId || "";
+          const courseName = reg?.courseName || matchedOrder?.courseName || paymentEntity.notes?.courseName || "";
+          const batchId = reg?.batchId || matchedOrder?.batchId || paymentEntity.notes?.batchId || "batch-spoken-oct-2026";
+          const batchName = reg?.batchName || matchedOrder?.batchName || paymentEntity.notes?.batchName || "Assigned Batch";
+          const admissionId = reg?.admissionId || `WL-2026-${Date.now().toString().slice(-4)}`;
+
+          const newPaymentRecord: DBPayment = {
+            id: `pay-${Date.now()}`,
+            orderId: orderId || matchedOrder?.id || "",
+            paymentId: paymentId || "",
+            amount,
+            currency: paymentEntity.currency || "INR",
+            status: "Paid",
+            studentName,
+            studentEmail,
+            studentPhone,
+            courseId,
+            courseName,
+            batchId,
+            batchName,
+            admissionId,
+            method: paymentEntity.method || "Razorpay",
+            createdAt: new Date().toISOString(),
+            verifiedAt: new Date().toISOString(),
+            source: "razorpay_webhook",
+            rawPayload: paymentEntity
+          };
+
+          payments.unshift(newPaymentRecord);
+          savePayments();
+
+          // 4. Ensure Student Login Account Activated
+          let userRecord = users.find(u => u.phone === studentPhone || (studentEmail && u.email.toLowerCase() === studentEmail.toLowerCase()));
+          if (!userRecord) {
+            userRecord = {
+              id: `usr-${Date.now()}`,
+              name: studentName,
+              email: studentEmail || `${studentPhone}@student.witslingo.com`,
+              passwordHash: hashPassword(studentPhone.slice(-6) || "student123"),
+              role: "student",
+              phone: studentPhone,
+              batchIds: [batchId],
+              admissionId,
+              registrationDate: new Date().toISOString()
+            };
+            users.push(userRecord);
+          } else {
+            if (!userRecord.batchIds.includes(batchId)) {
+              userRecord.batchIds.push(batchId);
+            }
+          }
+          saveUsers();
+
+          // 5. Send Automated WhatsApp Payment Confirmation
+          if (matchedOrder) {
+            sendPaymentConfirmationWhatsApp(matchedOrder, newPaymentRecord).catch(err => {
+              console.warn("[Razorpay Webhook] Async WhatsApp dispatch error:", err);
             });
-            savePayments();
+          }
+        }
+      } else if (event === "payment.failed") {
+        const paymentEntity = payload?.payload?.payment?.entity;
+        const orderId = paymentEntity?.order_id;
+        if (orderId) {
+          const matchedOrder = orders.find(o => o.razorpayOrderId === orderId || o.id === paymentEntity?.notes?.orderId);
+          if (matchedOrder) {
+            matchedOrder.orderStatus = "failed";
+            matchedOrder.updatedAt = new Date().toISOString();
+            saveOrders();
+            console.log(`[Razorpay Webhook] Order ${matchedOrder.id} marked as failed from webhook.`);
           }
         }
       }
@@ -3180,9 +3666,577 @@ www.witslingo.com`;
   });
 
   // =========================================================================
+  // STUDENT CHECKOUT & ORDER CREATION (SERVER-SIDE PRICE VERIFICATION)
+  // =========================================================================
+
+  app.post("/api/orders/create", async (req, res) => {
+    try {
+      const { studentName, whatsapp, email, courseId, couponCode } = req.body;
+
+      if (!studentName || !studentName.trim()) {
+        return res.status(400).json({ success: false, error: "Full Name is required." });
+      }
+
+      const cleanWhatsapp = (whatsapp || "").replace(/\D/g, "");
+      if (!cleanWhatsapp || cleanWhatsapp.length < 10) {
+        return res.status(400).json({ success: false, error: "A valid 10-digit WhatsApp number is required." });
+      }
+
+      if (!courseId) {
+        return res.status(400).json({ success: false, error: "Please select a course to continue." });
+      }
+
+      // Determine price strictly on server side from trusted course records
+      const foundCourse = (cmsContent.courses || []).find((c: any) => c.id === courseId) ||
+        (cmsContent.courses?.[0]);
+
+      if (!foundCourse) {
+        return res.status(404).json({ success: false, error: "Selected course was not found." });
+      }
+
+      const originalFee = Number(foundCourse.fee) || 1499;
+      let discountAmount = 0;
+      let appliedCoupon: string | undefined = undefined;
+
+      // Coupon / discount calculation
+      if (couponCode && typeof couponCode === "string") {
+        const codeClean = couponCode.trim().toUpperCase();
+        if (codeClean === "WELCOME10") {
+          discountAmount = Math.round(originalFee * 0.10);
+          appliedCoupon = "WELCOME10 (10% Off)";
+        } else if (codeClean === "WITS100") {
+          discountAmount = 100;
+          appliedCoupon = "WITS100 (₹100 Off)";
+        } else if (codeClean === "TEST100" || codeClean === "DEMO99") {
+          discountAmount = Math.max(0, originalFee - 1); // 1 rupee test mode
+          appliedCoupon = `${codeClean} (Test Mode: ₹1)`;
+        }
+      }
+
+      const finalPayable = Math.max(1, originalFee - discountAmount);
+      const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+      const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+
+      let razorpayOrderId: string | undefined;
+      const isTestMode = !Boolean(keyId && keySecret);
+
+      if (keyId && keySecret) {
+        try {
+          const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
+            method: "POST",
+            headers: {
+              "Authorization": `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              amount: finalPayable * 100, // in paise
+              currency: "INR",
+              receipt: `rcpt_${orderId}`,
+              notes: {
+                orderId,
+                courseId: foundCourse.id,
+                courseName: foundCourse.name,
+                studentName: studentName.trim(),
+                studentPhone: cleanWhatsapp,
+                studentEmail: email ? email.trim() : ""
+              }
+            })
+          });
+
+          const rzpData = (await rzpResponse.json()) as any;
+          if (rzpResponse.ok && rzpData.id) {
+            razorpayOrderId = rzpData.id;
+          } else {
+            console.warn("[Razorpay] Order API error:", rzpData?.error?.description || rzpData);
+          }
+        } catch (rzpErr) {
+          console.warn("[Razorpay] Network error generating order:", rzpErr);
+        }
+      }
+
+      // If keys are not configured or external API is offline, create simulated order ID
+      if (!razorpayOrderId) {
+        razorpayOrderId = `order_test_${orderId}`;
+      }
+
+      const newOrder: DBOrder = {
+        id: orderId,
+        studentId: `std_${cleanWhatsapp}`,
+        studentName: studentName.trim(),
+        studentPhone: cleanWhatsapp,
+        studentEmail: email ? email.trim() : `${cleanWhatsapp}@student.witslingo.com`,
+        courseId: foundCourse.id,
+        courseName: foundCourse.name,
+        coursePrice: originalFee,
+        discountAmount,
+        discountCode: appliedCoupon,
+        expectedAmount: finalPayable,
+        currency: "INR",
+        orderStatus: "pending",
+        razorpayOrderId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      orders.unshift(newOrder);
+      saveOrders();
+
+      res.json({
+        success: true,
+        order: newOrder,
+        keyId: keyId || "rzp_test_witslingo_placeholder",
+        amountPaise: finalPayable * 100,
+        currency: "INR",
+        isTestMode,
+        course: {
+          id: foundCourse.id,
+          name: foundCourse.name,
+          level: foundCourse.level,
+          duration: foundCourse.duration
+        }
+      });
+    } catch (err: any) {
+      console.error("[Orders] Create order error:", err);
+      res.status(500).json({ success: false, error: "Internal server error creating order." });
+    }
+  });
+
+  // Get Order Status (for polling during payment verification)
+  app.get("/api/orders/:orderId/status", (req, res) => {
+    const { orderId } = req.params;
+    const order = orders.find(o => o.id === orderId || o.razorpayOrderId === orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: "Order not found." });
+    }
+
+    const payment = payments.find(p => p.orderId === order.id || (order.razorpayOrderId && p.orderId === order.razorpayOrderId) || (order.razorpayPaymentId && p.paymentId === order.razorpayPaymentId));
+    const notification = notifications.find(n => n.orderId === order.id);
+
+    res.json({
+      success: true,
+      order,
+      payment: payment || null,
+      notification: notification || null,
+      joiningDetails: {
+        meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,
+        startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
+        scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME
+      }
+    });
+  });
+
+  // Verify Checkout Payment & Confirm Order
+  app.post("/api/payments/razorpay/verify-order", async (req, res) => {
+    try {
+      const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+
+      if (!orderId || !razorpayPaymentId) {
+        return res.status(400).json({ success: false, error: "Missing required order verification parameters." });
+      }
+
+      const order = orders.find(o => o.id === orderId || o.razorpayOrderId === razorpayOrderId);
+      if (!order) {
+        return res.status(404).json({ success: false, error: "Order not found." });
+      }
+
+      // Idempotency: If order is already paid, return confirmed state immediately
+      if (order.orderStatus === "paid") {
+        const existingPayment = payments.find(p => p.orderId === order.id || p.paymentId === razorpayPaymentId);
+        return res.json({
+          success: true,
+          message: "Payment already verified (Idempotent).",
+          order,
+          payment: existingPayment,
+          meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,
+          startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE
+        });
+      }
+
+      const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+
+      // Cryptographic signature verification if secret is configured and real razorpayOrderId is present
+      if (keySecret && razorpayOrderId && razorpaySignature && !razorpayOrderId.startsWith("order_test_")) {
+        const generatedSignature = crypto
+          .createHmac("sha256", keySecret)
+          .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+          .digest("hex");
+
+        if (generatedSignature !== razorpaySignature) {
+          console.warn("[Razorpay] Order signature verification failed:", { received: razorpaySignature, expected: generatedSignature });
+          return res.status(400).json({ success: false, error: "Payment signature verification failed." });
+        }
+      }
+
+      // 1. Mark Order as Paid
+      order.orderStatus = "paid";
+      order.razorpayOrderId = razorpayOrderId || order.razorpayOrderId;
+      order.razorpayPaymentId = razorpayPaymentId;
+      order.updatedAt = new Date().toISOString();
+      saveOrders();
+
+      // 2. Record Payment
+      const admissionId = `WL-2026-${Date.now().toString().slice(-4)}`;
+      const newPayment: DBPayment = {
+        id: `pay-${Date.now()}`,
+        orderId: order.id,
+        paymentId: razorpayPaymentId,
+        signature: razorpaySignature,
+        amount: order.expectedAmount,
+        currency: order.currency,
+        status: "Paid",
+        studentName: order.studentName,
+        studentEmail: order.studentEmail,
+        studentPhone: order.studentPhone,
+        courseId: order.courseId,
+        courseName: order.courseName,
+        batchId: order.batchId || "batch-spoken-oct-2026",
+        batchName: order.batchName || "Assigned Batch",
+        admissionId,
+        method: "Razorpay",
+        createdAt: new Date().toISOString(),
+        verifiedAt: new Date().toISOString(),
+        source: "razorpay_verify"
+      };
+
+      const existingPayIdx = payments.findIndex(p => p.paymentId === razorpayPaymentId);
+      if (existingPayIdx >= 0) {
+        payments[existingPayIdx] = newPayment;
+      } else {
+        payments.unshift(newPayment);
+      }
+      savePayments();
+
+      // 3. Activate Course Enrolment & Student Access
+      let existingReg = registrations.find(r => r.phone === order.studentPhone || r.whatsapp === order.studentPhone);
+      if (!existingReg) {
+        existingReg = {
+          id: `reg-${Date.now()}`,
+          admissionId,
+          name: order.studentName,
+          fatherName: "Parent/Guardian",
+          dob: "2000-01-01",
+          gender: "Not specified",
+          district: "Not specified",
+          state: "Not specified",
+          phone: order.studentPhone,
+          whatsapp: order.studentPhone,
+          email: order.studentEmail,
+          address: "Online Enrolment",
+          qualification: "Student",
+          currentEnglishLevel: "All Levels",
+          courseId: order.courseId,
+          courseName: order.courseName,
+          batchId: order.batchId || "batch-spoken-oct-2026",
+          batchName: order.batchName || "Active Batch",
+          feeAmount: order.expectedAmount,
+          paymentStatus: "Paid",
+          paymentMethod: "Razorpay",
+          paymentTxnId: razorpayPaymentId,
+          razorpayOrderId,
+          razorpayPaymentId,
+          registeredAt: new Date().toISOString()
+        };
+        registrations.unshift(existingReg);
+      } else {
+        existingReg.paymentStatus = "Paid";
+        existingReg.paymentTxnId = razorpayPaymentId;
+        existingReg.razorpayPaymentId = razorpayPaymentId;
+        existingReg.courseId = order.courseId;
+        existingReg.courseName = order.courseName;
+      }
+      saveRegistrations();
+
+      // 4. Ensure Student Login Account
+      let existingUser = users.find(u => u.phone === order.studentPhone || u.email.toLowerCase() === order.studentEmail.toLowerCase());
+      if (!existingUser) {
+        existingUser = {
+          id: `usr-${Date.now()}`,
+          name: order.studentName,
+          email: order.studentEmail,
+          passwordHash: hashPassword(order.studentPhone.slice(-6) || "student123"),
+          role: "student",
+          phone: order.studentPhone,
+          batchIds: [order.batchId || "batch-spoken-oct-2026"],
+          admissionId,
+          registrationDate: new Date().toISOString()
+        };
+        users.push(existingUser);
+      } else {
+        if (!existingUser.batchIds.includes(order.batchId || "batch-spoken-oct-2026")) {
+          existingUser.batchIds.push(order.batchId || "batch-spoken-oct-2026");
+        }
+      }
+      saveUsers();
+
+      // 5. Send Automatic WhatsApp Confirmation
+      sendPaymentConfirmationWhatsApp(order, newPayment).catch(waErr => {
+        console.warn("[WhatsApp] Async confirmation error:", waErr);
+      });
+
+      res.json({
+        success: true,
+        message: "Payment successfully verified! Your course access is activated.",
+        order,
+        payment: newPayment,
+        admissionId,
+        meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,
+        startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
+        scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME
+      });
+    } catch (err: any) {
+      console.error("[Razorpay] Verify order error:", err);
+      res.status(500).json({ success: false, error: "Internal server error verifying order payment." });
+    }
+  });
+
+  // =========================================================================
+  // WHATSAPP META CLOUD API WEBHOOKS
+  // =========================================================================
+
+  app.get(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], (req, res) => {
+    const mode = req.query["hub.mode"] as string;
+    const token = req.query["hub.verify_token"] as string;
+    const challenge = req.query["hub.challenge"] as string;
+
+    const validatedChallenge = whatsappCloudApiService.verifyWebhookChallenge(mode, token, challenge);
+    if (validatedChallenge) {
+      console.log("[WhatsApp Webhook] Verification handshake successful!");
+      return res.status(200).send(validatedChallenge);
+    }
+    console.warn("[WhatsApp Webhook] Verification handshake rejected.");
+    return res.sendStatus(403);
+  });
+
+  app.post(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], async (req, res) => {
+    // 1. Validate Meta HMAC SHA-256 signature if app secret is configured
+    const signature = req.headers["x-hub-signature-256"] as string | undefined;
+    const isValidSignature = whatsappCloudApiService.validateWebhookSignature((req as any).rawBody || JSON.stringify(req.body), signature);
+    if (!isValidSignature) {
+      console.warn("[WhatsApp Webhook] Invalid X-Hub-Signature-256 signature.");
+      return res.status(401).json({ error: "Invalid webhook signature" });
+    }
+
+    // 2. Respond 200 OK immediately to satisfy Meta's strict timeout requirements
+    res.status(200).json({ status: "ok" });
+
+    // 3. Process asynchronously in the background
+    try {
+      const { messages: inboundMessages, statuses } = whatsappCloudApiService.parseWebhookPayload(req.body);
+
+      // Handle delivery status updates (sent -> delivered -> read -> failed)
+      for (const st of statuses) {
+        const errorText = st.errors?.[0] ? `${st.errors[0].code}: ${st.errors[0].title}` : undefined;
+        whatsappNotificationService.updateDeliveryStatus(st.messageId, st.status, st.timestamp, errorText);
+      }
+
+      // Handle student incoming messages
+      for (const msg of inboundMessages) {
+        console.log(`[WhatsApp Meta Inbound] from=${msg.senderPhone}, type=${msg.type}, text="${msg.textBody}"`);
+        await studentSupportService.handleInboundMessage(msg);
+      }
+    } catch (err) {
+      console.error("[WhatsApp Webhook] Background processing error:", err);
+    }
+  });
+
+  // Interactive AI Support Chat Simulation / Test Endpoint
+  app.post("/api/support/chat", async (req, res) => {
+    try {
+      const { phone, message } = req.body;
+      if (!message || !message.trim()) {
+        return res.status(400).json({ success: false, error: "Message is required." });
+      }
+
+      const result = await handleInboundStudentMessage(
+        phone || "918791287575",
+        message.trim(),
+        "chat_ui"
+      );
+
+      res.json({
+        success: true,
+        reply: result.replyText,
+        ticketCreated: result.ticketCreated || false,
+        ticketNumber: result.ticketNumber
+      });
+    } catch (err: any) {
+      console.error("[Support Chat] Error handling message:", err);
+      res.status(500).json({ success: false, error: err?.message || "Internal server error" });
+    }
+  });
+
+  // =========================================================================
   // ADMIN AUTHENTICATION MIDDLEWARE FOR ALL /api/admin/* ROUTES
   // =========================================================================
   app.use("/api/admin", requireAdminAuth);
+
+  // 1. Admin Orders List & Stats
+  app.get("/api/admin/orders", (_req, res) => {
+    const total = orders.length;
+    const paid = orders.filter(o => o.orderStatus === "paid").length;
+    const pending = orders.filter(o => o.orderStatus === "pending").length;
+    const failed = orders.filter(o => o.orderStatus === "failed" || o.orderStatus === "cancelled").length;
+
+    res.json({
+      success: true,
+      stats: { total, paid, pending, failed },
+      orders
+    });
+  });
+
+  // 2. Admin Payments List
+  app.get("/api/admin/payments", (_req, res) => {
+    res.json({
+      success: true,
+      payments
+    });
+  });
+
+  // 3. Admin WhatsApp Notifications List & Stats
+  app.get("/api/admin/notifications", (_req, res) => {
+    const total = notifications.length;
+    const sent = notifications.filter(n => n.messageStatus === "sent").length;
+    const failed = notifications.filter(n => n.messageStatus === "failed").length;
+    const pending = notifications.filter(n => n.messageStatus === "pending").length;
+
+    res.json({
+      success: true,
+      stats: { total, sent, failed, pending },
+      notifications
+    });
+  });
+
+  // 4. Admin Retry WhatsApp Notification
+  app.post("/api/admin/notifications/:id/retry", async (req, res) => {
+    const notif = notifications.find(n => n.id === req.params.id);
+    if (!notif) return res.status(404).json({ error: "Notification record not found." });
+
+    const order = orders.find(o => o.id === notif.orderId);
+    const payment = payments.find(p => p.orderId === notif.orderId);
+
+    if (!order) return res.status(400).json({ error: "Related order not found." });
+
+    const sendRes = await sendPaymentConfirmationWhatsApp(
+      order,
+      payment || ({ amount: order.expectedAmount, paymentId: "Manual Retry" } as any),
+      true // force resend
+    );
+
+    res.json({ success: sendRes.success, sendRes, notification: notif });
+  });
+
+  // 5. Admin Support Tickets List & Stats
+  app.get("/api/admin/tickets", (_req, res) => {
+    const total = supportTickets.length;
+    const open = supportTickets.filter(t => t.status === "Open").length;
+    const assigned = supportTickets.filter(t => t.status === "Assigned").length;
+    const inProgress = supportTickets.filter(t => t.status === "In Progress").length;
+    const waitingForStudent = supportTickets.filter(t => t.status === "Waiting for Student").length;
+    const resolved = supportTickets.filter(t => t.status === "Resolved" || t.status === "Closed").length;
+
+    res.json({
+      success: true,
+      stats: { total, open, assigned, inProgress, waitingForStudent, resolved },
+      tickets: supportTickets
+    });
+  });
+
+  // 6. Admin Update Support Ticket
+  app.patch("/api/admin/tickets/:id", (req, res) => {
+    const ticket = supportTickets.find(t => t.id === req.params.id || t.ticketNumber === req.params.id);
+    if (!ticket) return res.status(404).json({ error: "Ticket not found." });
+
+    const { status, assignedAgentId, assignedAgentName, resolutionNotes, priority } = req.body;
+    if (status !== undefined) ticket.status = status;
+    if (assignedAgentId !== undefined) ticket.assignedAgentId = assignedAgentId;
+    if (assignedAgentName !== undefined) ticket.assignedAgentName = assignedAgentName;
+    if (resolutionNotes !== undefined) ticket.resolutionNotes = resolutionNotes;
+    if (priority !== undefined) ticket.priority = priority;
+    ticket.updatedAt = new Date().toISOString();
+
+    saveSupportTickets();
+    res.json({ success: true, ticket });
+  });
+
+  // 7. Admin Knowledge Base List & Management
+  app.get("/api/admin/knowledge-base", (_req, res) => {
+    const items = getAiSupportService().getKnowledgeBase();
+    res.json({ success: true, items });
+  });
+
+  app.post("/api/admin/knowledge-base", (req, res) => {
+    const { id, title, category, keywords, content } = req.body;
+    if (!title || !content) {
+      return res.status(400).json({ error: "Title and content are required." });
+    }
+
+    const item = getAiSupportService().addOrUpdateKnowledgeItem({
+      id: id || `kb_${Date.now()}`,
+      title,
+      category: category || "faq",
+      keywords: Array.isArray(keywords) ? keywords : (keywords || "").split(",").map((k: string) => k.trim()),
+      content
+    });
+
+    res.json({ success: true, item, items: getAiSupportService().getKnowledgeBase() });
+  });
+
+  app.delete("/api/admin/knowledge-base/:id", (req, res) => {
+    const deleted = getAiSupportService().deleteKnowledgeItem(req.params.id);
+    res.json({ success: deleted, items: getAiSupportService().getKnowledgeBase() });
+  });
+
+  // 8. Admin Student Conversations & Chat History
+  app.get("/api/admin/conversations", (_req, res) => {
+    res.json({
+      success: true,
+      conversations,
+      messages
+    });
+  });
+
+  // 9. Admin Reply to Student Conversation
+  app.post("/api/admin/conversations/:id/reply", async (req, res) => {
+    const conv = conversations.find(c => c.id === req.params.id);
+    if (!conv) return res.status(404).json({ error: "Conversation not found." });
+
+    const { messageText } = req.body;
+    if (!messageText || !messageText.trim()) return res.status(400).json({ error: "Message text is required." });
+
+    const cleanRecipient = conv.whatsappNumber;
+
+    // Dispatch via official Meta WhatsApp Cloud API
+    let dispatched = false;
+    let providerMsgId: string | undefined;
+    try {
+      const sendRes = await whatsappCloudApiService.sendTextMessage(cleanRecipient, messageText.trim());
+      if (sendRes.success) {
+        dispatched = true;
+        providerMsgId = sendRes.messageId;
+      }
+    } catch (e) {
+      console.warn("[Admin Reply] WhatsApp dispatch exception:", e);
+    }
+
+    const outMsgId = `msg_out_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const msgItem: DBMessageItem = {
+      id: outMsgId,
+      conversationId: conv.id,
+      direction: "outbound",
+      messageText: messageText.trim(),
+      provider: "admin",
+      createdAt: new Date().toISOString()
+    };
+
+    messages.push(msgItem);
+    conv.lastMessageAt = new Date().toISOString();
+    conv.updatedAt = new Date().toISOString();
+    saveConversations();
+    saveMessages();
+
+    res.json({ success: true, message: msgItem, dispatched });
+  });
 
   // =========================================================================
   // HERO VIDEO BACKBLAZE B2 MANAGEMENT & STREAMING
@@ -5522,10 +6576,19 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`[Wits Lingo Server] Running on http://0.0.0.0:${PORT}`);
+    console.log(`[WhatsApp] Operating strictly via official Meta WhatsApp Business Platform Cloud API.`);
+    console.log(`[WhatsApp] Cloud API Webhook Listener active at /api/webhooks/whatsapp`);
   });
 }
 
-if (!process.env.VERCEL) {
+const isServerless = Boolean(
+  process.env.VERCEL || 
+  process.env.NOW_REGION || 
+  process.env.AWS_LAMBDA_FUNCTION_NAME || 
+  process.env.LAMBDA_TASK_ROOT
+);
+
+if (!isServerless) {
   startServer();
 }
 

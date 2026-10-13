@@ -7,8 +7,8 @@
 
 export const WITS_LINGO_CONFIG = {
   // Fixed permanent WhatsApp Business sender number
-  WHATSAPP_BUSINESS_NUMBER: '+91 85768 97694',
-  WHATSAPP_BUSINESS_NUMBER_CLEAN: '918576897694',
+  WHATSAPP_BUSINESS_NUMBER: '+91 87912 87575',
+  WHATSAPP_BUSINESS_NUMBER_CLEAN: '918791287575',
 
   // Fixed permanent Google Meet class link
   GOOGLE_MEET_LINK: 'https://meet.google.com/wwu-zohu-yij',
