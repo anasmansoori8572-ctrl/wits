@@ -33,39 +33,107 @@ export default async function handler(req: any, res: any) {
   const method = req.method?.toUpperCase();
 
   // --------------------------------------------------------------------------
-  // 1. GET: Meta Webhook Verification Handshake
+  // 1. GET: Meta Webhook Verification Handshake & Status Check
   // --------------------------------------------------------------------------
   if (method === 'GET') {
     try {
-      const mode = (req.query?.['hub.mode'] || req.query?.mode || '') as string;
-      const token = (req.query?.['hub.verify_token'] || req.query?.verify_token || '') as string;
-      const challenge = (req.query?.['hub.challenge'] || req.query?.challenge || '') as string;
-
-      const configuredToken = 
-        process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN?.trim() || 
-        process.env.WHATSAPP_VERIFY_TOKEN?.trim() || 
-        'witslingo_meta_verify_token_2026';
-
-      console.log(`[Meta Webhook GET] mode=${mode}, tokenProvided=${Boolean(token)}, challengeProvided=${Boolean(challenge)}`);
-
-      if (mode === 'subscribe' && token === configuredToken && challenge) {
-        console.log('[Meta Webhook GET] Verification challenge accepted. Responding HTTP 200 with challenge.');
-        if (typeof res.setHeader === 'function') {
-          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      // 1. Extract query parameters safely from req.query and req.url
+      const queryParams: Record<string, string> = {};
+      if (req.query && typeof req.query === 'object') {
+        for (const [k, v] of Object.entries(req.query)) {
+          if (typeof v === 'string') queryParams[k] = v;
+          else if (Array.isArray(v) && typeof v[0] === 'string') queryParams[k] = v[0];
         }
+      }
+      if (req.url && req.url.includes('?')) {
+        try {
+          const parsedUrl = new URL(req.url, 'https://www.witslingo.com');
+          for (const [k, v] of parsedUrl.searchParams.entries()) {
+            if (!queryParams[k]) queryParams[k] = v;
+          }
+        } catch {
+          // Ignore URL parsing errors
+        }
+      }
+
+      const mode = (queryParams['hub.mode'] || queryParams['mode'] || '').trim();
+      const token = (queryParams['hub.verify_token'] || queryParams['verify_token'] || '').trim();
+      const challenge = (queryParams['hub.challenge'] || queryParams['challenge'] || '').trim();
+
+      // Read configured token securely from environment or official fallback
+      const rawConfiguredToken = 
+        process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 
+        process.env.WHATSAPP_VERIFY_TOKEN || 
+        'witslingo_meta_verify_token_2026';
+      const configuredToken = rawConfiguredToken.trim().replace(/^["']|["']$/g, '');
+
+      // Browser visit / Direct health check without Meta handshake parameters
+      if (!mode && !token && !challenge) {
+        if (typeof res.setHeader === 'function') {
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        }
+        const healthPayload = {
+          status: 'ready',
+          endpoint: 'Official Meta WhatsApp Cloud API Webhook',
+          message: 'Webhook endpoint is active and awaiting Meta Cloud API verification challenge or events.',
+          verificationProtocol: {
+            method: 'GET',
+            requiredParams: [
+              'hub.mode=subscribe',
+              'hub.verify_token=<your_configured_verify_token>',
+              'hub.challenge=<random_challenge_string>'
+            ],
+            response: 'HTTP 200 with hub.challenge as plain text upon token match'
+          },
+          tokenConfigured: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN)
+        };
         if (typeof res.status === 'function') {
-          return res.status(200).send(challenge);
+          return res.status(200).json(healthPayload);
         }
         res.statusCode = 200;
-        return res.end(challenge);
+        return res.end(JSON.stringify(healthPayload));
       }
 
-      console.warn('[Meta Webhook GET] Verification failed. Token mismatch or missing mode/challenge.');
-      if (typeof res.status === 'function') {
-        return res.status(403).send('Forbidden: Verification token mismatch');
+      // Meta Handshake: Validate mode === 'subscribe'
+      if (mode !== 'subscribe') {
+        console.warn(`[Meta Webhook GET] Handshake rejected: invalid hub.mode "${mode}". Expected "subscribe".`);
+        if (typeof res.status === 'function') {
+          return res.status(400).send('Bad Request: hub.mode must be "subscribe"');
+        }
+        res.statusCode = 400;
+        return res.end('Bad Request: hub.mode must be "subscribe"');
       }
-      res.statusCode = 403;
-      return res.end('Forbidden: Verification token mismatch');
+
+      // Meta Handshake: Validate verify_token matches
+      if (token !== configuredToken) {
+        console.warn('[Meta Webhook GET] Handshake rejected: verification token mismatch.');
+        if (typeof res.status === 'function') {
+          return res.status(403).send('Forbidden: Verification token mismatch');
+        }
+        res.statusCode = 403;
+        return res.end('Forbidden: Verification token mismatch');
+      }
+
+      // Meta Handshake: Validate challenge parameter present
+      if (!challenge) {
+        console.warn('[Meta Webhook GET] Handshake rejected: missing hub.challenge.');
+        if (typeof res.status === 'function') {
+          return res.status(400).send('Bad Request: Missing hub.challenge');
+        }
+        res.statusCode = 400;
+        return res.end('Bad Request: Missing hub.challenge');
+      }
+
+      // Meta Handshake Accepted: Return HTTP 200 plain text challenge
+      console.log('[Meta Webhook GET] Handshake accepted. Responding HTTP 200 with challenge.');
+      if (typeof res.setHeader === 'function') {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      }
+      if (typeof res.status === 'function') {
+        return res.status(200).send(challenge);
+      }
+      res.statusCode = 200;
+      return res.end(challenge);
     } catch (err: any) {
       console.error('[Meta Webhook GET] Error during handshake:', err);
       if (typeof res.status === 'function') {

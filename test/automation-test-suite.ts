@@ -162,6 +162,19 @@ async function runFullTestSuite() {
   assertTest('Meta Webhook X-Hub-Signature-256 validates authentic payload', validateSigManual(rawBodyPayload, validHeader));
   assertTest('Meta Webhook X-Hub-Signature-256 rejects tampered payload', !validateSigManual(rawBodyPayload + 'tampered', validHeader));
 
+  // Meta Webhook GET Handshake tests
+  const challengeCode = '9876543210';
+  const matchingToken = whatsappCloudApiService.verifyToken;
+  assertTest('Meta Webhook handshake returns challenge for matching token', 
+    whatsappCloudApiService.verifyWebhookChallenge('subscribe', matchingToken, challengeCode) === challengeCode
+  );
+  assertTest('Meta Webhook handshake rejects mismatched token', 
+    whatsappCloudApiService.verifyWebhookChallenge('subscribe', 'invalid_token_mismatch', challengeCode) === null
+  );
+  assertTest('Meta Webhook handshake rejects non-subscribe mode', 
+    whatsappCloudApiService.verifyWebhookChallenge('invalid_mode', matchingToken, challengeCode) === null
+  );
+
   // -------------------------------------------------------------
   // 12. AI retrieval from course FAQs
   // -------------------------------------------------------------

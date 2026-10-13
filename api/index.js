@@ -47,7 +47,8 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     return process.env.WHATSAPP_GRAPH_API_VERSION?.trim() || "v21.0";
   }
   get verifyToken() {
-    return process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN?.trim() || process.env.WHATSAPP_VERIFY_TOKEN?.trim() || "witslingo_meta_verify_token_2026";
+    const raw = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || "witslingo_meta_verify_token_2026";
+    return raw.trim().replace(/^["']|["']$/g, "");
   }
   get appSecret() {
     return process.env.WHATSAPP_APP_SECRET?.trim() || "";
@@ -72,6 +73,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       hasAccessToken: Boolean(this.accessToken),
       hasAppSecret: Boolean(this.appSecret),
       hasBusinessAccountId: Boolean(this.businessAccountId),
+      hasWebhookVerifyTokenEnv: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN),
       graphApiVersion: this.graphApiVersion,
       confirmationTemplateName: this.confirmationTemplateName,
       templateLanguage: this.templateLanguage,
@@ -4465,16 +4467,41 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
   }
 });
 app.get(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], (req, res) => {
-  const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
-  const validatedChallenge = whatsappCloudApiService.verifyWebhookChallenge(mode, token, challenge);
-  if (validatedChallenge) {
-    console.log("[WhatsApp Webhook] Verification handshake successful!");
-    return res.status(200).send(validatedChallenge);
+  const mode = (req.query["hub.mode"] || req.query["mode"] || "").trim();
+  const token = (req.query["hub.verify_token"] || req.query["verify_token"] || "").trim();
+  const challenge = (req.query["hub.challenge"] || req.query["challenge"] || "").trim();
+  if (!mode && !token && !challenge) {
+    return res.status(200).json({
+      status: "ready",
+      endpoint: "Official Meta WhatsApp Cloud API Webhook",
+      message: "Webhook endpoint is active and awaiting Meta Cloud API verification challenge or events.",
+      verificationProtocol: {
+        method: "GET",
+        requiredParams: [
+          "hub.mode=subscribe",
+          "hub.verify_token=<your_configured_verify_token>",
+          "hub.challenge=<random_challenge_string>"
+        ],
+        response: "HTTP 200 with hub.challenge as plain text upon token match"
+      },
+      tokenConfigured: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN)
+    });
   }
-  console.warn("[WhatsApp Webhook] Verification handshake rejected.");
-  return res.sendStatus(403);
+  if (mode !== "subscribe") {
+    console.warn(`[WhatsApp Webhook] Handshake rejected: invalid hub.mode "${mode}". Expected "subscribe".`);
+    return res.status(400).send('Bad Request: hub.mode must be "subscribe"');
+  }
+  if (token !== whatsappCloudApiService.verifyToken) {
+    console.warn("[WhatsApp Webhook] Handshake rejected: verification token mismatch.");
+    return res.status(403).send("Forbidden: Verification token mismatch");
+  }
+  if (!challenge) {
+    console.warn("[WhatsApp Webhook] Handshake rejected: missing hub.challenge.");
+    return res.status(400).send("Bad Request: Missing hub.challenge");
+  }
+  console.log("[WhatsApp Webhook] Verification handshake successful!");
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  return res.status(200).send(challenge);
 });
 app.post(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], async (req, res) => {
   const signature = req.headers["x-hub-signature-256"];

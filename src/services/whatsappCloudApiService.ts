@@ -72,9 +72,10 @@ export class WhatsAppCloudApiService {
   }
 
   public get verifyToken(): string {
-    return process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN?.trim() || 
-           process.env.WHATSAPP_VERIFY_TOKEN?.trim() || 
-           'witslingo_meta_verify_token_2026';
+    const raw = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 
+                process.env.WHATSAPP_VERIFY_TOKEN || 
+                'witslingo_meta_verify_token_2026';
+    return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   public get appSecret(): string {
@@ -104,6 +105,7 @@ export class WhatsAppCloudApiService {
       hasAccessToken: Boolean(this.accessToken),
       hasAppSecret: Boolean(this.appSecret),
       hasBusinessAccountId: Boolean(this.businessAccountId),
+      hasWebhookVerifyTokenEnv: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN),
       graphApiVersion: this.graphApiVersion,
       confirmationTemplateName: this.confirmationTemplateName,
       templateLanguage: this.templateLanguage,
