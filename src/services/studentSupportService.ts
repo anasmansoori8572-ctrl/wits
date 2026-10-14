@@ -3,6 +3,7 @@ import path from 'path';
 import { whatsappCloudApiService, InboundMessageEvent } from './whatsappCloudApiService';
 import { aiSupportService, StudentContext } from './aiSupportService';
 import { supportTicketService } from './supportTicketService';
+import { durableStorageService } from './durableStorageService';
 import { WITS_LINGO_CONFIG } from '../config/witsLingoConfig';
 
 export interface DBConversation {
@@ -26,19 +27,15 @@ export interface DBMessageItem {
   timestamp: string;
   provider: 'meta_cloud_api';
   status: 'sent' | 'delivered' | 'read' | 'failed';
+  errorDetails?: string;
 }
 
 export class StudentSupportService {
   private static instance: StudentSupportService;
-  private conversationsPath: string;
-  private messagesPath: string;
   private conversations: DBConversation[] = [];
   private messages: DBMessageItem[] = [];
-  private processedMessageIds: Set<string> = new Set();
 
   private constructor() {
-    this.conversationsPath = path.join(process.cwd(), 'uploads', 'data', 'conversations.json');
-    this.messagesPath = path.join(process.cwd(), 'uploads', 'data', 'messages.json');
     this.loadData();
   }
 
@@ -50,41 +47,63 @@ export class StudentSupportService {
   }
 
   private loadData(): void {
-    try {
-      if (fs.existsSync(this.conversationsPath)) {
-        this.conversations = JSON.parse(fs.readFileSync(this.conversationsPath, 'utf-8'));
+    // 1. Load from DurableStorage memory cache or seed files
+    this.conversations = durableStorageService.getCollectionSync<DBConversation>('conversations', []);
+    this.messages = durableStorageService.getCollectionSync<DBMessageItem>('messages', []);
+
+    // 2. If memory cache was empty, attempt safe read from local file without throwing on Vercel
+    if (this.conversations.length === 0) {
+      try {
+        const convPath = path.join(process.cwd(), 'uploads', 'data', 'conversations.json');
+        if (fs.existsSync(convPath)) {
+          this.conversations = JSON.parse(fs.readFileSync(convPath, 'utf-8'));
+        }
+      } catch {
+        this.conversations = [];
       }
-    } catch (e) {
-      this.conversations = [];
     }
 
-    try {
-      if (fs.existsSync(this.messagesPath)) {
-        this.messages = JSON.parse(fs.readFileSync(this.messagesPath, 'utf-8'));
-        // Populate deduplication set with recent message IDs
-        for (const m of this.messages.slice(0, 1000)) {
-          this.processedMessageIds.add(m.id);
+    if (this.messages.length === 0) {
+      try {
+        const msgPath = path.join(process.cwd(), 'uploads', 'data', 'messages.json');
+        if (fs.existsSync(msgPath)) {
+          this.messages = JSON.parse(fs.readFileSync(msgPath, 'utf-8'));
         }
+      } catch {
+        this.messages = [];
       }
-    } catch (e) {
-      this.messages = [];
     }
   }
 
+  /**
+   * Save conversations and messages using Durable Storage (B2 / Firestore / Local FS when writable).
+   * NEVER throws EROFS on Vercel.
+   */
   private saveData(): void {
-    try {
-      const dir = path.dirname(this.conversationsPath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(this.conversationsPath, JSON.stringify(this.conversations, null, 2), 'utf-8');
-      fs.writeFileSync(this.messagesPath, JSON.stringify(this.messages, null, 2), 'utf-8');
-    } catch (e) {
-      console.error('[StudentSupportService] Error saving conversations/messages:', e);
+    durableStorageService.saveCollectionBackground('conversations', this.conversations);
+    durableStorageService.saveCollectionBackground('messages', this.messages);
+  }
+
+  /**
+   * Explicit awaitable save that reports true persistence status
+   */
+  public async saveDataDurable(): Promise<{ success: boolean; error?: string }> {
+    const res1 = await durableStorageService.saveCollection('conversations', this.conversations);
+    const res2 = await durableStorageService.saveCollection('messages', this.messages);
+    if (!res1.success || !res2.success) {
+      return {
+        success: false,
+        error: res1.error || res2.error || 'Durable persistence write failed'
+      };
     }
+    return { success: true };
   }
 
   public getConversations(): DBConversation[] {
     this.loadData();
-    return [...this.conversations].sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+    return [...this.conversations].sort(
+      (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+    );
   }
 
   public getMessagesForConversation(convId: string): DBMessageItem[] {
@@ -100,48 +119,60 @@ export class StudentSupportService {
     let matchedName: string | undefined;
     let enrolledCourses: any[] = [];
 
-    // 1. Search in orders.json
+    // 1. Search in orders (from durable storage or local file fallback)
     try {
-      const ordersPath = path.join(process.cwd(), 'uploads', 'data', 'orders.json');
-      if (fs.existsSync(ordersPath)) {
-        const orders = JSON.parse(fs.readFileSync(ordersPath, 'utf-8'));
-        const studentOrders = orders.filter((o: any) => {
-          const oPhone = whatsappCloudApiService.normalizePhone(o.studentPhone || '');
-          return oPhone && (oPhone === cleanPhone || oPhone.endsWith(cleanPhone) || cleanPhone.endsWith(oPhone));
-        });
-
-        if (studentOrders.length > 0) {
-          const latest = studentOrders[0];
-          matchedName = latest.studentName;
-          enrolledCourses = studentOrders
-            .filter((o: any) => o.orderStatus === 'paid')
-            .map((o: any) => ({
-              courseName: o.courseName,
-              courseId: o.courseId,
-              paymentStatus: o.orderStatus,
-              amountPaid: o.expectedAmount,
-              transactionId: o.razorpayPaymentId || o.id,
-              startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE
-            }));
+      let orders = durableStorageService.getCollectionSync<any>('orders', []);
+      if (orders.length === 0) {
+        const ordersPath = path.join(process.cwd(), 'uploads', 'data', 'orders.json');
+        if (fs.existsSync(ordersPath)) {
+          orders = JSON.parse(fs.readFileSync(ordersPath, 'utf-8'));
         }
       }
-    } catch (e) {}
 
-    // 2. Search in registrations.json / users.json if name not found yet
+      const studentOrders = orders.filter((o: any) => {
+        const oPhone = whatsappCloudApiService.normalizePhone(o.studentPhone || '');
+        return oPhone && (oPhone === cleanPhone || oPhone.endsWith(cleanPhone) || cleanPhone.endsWith(oPhone));
+      });
+
+      if (studentOrders.length > 0) {
+        const latest = studentOrders[0];
+        matchedName = latest.studentName;
+        enrolledCourses = studentOrders
+          .filter((o: any) => o.orderStatus === 'paid')
+          .map((o: any) => ({
+            courseName: o.courseName,
+            courseId: o.courseId,
+            paymentStatus: o.orderStatus,
+            amountPaid: o.expectedAmount,
+            transactionId: o.razorpayPaymentId || o.id,
+            startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE
+          }));
+      }
+    } catch (e) {
+      // Ignore lookup error
+    }
+
+    // 2. Search in registrations / users if name not found yet
     if (!matchedName) {
       try {
-        const regPath = path.join(process.cwd(), 'uploads', 'data', 'registrations.json');
-        if (fs.existsSync(regPath)) {
-          const registrations = JSON.parse(fs.readFileSync(regPath, 'utf-8'));
-          const match = registrations.find((r: any) => {
-            const rPhone = whatsappCloudApiService.normalizePhone(r.phone || r.whatsappPhone || '');
-            return rPhone && (rPhone === cleanPhone || rPhone.endsWith(cleanPhone) || cleanPhone.endsWith(rPhone));
-          });
-          if (match) {
-            matchedName = match.name || match.fullName;
+        let registrations = durableStorageService.getCollectionSync<any>('registrations', []);
+        if (registrations.length === 0) {
+          const regPath = path.join(process.cwd(), 'uploads', 'data', 'registrations.json');
+          if (fs.existsSync(regPath)) {
+            registrations = JSON.parse(fs.readFileSync(regPath, 'utf-8'));
           }
         }
-      } catch (e) {}
+
+        const match = registrations.find((r: any) => {
+          const rPhone = whatsappCloudApiService.normalizePhone(r.phone || r.whatsappPhone || '');
+          return rPhone && (rPhone === cleanPhone || rPhone.endsWith(cleanPhone) || cleanPhone.endsWith(rPhone));
+        });
+        if (match) {
+          matchedName = match.name || match.fullName;
+        }
+      } catch (e) {
+        // Ignore lookup error
+      }
     }
 
     const studentCtx: StudentContext | undefined = matchedName ? {
@@ -164,12 +195,14 @@ export class StudentSupportService {
   }> {
     const { messageId, senderPhone, timestamp, textBody } = event;
 
-    // 1. Webhook Deduplication
-    if (this.processedMessageIds.has(messageId)) {
-      console.log(`[StudentSupportService] Duplicate message ID ${messageId} ignored.`);
+    // 1. Durable Webhook Deduplication across serverless invocations
+    const isDup = await durableStorageService.isDeduplicated('whatsapp_inbound', messageId);
+    if (isDup) {
+      console.log(`[StudentSupportService] Duplicate message ID ${messageId} ignored across invocations.`);
       return { handled: true, reason: 'duplicate_message_id' };
     }
-    this.processedMessageIds.add(messageId);
+    // Record into durable dedup store
+    durableStorageService.recordDedupBackground('whatsapp_inbound', messageId);
 
     const text = (textBody || '').trim();
     if (!text) {
@@ -180,11 +213,14 @@ export class StudentSupportService {
     const convId = `conv_${cleanSender}`;
     const now = timestamp || new Date().toISOString();
 
-    // 2. Identify Student & Authorized Context
+    // 2. Open / extend the 24-hour Customer Service Window
+    whatsappCloudApiService.recordCustomerInbound(cleanSender, now);
+
+    // 3. Identify Student & Authorized Context
     const { studentName, studentContext } = this.findStudentContext(cleanSender);
     const finalStudentName = studentName || 'Student';
 
-    // 3. Update Conversation & Record Incoming Message
+    // 4. Update Conversation & Record Incoming Message
     let conv = this.conversations.find(c => c.id === convId);
     if (!conv) {
       conv = {
@@ -217,11 +253,10 @@ export class StudentSupportService {
     this.messages.unshift(incomingMsgRecord);
     this.saveData();
 
-    // 4. Check if Human Agent has active ownership of this ticket / conversation
+    // 5. Check if Human Agent has active ownership of this ticket / conversation
     const activeTicket = supportTicketService.getActiveTicketForStudent(cleanSender);
     if (activeTicket && activeTicket.status === 'in_progress' && activeTicket.assignedTo) {
       console.log(`[StudentSupportService] Student ${cleanSender} has active assigned ticket (${activeTicket.id}). Silencing AI auto-reply to prevent agent conflict.`);
-      // Append message to ticket reply history
       activeTicket.replyHistory.push({
         id: `rep_${Date.now()}`,
         sender: 'student',
@@ -235,10 +270,10 @@ export class StudentSupportService {
       return { handled: true, replySent: false, reason: 'human_agent_active' };
     }
 
-    // 5. Query AI Support Engine
+    // 6. Query AI Support Engine
     const aiResult = await aiSupportService.answerInquiry(text, studentContext);
 
-    // 6. Handle Escalation to Human Support
+    // 7. Handle Escalation to Human Support
     let ticketCreated = false;
     if (aiResult.shouldEscalate) {
       conv.isEscalated = true;
@@ -247,7 +282,7 @@ export class StudentSupportService {
       const ticket = supportTicketService.createTicket({
         studentName: finalStudentName,
         studentPhone: cleanSender,
-        category: aiResult.escalationCategory as any || 'human_handover',
+        category: (aiResult.escalationCategory as any) || 'human_handover',
         priority: (aiResult.escalationPriority as any) || 'medium',
         description: text,
         courseName: studentContext?.enrolledCourses?.[0]?.courseName
@@ -255,11 +290,27 @@ export class StudentSupportService {
       ticketCreated = true;
     }
 
-    // 7. Dispatch Response Back to Student via Official Meta Cloud API
+    // 8. Dispatch Response Back to Student via Official Meta Cloud API
     const replyText = aiResult.replyText;
     const sendRes = await whatsappCloudApiService.sendTextMessage(cleanSender, replyText);
 
-    // 8. Record Outbound AI Message
+    // If Meta rejected reply because 24h Customer Service Window expired (#131047), escalate to ticket
+    if (sendRes.isCustomerServiceWindowExpired && !ticketCreated) {
+      console.warn(`[StudentSupportService] Outbound reply to ${cleanSender} failed due to expired 24h customer window. Escalating to support ticket.`);
+      conv.isEscalated = true;
+      conv.status = 'escalated';
+      supportTicketService.createTicket({
+        studentName: finalStudentName,
+        studentPhone: cleanSender,
+        category: 'human_handover',
+        priority: 'high',
+        description: `Customer service window (24h) expired. Direct message failed (#131047). Student inquired: "${text.substring(0, 100)}..."`,
+        courseName: studentContext?.enrolledCourses?.[0]?.courseName
+      });
+      ticketCreated = true;
+    }
+
+    // 9. Record Outbound AI Message
     const outboundMsgRecord: DBMessageItem = {
       id: sendRes.messageId || `msg_ai_${Date.now()}`,
       conversationId: convId,
@@ -269,17 +320,21 @@ export class StudentSupportService {
       text: replyText,
       timestamp: new Date().toISOString(),
       provider: 'meta_cloud_api',
-      status: sendRes.success ? 'sent' : 'failed'
+      status: sendRes.success ? 'sent' : 'failed',
+      errorDetails: sendRes.sanitizedError || sendRes.error
     };
     this.messages.unshift(outboundMsgRecord);
     this.saveData();
 
-    console.log(`[StudentSupportService] Replied to ${cleanSender} via Meta Cloud API (${sendRes.success ? 'Success' : 'Failed: ' + sendRes.error})`);
+    console.log(
+      `[StudentSupportService] Outbound dispatch to ${cleanSender}: ${sendRes.success ? 'Accepted by Meta' : 'Failed: ' + (sendRes.sanitizedError || sendRes.error)}`
+    );
 
     return {
       handled: true,
       replySent: sendRes.success,
-      ticketCreated
+      ticketCreated,
+      reason: sendRes.success ? undefined : sendRes.sanitizedError
     };
   }
 }

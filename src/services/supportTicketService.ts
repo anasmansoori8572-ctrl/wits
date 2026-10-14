@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { whatsappCloudApiService } from './whatsappCloudApiService';
+import { durableStorageService } from './durableStorageService';
 
 export type TicketStatus = 'open' | 'assigned' | 'in_progress' | 'waiting_student' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -38,11 +39,9 @@ export interface DBSupportTicket {
 
 export class SupportTicketService {
   private static instance: SupportTicketService;
-  private filePath: string;
   private tickets: DBSupportTicket[] = [];
 
   private constructor() {
-    this.filePath = path.join(process.cwd(), 'uploads', 'data', 'support-tickets.json');
     this.loadTickets();
   }
 
@@ -54,27 +53,39 @@ export class SupportTicketService {
   }
 
   private loadTickets(): void {
-    try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = fs.readFileSync(this.filePath, 'utf-8');
-        this.tickets = JSON.parse(raw);
-      } else {
+    // 1. Read from DurableStorage memory cache or seed
+    this.tickets = durableStorageService.getCollectionSync<DBSupportTicket>('support-tickets', []);
+
+    // 2. Fallback read from local file if memory cache empty
+    if (this.tickets.length === 0) {
+      try {
+        const filePath = path.join(process.cwd(), 'uploads', 'data', 'support-tickets.json');
+        if (fs.existsSync(filePath)) {
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          this.tickets = JSON.parse(raw);
+        }
+      } catch (e) {
         this.tickets = [];
       }
-    } catch (e) {
-      console.warn('[SupportTicketService] Error loading tickets, initializing empty:', e);
-      this.tickets = [];
     }
   }
 
+  /**
+   * Save tickets safely using DurableStorageService without local EROFS failures
+   */
   private saveTickets(): void {
-    try {
-      const dir = path.dirname(this.filePath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(this.filePath, JSON.stringify(this.tickets, null, 2), 'utf-8');
-    } catch (e) {
-      console.error('[SupportTicketService] Error saving tickets:', e);
-    }
+    durableStorageService.saveCollectionBackground('support-tickets', this.tickets);
+  }
+
+  /**
+   * Explicit awaitable durable persistence
+   */
+  public async saveTicketsDurable(): Promise<{ success: boolean; error?: string }> {
+    const res = await durableStorageService.saveCollection('support-tickets', this.tickets);
+    return {
+      success: res.success,
+      error: res.error
+    };
   }
 
   public getAllTickets(filter?: { status?: TicketStatus; phone?: string }): DBSupportTicket[] {
@@ -218,9 +229,12 @@ export class SupportTicketService {
     this.saveTickets();
 
     if (!sendRes.success) {
+      const errorDetail = sendRes.isCustomerServiceWindowExpired
+        ? 'Customer 24h service window expired. Meta requires an approved template message to re-engage.'
+        : (sendRes.sanitizedError || sendRes.error || 'Failed to dispatch WhatsApp message via Meta Cloud API');
       return {
         success: false,
-        error: sendRes.error || 'Failed to dispatch WhatsApp message via Meta Cloud API',
+        error: errorDetail,
         ticket
       };
     }

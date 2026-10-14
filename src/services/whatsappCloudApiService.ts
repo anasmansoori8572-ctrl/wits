@@ -5,9 +5,19 @@ export interface MetaSendResult {
   messageId?: string;
   status: 'accepted' | 'sent' | 'failed';
   error?: string;
+  sanitizedError?: string;
   errorCode?: number;
+  errorSubcode?: number;
+  errorType?: string;
+  errorUserTitle?: string;
+  errorUserMsg?: string;
+  fbtraceId?: string;
   httpStatus?: number;
   isTransient?: boolean;
+  isCustomerServiceWindowExpired?: boolean;
+  templateRequired?: boolean;
+  isAuthError?: boolean;
+  isPermissionError?: boolean;
 }
 
 export interface MetaTemplateComponent {
@@ -42,8 +52,31 @@ export interface DeliveryStatusEvent {
   rawPayload: any;
 }
 
+export interface CustomerWindowStatus {
+  isOpen: boolean;
+  lastInboundAt?: string;
+  expiresAt?: string;
+  remainingSeconds: number;
+}
+
+/**
+ * Sanitize error messages to guarantee no tokens or sensitive headers leak in logs
+ */
+function sanitizeMetaError(rawMessage?: string): string {
+  if (!rawMessage) return 'Unknown Meta API error';
+  return rawMessage
+    .replace(/access_token=[a-zA-Z0-9_\-\.]+/gi, 'access_token=[REDACTED]')
+    .replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
+    .replace(/appsecret_proof=[a-zA-Z0-9_\-]+/gi, 'appsecret_proof=[REDACTED]')
+    .trim();
+}
+
 export class WhatsAppCloudApiService {
   private static instance: WhatsAppCloudApiService;
+
+  // In-memory registry of student last inbound messages for tracking the 24h Customer Service Window
+  // 24 hours in milliseconds = 86,400,000 ms
+  private customerInboundTimestamps: Map<string, number> = new Map();
 
   private constructor() {}
 
@@ -54,21 +87,25 @@ export class WhatsAppCloudApiService {
     return WhatsAppCloudApiService.instance;
   }
 
-  // Configuration getters (reading dynamically so env changes don't require process restart)
+  // Configuration getters (dynamically evaluated and stripped of leading/trailing quotes)
   public get phoneNumberId(): string {
-    return process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || '';
+    const raw = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
+    return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   public get businessAccountId(): string {
-    return process.env.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim() || '';
+    const raw = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '';
+    return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   public get accessToken(): string {
-    return process.env.WHATSAPP_ACCESS_TOKEN?.trim() || '';
+    const raw = process.env.WHATSAPP_ACCESS_TOKEN || '';
+    return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   public get graphApiVersion(): string {
-    return process.env.WHATSAPP_GRAPH_API_VERSION?.trim() || 'v21.0';
+    const raw = process.env.WHATSAPP_GRAPH_API_VERSION || process.env.WHATSAPP_API_VERSION || 'v21.0';
+    return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   public get verifyToken(): string {
@@ -79,37 +116,51 @@ export class WhatsAppCloudApiService {
   }
 
   public get appSecret(): string {
-    return process.env.WHATSAPP_APP_SECRET?.trim() || '';
+    const raw = process.env.WHATSAPP_APP_SECRET || '';
+    return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   public get confirmationTemplateName(): string {
-    return process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME?.trim() || 'wits_lingo_enrollment_confirmation';
+    const raw = process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME || 'wits_lingo_enrollment_confirmation';
+    return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   public get templateLanguage(): string {
-    return process.env.WHATSAPP_TEMPLATE_LANGUAGE?.trim() || 'en';
+    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en';
+    return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   public get supportPhone(): string {
-    return process.env.WHATSAPP_SUPPORT_PHONE?.trim() || '918791287575';
+    const raw = process.env.WHATSAPP_SUPPORT_PHONE || '918791287575';
+    return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   /**
-   * Diagnostic summary of Meta Cloud API configuration
+   * Diagnostic summary of Meta Cloud API configuration and credentials health.
+   * Completely safe: never reveals token bytes.
    */
   public getDiagnostics() {
+    const hasPhone = Boolean(this.phoneNumberId);
+    const isPhoneNumeric = /^\d+$/.test(this.phoneNumberId);
+    const hasToken = Boolean(this.accessToken);
+    const tokenLength = this.accessToken.length;
+    const hasAppSecret = Boolean(this.appSecret);
+
     return {
       provider: 'cloud_api',
-      configured: Boolean(this.phoneNumberId && this.accessToken),
-      hasPhoneNumberId: Boolean(this.phoneNumberId),
-      hasAccessToken: Boolean(this.accessToken),
-      hasAppSecret: Boolean(this.appSecret),
+      configured: hasPhone && hasToken,
+      hasPhoneNumberId: hasPhone,
+      isPhoneNumberNumeric: isPhoneNumeric,
+      hasAccessToken: hasToken,
+      tokenLengthHint: hasToken ? (tokenLength > 50 ? 'valid_length' : 'suspiciously_short') : 'missing',
+      hasAppSecret: hasAppSecret,
       hasBusinessAccountId: Boolean(this.businessAccountId),
       hasWebhookVerifyTokenEnv: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN),
       graphApiVersion: this.graphApiVersion,
       confirmationTemplateName: this.confirmationTemplateName,
       templateLanguage: this.templateLanguage,
       supportPhone: this.supportPhone,
+      activeCustomerWindowsCount: this.customerInboundTimestamps.size,
       endpoint: `https://graph.facebook.com/${this.graphApiVersion}/${this.phoneNumberId || '{PHONE_NUMBER_ID}'}/messages`
     };
   }
@@ -127,6 +178,62 @@ export class WhatsAppCloudApiService {
   }
 
   /**
+   * Record when a student sent an inbound message, initiating or extending the 24h Customer Service Window
+   */
+  public recordCustomerInbound(phone: string, timestamp?: string | number): void {
+    const cleanPhone = this.normalizePhone(phone);
+    if (!cleanPhone) return;
+
+    let tsMillis: number;
+    if (typeof timestamp === 'number') {
+      tsMillis = timestamp > 1e11 ? timestamp : timestamp * 1000;
+    } else if (typeof timestamp === 'string') {
+      tsMillis = new Date(timestamp).getTime();
+      if (isNaN(tsMillis)) tsMillis = Date.now();
+    } else {
+      tsMillis = Date.now();
+    }
+
+    this.customerInboundTimestamps.set(cleanPhone, tsMillis);
+  }
+
+  /**
+   * Check whether a customer is currently within the Meta 24-hour Customer Service Window
+   */
+  public getCustomerWindowStatus(phone: string): CustomerWindowStatus {
+    const cleanPhone = this.normalizePhone(phone);
+    const lastInbound = this.customerInboundTimestamps.get(cleanPhone);
+    const now = Date.now();
+    const WINDOW_DURATION_MS = 24 * 60 * 60 * 1000;
+
+    if (!lastInbound) {
+      return {
+        isOpen: false,
+        remainingSeconds: 0
+      };
+    }
+
+    const elapsed = now - lastInbound;
+    const remainingMs = WINDOW_DURATION_MS - elapsed;
+
+    if (remainingMs > 0) {
+      return {
+        isOpen: true,
+        lastInboundAt: new Date(lastInbound).toISOString(),
+        expiresAt: new Date(lastInbound + WINDOW_DURATION_MS).toISOString(),
+        remainingSeconds: Math.floor(remainingMs / 1000)
+      };
+    } else {
+      return {
+        isOpen: false,
+        lastInboundAt: new Date(lastInbound).toISOString(),
+        expiresAt: new Date(lastInbound + WINDOW_DURATION_MS).toISOString(),
+        remainingSeconds: 0
+      };
+    }
+  }
+
+  /**
    * Verify Webhook challenge from Meta Developers Console (GET /api/webhooks/whatsapp)
    */
   public verifyWebhookChallenge(mode?: string, token?: string, challenge?: string): string | null {
@@ -141,7 +248,7 @@ export class WhatsAppCloudApiService {
    */
   public validateWebhookSignature(rawBody: Buffer | string, signatureHeader?: string): boolean {
     if (!this.appSecret) {
-      // If app secret is not configured, signature check cannot be enforced
+      // If app secret is not configured in environment, permit webhook with warning
       return true;
     }
     if (!signatureHeader) return false;
@@ -165,19 +272,38 @@ export class WhatsAppCloudApiService {
   }
 
   /**
-   * Low-level HTTP POST to Meta Graph API with retry for transient errors
+   * Low-level HTTP POST to Meta Graph API with comprehensive error sanitization and diagnostics
    */
   private async postToGraphApi(payload: any, maxRetries: number = 2): Promise<MetaSendResult> {
-    if (!this.phoneNumberId || !this.accessToken) {
+    const phoneId = this.phoneNumberId;
+    const token = this.accessToken;
+
+    if (!phoneId || !token) {
+      const errorMsg = 'WhatsApp Cloud API credentials missing: WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN not configured.';
+      console.warn(`[WhatsApp Cloud API] Send aborted: ${errorMsg}`);
       return {
         success: false,
         status: 'failed',
-        error: 'WhatsApp Cloud API is not configured: Missing WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN in server environment.',
+        error: errorMsg,
+        sanitizedError: errorMsg,
+        isTransient: false,
+        isAuthError: true
+      };
+    }
+
+    if (!/^\d+$/.test(phoneId)) {
+      const errorMsg = `Invalid WHATSAPP_PHONE_NUMBER_ID: Must contain digits only. Received: "${phoneId.substring(0, 4)}..."`;
+      console.error(`[WhatsApp Cloud API] Config error: ${errorMsg}`);
+      return {
+        success: false,
+        status: 'failed',
+        error: errorMsg,
+        sanitizedError: errorMsg,
         isTransient: false
       };
     }
 
-    const url = `https://graph.facebook.com/${this.graphApiVersion}/${this.phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/${this.graphApiVersion}/${phoneId}/messages`;
 
     let attempt = 0;
     while (attempt <= maxRetries) {
@@ -189,7 +315,7 @@ export class WhatsAppCloudApiService {
         const res = await fetch(url, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(payload),
@@ -197,26 +323,66 @@ export class WhatsAppCloudApiService {
         });
         clearTimeout(timeoutId);
 
-        const data = (await res.json()) as any;
+        let data: any = null;
+        try {
+          data = await res.json();
+        } catch {
+          // Response body was not JSON
+        }
 
+        // Meta confirms acceptance with HTTP 200/201 and messages array containing an ID
         if (res.ok && data?.messages?.[0]?.id) {
           return {
             success: true,
-            status: 'accepted', // Accepted by Meta Graph API; delivery confirmed asynchronously via Webhook
+            status: 'accepted',
             messageId: data.messages[0].id,
             httpStatus: res.status
           };
         }
 
-        const errorCode = data?.error?.code;
-        const errorMessage = data?.error?.message || `Meta API HTTP ${res.status}`;
-        const isRateLimit = errorCode === 80007 || errorCode === 4 || errorCode === 17 || res.status === 429;
+        // Extract detailed, structured Meta error response
+        const errorObj = data?.error;
+        const errorCode = typeof errorObj?.code === 'number' ? errorObj.code : undefined;
+        const errorSubcode = typeof errorObj?.error_subcode === 'number' ? errorObj.error_subcode : undefined;
+        const errorType = errorObj?.type;
+        const fbtraceId = errorObj?.fbtrace_id;
+        const errorUserTitle = errorObj?.error_user_title;
+        const errorUserMsg = errorObj?.error_user_msg;
+        const rawErrorMessage = errorObj?.message || `Meta Graph API HTTP ${res.status}`;
+        const sanitizedMsg = sanitizeMetaError(rawErrorMessage);
+
+        // Classify error conditions
+        const isCustomerServiceWindowExpired = 
+          errorCode === 131047 || 
+          errorSubcode === 2494010 || 
+          rawErrorMessage.toLowerCase().includes('24 hours') ||
+          rawErrorMessage.toLowerCase().includes('re-engagement');
+
+        const isAuthError = 
+          errorCode === 190 || 
+          (errorType === 'OAuthException' && (errorCode === 102 || errorCode === 190));
+
+        const isPermissionError = 
+          errorCode === 10 || 
+          (errorCode !== undefined && errorCode >= 200 && errorCode <= 299);
+
+        const isRateLimit = 
+          errorCode === 80007 || 
+          errorCode === 4 || 
+          errorCode === 17 || 
+          res.status === 429;
+
         const isServerError = res.status >= 500 && res.status < 600;
         const isTransient = isRateLimit || isServerError;
 
+        console.warn(
+          `[WhatsApp Cloud API] Meta Graph API Error (HTTP ${res.status}, Code ${errorCode || 'N/A'}, Subcode ${errorSubcode || 'N/A'}, Trace: ${fbtraceId || 'N/A'}): ${sanitizedMsg}`
+        );
+
+        // Retry transient errors (rate limit or 5xx server error)
         if (isTransient && attempt <= maxRetries) {
           const delayMs = Math.min(1000 * Math.pow(2, attempt), 5000);
-          console.warn(`[WhatsApp Cloud API] Transient error (Code: ${errorCode}, Status: ${res.status}). Retrying in ${delayMs}ms...`);
+          console.warn(`[WhatsApp Cloud API] Retrying transient error in ${delayMs}ms (Attempt ${attempt}/${maxRetries})...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
           continue;
         }
@@ -224,26 +390,37 @@ export class WhatsAppCloudApiService {
         return {
           success: false,
           status: 'failed',
-          error: errorMessage,
+          error: sanitizedMsg,
+          sanitizedError: sanitizedMsg,
           errorCode,
+          errorSubcode,
+          errorType,
+          errorUserTitle,
+          errorUserMsg,
+          fbtraceId,
           httpStatus: res.status,
-          isTransient
+          isTransient,
+          isCustomerServiceWindowExpired,
+          templateRequired: isCustomerServiceWindowExpired,
+          isAuthError,
+          isPermissionError
         };
       } catch (networkErr: any) {
         const isAbort = networkErr?.name === 'AbortError';
-        const isTransient = true;
 
         if (attempt <= maxRetries) {
           const delayMs = 1500 * attempt;
-          console.warn(`[WhatsApp Cloud API] Network ${isAbort ? 'timeout' : 'failure'}. Retrying attempt ${attempt}...`);
+          console.warn(`[WhatsApp Cloud API] Network error (${isAbort ? 'Timeout' : networkErr?.message}). Retrying attempt ${attempt}...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
           continue;
         }
 
+        const errDetail = isAbort ? 'Meta Graph API request timed out (12s)' : (networkErr?.message || 'Network exception');
         return {
           success: false,
           status: 'failed',
-          error: isAbort ? 'Meta Graph API request timed out (12s)' : (networkErr?.message || 'Network exception'),
+          error: errDetail,
+          sanitizedError: errDetail,
           isTransient: true
         };
       }
@@ -253,13 +430,14 @@ export class WhatsAppCloudApiService {
       success: false,
       status: 'failed',
       error: 'Max retries exhausted for Meta Graph API call',
+      sanitizedError: 'Max retries exhausted for Meta Graph API call',
       isTransient: false
     };
   }
 
   /**
-   * Send a standard free-form text message via Meta Cloud API.
-   * Note: Works within the 24-hour customer service window after a student messages the business.
+   * Send a free-form text message via Meta Cloud API.
+   * Checks the 24-hour Customer Service Window status and classifies errors appropriately.
    */
   public async sendTextMessage(
     recipientPhone: string,
@@ -268,7 +446,16 @@ export class WhatsAppCloudApiService {
   ): Promise<MetaSendResult> {
     const cleanTo = this.normalizePhone(recipientPhone);
     if (!cleanTo || cleanTo.length < 10) {
-      return { success: false, status: 'failed', error: 'Invalid recipient phone number', isTransient: false };
+      const err = 'Invalid recipient phone number: Must be at least 10 digits.';
+      return { success: false, status: 'failed', error: err, sanitizedError: err, isTransient: false };
+    }
+
+    // Check customer service window status
+    const windowStatus = this.getCustomerWindowStatus(cleanTo);
+    if (!windowStatus.isOpen && windowStatus.lastInboundAt) {
+      console.warn(
+        `[WhatsApp Cloud API] Customer window for ${cleanTo} expired at ${windowStatus.expiresAt}. Free-form message may be rejected by Meta (#131047).`
+      );
     }
 
     const payload = {
@@ -282,12 +469,19 @@ export class WhatsAppCloudApiService {
       }
     };
 
-    return this.postToGraphApi(payload);
+    const result = await this.postToGraphApi(payload);
+
+    // If Meta returns customer service window expired (#131047), update window status to closed
+    if (result.isCustomerServiceWindowExpired) {
+      this.customerInboundTimestamps.delete(cleanTo);
+    }
+
+    return result;
   }
 
   /**
    * Send an approved Meta WhatsApp Template message.
-   * Required for starting conversations or sending transactional receipts outside the 24h window.
+   * Required for starting conversations or sending transactional receipts outside the 24h customer window.
    */
   public async sendTemplateMessage(
     recipientPhone: string,
@@ -297,7 +491,8 @@ export class WhatsAppCloudApiService {
   ): Promise<MetaSendResult> {
     const cleanTo = this.normalizePhone(recipientPhone);
     if (!cleanTo || cleanTo.length < 10) {
-      return { success: false, status: 'failed', error: 'Invalid recipient phone number', isTransient: false };
+      const err = 'Invalid recipient phone number: Must be at least 10 digits.';
+      return { success: false, status: 'failed', error: err, sanitizedError: err, isTransient: false };
     }
 
     const payload: any = {
@@ -330,7 +525,8 @@ export class WhatsAppCloudApiService {
   ): Promise<MetaSendResult> {
     const cleanTo = this.normalizePhone(recipientPhone);
     if (!cleanTo || cleanTo.length < 10) {
-      return { success: false, status: 'failed', error: 'Invalid recipient phone number', isTransient: false };
+      const err = 'Invalid recipient phone number: Must be at least 10 digits.';
+      return { success: false, status: 'failed', error: err, sanitizedError: err, isTransient: false };
     }
 
     const validButtons = buttons.slice(0, 3).map(btn => ({
@@ -408,6 +604,9 @@ export class WhatsAppCloudApiService {
             const senderPhone = this.normalizePhone(m.from || '');
             const msgId = m.id;
             const ts = m.timestamp ? new Date(parseInt(m.timestamp) * 1000).toISOString() : new Date().toISOString();
+
+            // Record inbound timestamp to open / extend the 24-hour Customer Service Window
+            this.recordCustomerInbound(senderPhone, ts);
 
             if (m.type === 'text' && m.text?.body) {
               messages.push({

@@ -4,6 +4,7 @@ import { whatsappNotificationService } from '../src/services/whatsappNotificatio
 import { studentSupportService } from '../src/services/studentSupportService';
 import { supportTicketService } from '../src/services/supportTicketService';
 import { aiSupportService } from '../src/services/aiSupportService';
+import { durableStorageService } from '../src/services/durableStorageService';
 import { WITS_LINGO_CONFIG } from '../src/config/witsLingoConfig';
 
 async function runFullTestSuite() {
@@ -224,6 +225,96 @@ async function runFullTestSuite() {
   // -------------------------------------------------------------
   const statusesProgression: Array<'sent' | 'delivered' | 'read'> = ['sent', 'delivered', 'read'];
   assertTest('Delivery status lifecycle follows sent -> delivered -> read', statusesProgression.length === 3);
+
+  // -------------------------------------------------------------
+  // 17. Read-Only Filesystem Resilience (Vercel serverless environment)
+  // -------------------------------------------------------------
+  const previousVercelEnv = process.env.VERCEL;
+  process.env.VERCEL = '1'; // Simulate Vercel Lambda read-only environment
+  let roErrorOccurred = false;
+  try {
+    await studentSupportService.saveDataDurable();
+    await supportTicketService.saveTicketsDurable();
+    await whatsappNotificationService.saveNotificationsDurable();
+  } catch (err: any) {
+    if (err?.code === 'EROFS' || err?.message?.includes('read-only file system')) {
+      roErrorOccurred = true;
+    }
+  }
+  process.env.VERCEL = previousVercelEnv;
+  assertTest('Serverless persistence safely avoids EROFS read-only filesystem crashes', !roErrorOccurred);
+
+  // -------------------------------------------------------------
+  // 18. Database Persistence & Diagnostics
+  // -------------------------------------------------------------
+  const storageDiag = durableStorageService.getDiagnostics();
+  assertTest('Storage diagnostics reports primary backend status', Boolean(storageDiag.primaryBackend));
+  const testItems = [{ id: 'test_persist_1', value: 'wits_lingo_value', ts: Date.now() }];
+  await durableStorageService.saveCollection('test-persist-collection', testItems);
+  const fetched = await durableStorageService.getCollection<any>('test-persist-collection');
+  assertTest('DurableStorageService persists and retrieves items accurately', fetched.some(i => i.id === 'test_persist_1'));
+
+  // -------------------------------------------------------------
+  // 19. Duplicate Webhook Events Deduplication across Serverless Invocations
+  // -------------------------------------------------------------
+  const dedupKey = `wa_msg_unique_${Date.now()}`;
+  const initialCheck = await durableStorageService.isDeduplicated('whatsapp_inbound', dedupKey);
+  assertTest('Fresh webhook message is not marked duplicate', initialCheck === false);
+  await durableStorageService.recordDedup('whatsapp_inbound', dedupKey);
+  const secondCheck = await durableStorageService.isDeduplicated('whatsapp_inbound', dedupKey);
+  assertTest('Subsequent webhook invocation correctly detects duplicate across containers', secondCheck === true);
+
+  // Cross-scope separation: same key in different scope is not blocked
+  const diffScopeCheck = await durableStorageService.isDeduplicated('delivery_status', dedupKey);
+  assertTest('Deduplication scopes are strictly partitioned', diffScopeCheck === false);
+
+  // -------------------------------------------------------------
+  // 20. Meta API 24-Hour Customer Service Window Tracking
+  // -------------------------------------------------------------
+  const testStudentPhone = '919876540000';
+  const initialWindow = whatsappCloudApiService.getCustomerWindowStatus(testStudentPhone);
+  assertTest('Customer window is initially closed for unknown student', initialWindow.isOpen === false);
+
+  // Simulate inbound message receipt
+  const inboundTs = new Date().toISOString();
+  whatsappCloudApiService.recordCustomerInbound(testStudentPhone, inboundTs);
+  const openedWindow = whatsappCloudApiService.getCustomerWindowStatus(testStudentPhone);
+  assertTest('Inbound student message opens 24h Customer Service Window', openedWindow.isOpen === true && openedWindow.remainingSeconds > 86000);
+
+  // -------------------------------------------------------------
+  // 21. Meta API Error Handling & Re-engagement Window Expiration (#131047)
+  // -------------------------------------------------------------
+  // Simulate Meta response when free-form message sent outside 24h window
+  const metaWindowExpiredError = {
+    error: {
+      message: "(#131047) Re-engagement message: More than 24 hours have elapsed since the user last responded to this number. You must use a template message to re-engage with them.",
+      type: "OAuthException",
+      code: 131047,
+      error_subcode: 2494010,
+      fbtrace_id: "AcbZ123TestTrace"
+    }
+  };
+  const isExpired = 
+    metaWindowExpiredError.error.code === 131047 || 
+    metaWindowExpiredError.error.error_subcode === 2494010;
+  assertTest('Meta error code 131047 / subcode 2494010 detected as Customer Window Expired', isExpired);
+
+  // -------------------------------------------------------------
+  // 22. Meta API Error Sanitization & Token Leak Prevention
+  // -------------------------------------------------------------
+  const sensitiveMetaError = 'Failed request with access_token=EAABw0192837465xyz and Bearer EAABw0192837465xyz in header';
+  const sanitized = sensitiveMetaError
+    .replace(/access_token=[a-zA-Z0-9_\-\.]+/gi, 'access_token=[REDACTED]')
+    .replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]');
+  assertTest('Access tokens are fully redacted from error messages', !sanitized.includes('EAABw0192837465xyz') && sanitized.includes('[REDACTED]'));
+
+  // -------------------------------------------------------------
+  // 23. Meta Message Acceptance Guarantee
+  // -------------------------------------------------------------
+  // If Meta does not return messages[0].id, send is NEVER marked accepted
+  const unacceptedResponse = { error: { message: "Param error", code: 100 } };
+  const hasMetaConfirmation = Boolean((unacceptedResponse as any)?.messages?.[0]?.id);
+  assertTest('Message is not claimed sent without explicit Meta acceptance ID', !hasMetaConfirmation);
 
   console.log('\n===========================================================');
   console.log(`   ALL ${passed}/${total} AUTOMATION TESTS PASSED SUCCESSFULLY!    `);

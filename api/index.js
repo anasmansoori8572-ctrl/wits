@@ -1,10 +1,10 @@
 // server.ts
 import "dotenv/config";
 import express from "express";
-import path5 from "path";
+import path6 from "path";
 import crypto2 from "crypto";
-import fs5 from "fs";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import fs6 from "fs";
+import { S3Client as S3Client2, PutObjectCommand as PutObjectCommand2 } from "@aws-sdk/client-s3";
 
 // src/config/witsLingoConfig.ts
 var WITS_LINGO_CONFIG = {
@@ -24,8 +24,15 @@ var WITS_LINGO_CONFIG = {
 
 // src/services/whatsappCloudApiService.ts
 import crypto from "crypto";
+function sanitizeMetaError(rawMessage) {
+  if (!rawMessage) return "Unknown Meta API error";
+  return rawMessage.replace(/access_token=[a-zA-Z0-9_\-\.]+/gi, "access_token=[REDACTED]").replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, "Bearer [REDACTED]").replace(/appsecret_proof=[a-zA-Z0-9_\-]+/gi, "appsecret_proof=[REDACTED]").trim();
+}
 var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
   constructor() {
+    // In-memory registry of student last inbound messages for tracking the 24h Customer Service Window
+    // 24 hours in milliseconds = 86,400,000 ms
+    this.customerInboundTimestamps = /* @__PURE__ */ new Map();
   }
   static getInstance() {
     if (!_WhatsAppCloudApiService.instance) {
@@ -33,51 +40,68 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     }
     return _WhatsAppCloudApiService.instance;
   }
-  // Configuration getters (reading dynamically so env changes don't require process restart)
+  // Configuration getters (dynamically evaluated and stripped of leading/trailing quotes)
   get phoneNumberId() {
-    return process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || "";
+    const raw = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+    return raw.trim().replace(/^["']|["']$/g, "");
   }
   get businessAccountId() {
-    return process.env.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim() || "";
+    const raw = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
+    return raw.trim().replace(/^["']|["']$/g, "");
   }
   get accessToken() {
-    return process.env.WHATSAPP_ACCESS_TOKEN?.trim() || "";
+    const raw = process.env.WHATSAPP_ACCESS_TOKEN || "";
+    return raw.trim().replace(/^["']|["']$/g, "");
   }
   get graphApiVersion() {
-    return process.env.WHATSAPP_GRAPH_API_VERSION?.trim() || "v21.0";
+    const raw = process.env.WHATSAPP_GRAPH_API_VERSION || process.env.WHATSAPP_API_VERSION || "v21.0";
+    return raw.trim().replace(/^["']|["']$/g, "");
   }
   get verifyToken() {
     const raw = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || "witslingo_meta_verify_token_2026";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get appSecret() {
-    return process.env.WHATSAPP_APP_SECRET?.trim() || "";
+    const raw = process.env.WHATSAPP_APP_SECRET || "";
+    return raw.trim().replace(/^["']|["']$/g, "");
   }
   get confirmationTemplateName() {
-    return process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME?.trim() || "wits_lingo_enrollment_confirmation";
+    const raw = process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME || "wits_lingo_enrollment_confirmation";
+    return raw.trim().replace(/^["']|["']$/g, "");
   }
   get templateLanguage() {
-    return process.env.WHATSAPP_TEMPLATE_LANGUAGE?.trim() || "en";
+    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en";
+    return raw.trim().replace(/^["']|["']$/g, "");
   }
   get supportPhone() {
-    return process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "918791287575";
+    const raw = process.env.WHATSAPP_SUPPORT_PHONE || "918791287575";
+    return raw.trim().replace(/^["']|["']$/g, "");
   }
   /**
-   * Diagnostic summary of Meta Cloud API configuration
+   * Diagnostic summary of Meta Cloud API configuration and credentials health.
+   * Completely safe: never reveals token bytes.
    */
   getDiagnostics() {
+    const hasPhone = Boolean(this.phoneNumberId);
+    const isPhoneNumeric = /^\d+$/.test(this.phoneNumberId);
+    const hasToken = Boolean(this.accessToken);
+    const tokenLength = this.accessToken.length;
+    const hasAppSecret = Boolean(this.appSecret);
     return {
       provider: "cloud_api",
-      configured: Boolean(this.phoneNumberId && this.accessToken),
-      hasPhoneNumberId: Boolean(this.phoneNumberId),
-      hasAccessToken: Boolean(this.accessToken),
-      hasAppSecret: Boolean(this.appSecret),
+      configured: hasPhone && hasToken,
+      hasPhoneNumberId: hasPhone,
+      isPhoneNumberNumeric: isPhoneNumeric,
+      hasAccessToken: hasToken,
+      tokenLengthHint: hasToken ? tokenLength > 50 ? "valid_length" : "suspiciously_short" : "missing",
+      hasAppSecret,
       hasBusinessAccountId: Boolean(this.businessAccountId),
       hasWebhookVerifyTokenEnv: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN),
       graphApiVersion: this.graphApiVersion,
       confirmationTemplateName: this.confirmationTemplateName,
       templateLanguage: this.templateLanguage,
       supportPhone: this.supportPhone,
+      activeCustomerWindowsCount: this.customerInboundTimestamps.size,
       endpoint: `https://graph.facebook.com/${this.graphApiVersion}/${this.phoneNumberId || "{PHONE_NUMBER_ID}"}/messages`
     };
   }
@@ -91,6 +115,55 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     if (digits.startsWith("0")) digits = digits.replace(/^0+/, "");
     if (digits.length === 10) digits = "91" + digits;
     return digits;
+  }
+  /**
+   * Record when a student sent an inbound message, initiating or extending the 24h Customer Service Window
+   */
+  recordCustomerInbound(phone, timestamp) {
+    const cleanPhone = this.normalizePhone(phone);
+    if (!cleanPhone) return;
+    let tsMillis;
+    if (typeof timestamp === "number") {
+      tsMillis = timestamp > 1e11 ? timestamp : timestamp * 1e3;
+    } else if (typeof timestamp === "string") {
+      tsMillis = new Date(timestamp).getTime();
+      if (isNaN(tsMillis)) tsMillis = Date.now();
+    } else {
+      tsMillis = Date.now();
+    }
+    this.customerInboundTimestamps.set(cleanPhone, tsMillis);
+  }
+  /**
+   * Check whether a customer is currently within the Meta 24-hour Customer Service Window
+   */
+  getCustomerWindowStatus(phone) {
+    const cleanPhone = this.normalizePhone(phone);
+    const lastInbound = this.customerInboundTimestamps.get(cleanPhone);
+    const now = Date.now();
+    const WINDOW_DURATION_MS = 24 * 60 * 60 * 1e3;
+    if (!lastInbound) {
+      return {
+        isOpen: false,
+        remainingSeconds: 0
+      };
+    }
+    const elapsed = now - lastInbound;
+    const remainingMs = WINDOW_DURATION_MS - elapsed;
+    if (remainingMs > 0) {
+      return {
+        isOpen: true,
+        lastInboundAt: new Date(lastInbound).toISOString(),
+        expiresAt: new Date(lastInbound + WINDOW_DURATION_MS).toISOString(),
+        remainingSeconds: Math.floor(remainingMs / 1e3)
+      };
+    } else {
+      return {
+        isOpen: false,
+        lastInboundAt: new Date(lastInbound).toISOString(),
+        expiresAt: new Date(lastInbound + WINDOW_DURATION_MS).toISOString(),
+        remainingSeconds: 0
+      };
+    }
   }
   /**
    * Verify Webhook challenge from Meta Developers Console (GET /api/webhooks/whatsapp)
@@ -122,18 +195,35 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     }
   }
   /**
-   * Low-level HTTP POST to Meta Graph API with retry for transient errors
+   * Low-level HTTP POST to Meta Graph API with comprehensive error sanitization and diagnostics
    */
   async postToGraphApi(payload, maxRetries = 2) {
-    if (!this.phoneNumberId || !this.accessToken) {
+    const phoneId = this.phoneNumberId;
+    const token = this.accessToken;
+    if (!phoneId || !token) {
+      const errorMsg = "WhatsApp Cloud API credentials missing: WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN not configured.";
+      console.warn(`[WhatsApp Cloud API] Send aborted: ${errorMsg}`);
       return {
         success: false,
         status: "failed",
-        error: "WhatsApp Cloud API is not configured: Missing WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN in server environment.",
+        error: errorMsg,
+        sanitizedError: errorMsg,
+        isTransient: false,
+        isAuthError: true
+      };
+    }
+    if (!/^\d+$/.test(phoneId)) {
+      const errorMsg = `Invalid WHATSAPP_PHONE_NUMBER_ID: Must contain digits only. Received: "${phoneId.substring(0, 4)}..."`;
+      console.error(`[WhatsApp Cloud API] Config error: ${errorMsg}`);
+      return {
+        success: false,
+        status: "failed",
+        error: errorMsg,
+        sanitizedError: errorMsg,
         isTransient: false
       };
     }
-    const url = `https://graph.facebook.com/${this.graphApiVersion}/${this.phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/${this.graphApiVersion}/${phoneId}/messages`;
     let attempt = 0;
     while (attempt <= maxRetries) {
       attempt++;
@@ -143,55 +233,82 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
         const res = await fetch(url, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${this.accessToken}`,
+            "Authorization": `Bearer ${token}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify(payload),
           signal: controller.signal
         });
         clearTimeout(timeoutId);
-        const data = await res.json();
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+        }
         if (res.ok && data?.messages?.[0]?.id) {
           return {
             success: true,
             status: "accepted",
-            // Accepted by Meta Graph API; delivery confirmed asynchronously via Webhook
             messageId: data.messages[0].id,
             httpStatus: res.status
           };
         }
-        const errorCode = data?.error?.code;
-        const errorMessage = data?.error?.message || `Meta API HTTP ${res.status}`;
+        const errorObj = data?.error;
+        const errorCode = typeof errorObj?.code === "number" ? errorObj.code : void 0;
+        const errorSubcode = typeof errorObj?.error_subcode === "number" ? errorObj.error_subcode : void 0;
+        const errorType = errorObj?.type;
+        const fbtraceId = errorObj?.fbtrace_id;
+        const errorUserTitle = errorObj?.error_user_title;
+        const errorUserMsg = errorObj?.error_user_msg;
+        const rawErrorMessage = errorObj?.message || `Meta Graph API HTTP ${res.status}`;
+        const sanitizedMsg = sanitizeMetaError(rawErrorMessage);
+        const isCustomerServiceWindowExpired = errorCode === 131047 || errorSubcode === 2494010 || rawErrorMessage.toLowerCase().includes("24 hours") || rawErrorMessage.toLowerCase().includes("re-engagement");
+        const isAuthError = errorCode === 190 || errorType === "OAuthException" && (errorCode === 102 || errorCode === 190);
+        const isPermissionError = errorCode === 10 || errorCode !== void 0 && errorCode >= 200 && errorCode <= 299;
         const isRateLimit = errorCode === 80007 || errorCode === 4 || errorCode === 17 || res.status === 429;
         const isServerError = res.status >= 500 && res.status < 600;
         const isTransient = isRateLimit || isServerError;
+        console.warn(
+          `[WhatsApp Cloud API] Meta Graph API Error (HTTP ${res.status}, Code ${errorCode || "N/A"}, Subcode ${errorSubcode || "N/A"}, Trace: ${fbtraceId || "N/A"}): ${sanitizedMsg}`
+        );
         if (isTransient && attempt <= maxRetries) {
           const delayMs = Math.min(1e3 * Math.pow(2, attempt), 5e3);
-          console.warn(`[WhatsApp Cloud API] Transient error (Code: ${errorCode}, Status: ${res.status}). Retrying in ${delayMs}ms...`);
+          console.warn(`[WhatsApp Cloud API] Retrying transient error in ${delayMs}ms (Attempt ${attempt}/${maxRetries})...`);
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
         }
         return {
           success: false,
           status: "failed",
-          error: errorMessage,
+          error: sanitizedMsg,
+          sanitizedError: sanitizedMsg,
           errorCode,
+          errorSubcode,
+          errorType,
+          errorUserTitle,
+          errorUserMsg,
+          fbtraceId,
           httpStatus: res.status,
-          isTransient
+          isTransient,
+          isCustomerServiceWindowExpired,
+          templateRequired: isCustomerServiceWindowExpired,
+          isAuthError,
+          isPermissionError
         };
       } catch (networkErr) {
         const isAbort = networkErr?.name === "AbortError";
-        const isTransient = true;
         if (attempt <= maxRetries) {
           const delayMs = 1500 * attempt;
-          console.warn(`[WhatsApp Cloud API] Network ${isAbort ? "timeout" : "failure"}. Retrying attempt ${attempt}...`);
+          console.warn(`[WhatsApp Cloud API] Network error (${isAbort ? "Timeout" : networkErr?.message}). Retrying attempt ${attempt}...`);
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
         }
+        const errDetail = isAbort ? "Meta Graph API request timed out (12s)" : networkErr?.message || "Network exception";
         return {
           success: false,
           status: "failed",
-          error: isAbort ? "Meta Graph API request timed out (12s)" : networkErr?.message || "Network exception",
+          error: errDetail,
+          sanitizedError: errDetail,
           isTransient: true
         };
       }
@@ -200,17 +317,25 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       success: false,
       status: "failed",
       error: "Max retries exhausted for Meta Graph API call",
+      sanitizedError: "Max retries exhausted for Meta Graph API call",
       isTransient: false
     };
   }
   /**
-   * Send a standard free-form text message via Meta Cloud API.
-   * Note: Works within the 24-hour customer service window after a student messages the business.
+   * Send a free-form text message via Meta Cloud API.
+   * Checks the 24-hour Customer Service Window status and classifies errors appropriately.
    */
   async sendTextMessage(recipientPhone, messageText, previewUrl = true) {
     const cleanTo = this.normalizePhone(recipientPhone);
     if (!cleanTo || cleanTo.length < 10) {
-      return { success: false, status: "failed", error: "Invalid recipient phone number", isTransient: false };
+      const err = "Invalid recipient phone number: Must be at least 10 digits.";
+      return { success: false, status: "failed", error: err, sanitizedError: err, isTransient: false };
+    }
+    const windowStatus = this.getCustomerWindowStatus(cleanTo);
+    if (!windowStatus.isOpen && windowStatus.lastInboundAt) {
+      console.warn(
+        `[WhatsApp Cloud API] Customer window for ${cleanTo} expired at ${windowStatus.expiresAt}. Free-form message may be rejected by Meta (#131047).`
+      );
     }
     const payload = {
       messaging_product: "whatsapp",
@@ -222,16 +347,21 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
         body: messageText
       }
     };
-    return this.postToGraphApi(payload);
+    const result = await this.postToGraphApi(payload);
+    if (result.isCustomerServiceWindowExpired) {
+      this.customerInboundTimestamps.delete(cleanTo);
+    }
+    return result;
   }
   /**
    * Send an approved Meta WhatsApp Template message.
-   * Required for starting conversations or sending transactional receipts outside the 24h window.
+   * Required for starting conversations or sending transactional receipts outside the 24h customer window.
    */
   async sendTemplateMessage(recipientPhone, templateName, languageCode, components = []) {
     const cleanTo = this.normalizePhone(recipientPhone);
     if (!cleanTo || cleanTo.length < 10) {
-      return { success: false, status: "failed", error: "Invalid recipient phone number", isTransient: false };
+      const err = "Invalid recipient phone number: Must be at least 10 digits.";
+      return { success: false, status: "failed", error: err, sanitizedError: err, isTransient: false };
     }
     const payload = {
       messaging_product: "whatsapp",
@@ -254,7 +384,8 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
   async sendInteractiveButtons(recipientPhone, bodyText, buttons, headerText, footerText) {
     const cleanTo = this.normalizePhone(recipientPhone);
     if (!cleanTo || cleanTo.length < 10) {
-      return { success: false, status: "failed", error: "Invalid recipient phone number", isTransient: false };
+      const err = "Invalid recipient phone number: Must be at least 10 digits.";
+      return { success: false, status: "failed", error: err, sanitizedError: err, isTransient: false };
     }
     const validButtons = buttons.slice(0, 3).map((btn) => ({
       type: "reply",
@@ -317,6 +448,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
             const senderPhone = this.normalizePhone(m.from || "");
             const msgId = m.id;
             const ts = m.timestamp ? new Date(parseInt(m.timestamp) * 1e3).toISOString() : (/* @__PURE__ */ new Date()).toISOString();
+            this.recordCustomerInbound(senderPhone, ts);
             if (m.type === "text" && m.text?.body) {
               messages2.push({
                 messageId: msgId,
@@ -359,12 +491,418 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
 var whatsappCloudApiService = WhatsAppCloudApiService.getInstance();
 
 // src/services/whatsappNotificationService.ts
+import fs2 from "fs";
+import path2 from "path";
+
+// src/services/durableStorageService.ts
 import fs from "fs";
 import path from "path";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+var DurableStorageService = class _DurableStorageService {
+  constructor() {
+    this.memoryCache = /* @__PURE__ */ new Map();
+    this.s3Client = null;
+    this.s3Configured = false;
+    this.s3Bucket = "";
+    this.firestoreConfigured = false;
+    this.firestoreProjectId = "";
+    this.isReadOnlyFs = false;
+    this.dedupCache = /* @__PURE__ */ new Map();
+    this.detectEnvironment();
+    this.initS3Client();
+    this.initFirestore();
+    this.loadInitialData();
+  }
+  static getInstance() {
+    if (!_DurableStorageService.instance) {
+      _DurableStorageService.instance = new _DurableStorageService();
+    }
+    return _DurableStorageService.instance;
+  }
+  /**
+   * Detect whether running in a read-only environment like Vercel Lambda
+   */
+  detectEnvironment() {
+    if (process.env.VERCEL === "1" || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      this.isReadOnlyFs = true;
+      return;
+    }
+    try {
+      const testDir = path.join(process.cwd(), "uploads", "data");
+      if (!fs.existsSync(testDir)) {
+        fs.mkdirSync(testDir, { recursive: true });
+      }
+      const testFile = path.join(testDir, `.write_test_${Date.now()}`);
+      fs.writeFileSync(testFile, "ok", "utf-8");
+      fs.unlinkSync(testFile);
+      this.isReadOnlyFs = false;
+    } catch {
+      this.isReadOnlyFs = true;
+    }
+  }
+  /**
+   * Initialize S3 / Backblaze B2 client from environment variables
+   */
+  initS3Client() {
+    const bucket = (process.env.B2_BUCKET_NAME || process.env.AWS_S3_BUCKET || "").trim();
+    const rawEndpoint = (process.env.B2_ENDPOINT || process.env.AWS_ENDPOINT || "s3.us-east-005.backblazeb2.com").trim();
+    const keyId = (process.env.B2_KEY_ID || process.env.AWS_ACCESS_KEY_ID || "").trim();
+    const appKey = (process.env.B2_APPLICATION_KEY || process.env.AWS_SECRET_ACCESS_KEY || "").trim();
+    if (bucket && keyId && appKey) {
+      try {
+        const cleanEndpoint = rawEndpoint.replace(/^https?:\/\//i, "");
+        const regionMatch = cleanEndpoint.match(/^s3\.([a-z0-9-]+)\.backblazeb2\.com/i);
+        const region = regionMatch ? regionMatch[1] : process.env.AWS_REGION || "us-east-005";
+        this.s3Client = new S3Client({
+          endpoint: `https://${cleanEndpoint}`,
+          region,
+          credentials: {
+            accessKeyId: keyId,
+            secretAccessKey: appKey
+          }
+        });
+        this.s3Bucket = bucket;
+        this.s3Configured = true;
+      } catch (err) {
+        console.warn("[DurableStorage] Could not initialize S3/B2 client:", err);
+        this.s3Configured = false;
+      }
+    }
+  }
+  /**
+   * Initialize Firestore if configured in environment
+   */
+  initFirestore() {
+    const projectId = (process.env.FIREBASE_PROJECT_ID || process.env.FIRESTORE_PROJECT_ID || "").trim();
+    if (projectId) {
+      this.firestoreProjectId = projectId;
+      this.firestoreConfigured = true;
+    }
+  }
+  /**
+   * Pre-seed in-memory cache from packaged seed files on startup if readable
+   */
+  loadInitialData() {
+    const seedCollections = [
+      "conversations",
+      "messages",
+      "support-tickets",
+      "notifications",
+      "registrations",
+      "orders",
+      "webhook-dedup"
+    ];
+    for (const coll of seedCollections) {
+      try {
+        const localPath = path.join(process.cwd(), "uploads", "data", `${coll}.json`);
+        if (fs.existsSync(localPath)) {
+          const raw = fs.readFileSync(localPath, "utf-8");
+          const parsed = JSON.parse(raw);
+          this.memoryCache.set(coll, parsed);
+          if (coll === "webhook-dedup" && Array.isArray(parsed)) {
+            const now = Date.now();
+            for (const item of parsed) {
+              if (item.key && (!item.expiresAt || item.expiresAt > now)) {
+                this.dedupCache.set(`${item.scope || "default"}:${item.key}`, item);
+              }
+            }
+          }
+        }
+      } catch {
+      }
+    }
+  }
+  /**
+   * Diagnostic summary of persistence status
+   */
+  getDiagnostics() {
+    let primaryBackend;
+    if (this.s3Configured) {
+      primaryBackend = "b2_s3";
+    } else if (this.firestoreConfigured) {
+      primaryBackend = "firestore";
+    } else if (!this.isReadOnlyFs) {
+      primaryBackend = "local_fs";
+    } else {
+      primaryBackend = "in_memory_fallback";
+    }
+    return {
+      isVercel: process.env.VERCEL === "1",
+      isFileSystemReadOnly: this.isReadOnlyFs,
+      primaryBackend,
+      b2Configured: this.s3Configured,
+      b2Bucket: this.s3Bucket || void 0,
+      b2Endpoint: process.env.B2_ENDPOINT || void 0,
+      firestoreConfigured: this.firestoreConfigured,
+      firestoreProjectId: this.firestoreProjectId || void 0,
+      cachedCollections: Array.from(this.memoryCache.keys()),
+      dedupCount: this.dedupCache.size
+    };
+  }
+  /**
+   * Retrieve a collection from durable cloud storage or memory cache
+   */
+  async getCollection(collectionName, defaultValue = []) {
+    if (this.memoryCache.has(collectionName)) {
+      const cached = this.memoryCache.get(collectionName);
+      if (Array.isArray(cached)) {
+        return [...cached];
+      }
+    }
+    if (this.s3Configured && this.s3Client) {
+      try {
+        const key = `data/${collectionName}.json`;
+        const res = await this.s3Client.send(new GetObjectCommand({
+          Bucket: this.s3Bucket,
+          Key: key
+        }));
+        if (res.Body) {
+          const chunks = [];
+          for await (const chunk of res.Body) {
+            chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+          }
+          const content = Buffer.concat(chunks).toString("utf-8");
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            this.memoryCache.set(collectionName, parsed);
+            return [...parsed];
+          }
+        }
+      } catch (s3Err) {
+        if (s3Err?.name !== "NoSuchKey" && s3Err?.$metadata?.httpStatusCode !== 404) {
+          console.warn(`[DurableStorage] B2 read error for ${collectionName}:`, s3Err?.message);
+        }
+      }
+    }
+    try {
+      const localPath = path.join(process.cwd(), "uploads", "data", `${collectionName}.json`);
+      if (fs.existsSync(localPath)) {
+        const raw = fs.readFileSync(localPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          this.memoryCache.set(collectionName, parsed);
+          return [...parsed];
+        }
+      }
+    } catch {
+    }
+    this.memoryCache.set(collectionName, defaultValue);
+    return [...defaultValue];
+  }
+  /**
+   * Synchronously get collection from in-memory cache (zero latency)
+   */
+  getCollectionSync(collectionName, defaultValue = []) {
+    if (this.memoryCache.has(collectionName)) {
+      const cached = this.memoryCache.get(collectionName);
+      if (Array.isArray(cached)) {
+        return [...cached];
+      }
+    }
+    return [...defaultValue];
+  }
+  /**
+   * Persist collection to durable cloud storage and update memory cache.
+   * NEVER writes to read-only disk on Vercel.
+   * Reports exact status and never silently claims success on failure.
+   */
+  async saveCollection(collectionName, items) {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    const cloned = Array.isArray(items) ? [...items] : [];
+    this.memoryCache.set(collectionName, cloned);
+    const jsonString = JSON.stringify(cloned, null, 2);
+    const byteLength = Buffer.byteLength(jsonString, "utf-8");
+    if (this.s3Configured && this.s3Client) {
+      try {
+        const key = `data/${collectionName}.json`;
+        await this.s3Client.send(new PutObjectCommand({
+          Bucket: this.s3Bucket,
+          Key: key,
+          Body: Buffer.from(jsonString, "utf-8"),
+          ContentType: "application/json; charset=utf-8"
+        }));
+        return {
+          success: true,
+          backend: "b2_s3",
+          bytesWritten: byteLength,
+          timestamp
+        };
+      } catch (s3Err) {
+        const errMsg = s3Err?.message || "B2 PutObject failed";
+        console.error(`[DurableStorage] B2 persistence failed for collection '${collectionName}':`, errMsg);
+        return {
+          success: false,
+          backend: "b2_s3",
+          error: errMsg,
+          timestamp
+        };
+      }
+    }
+    if (this.firestoreConfigured && this.firestoreProjectId) {
+      try {
+        const url = `https://firestore.googleapis.com/v1/projects/${this.firestoreProjectId}/databases/(default)/documents/app_collections/${collectionName}`;
+        const res = await fetch(url, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fields: {
+              data: { stringValue: jsonString },
+              updatedAt: { timestampValue: timestamp }
+            }
+          })
+        });
+        if (res.ok) {
+          return {
+            success: true,
+            backend: "firestore",
+            bytesWritten: byteLength,
+            timestamp
+          };
+        } else {
+          const errBody = await res.text();
+          console.error(`[DurableStorage] Firestore REST error (${res.status}):`, errBody);
+          return {
+            success: false,
+            backend: "firestore",
+            error: `Firestore HTTP ${res.status}`,
+            timestamp
+          };
+        }
+      } catch (fsErr) {
+        console.error(`[DurableStorage] Firestore persistence failed:`, fsErr);
+        return {
+          success: false,
+          backend: "firestore",
+          error: fsErr?.message || "Firestore write failed",
+          timestamp
+        };
+      }
+    }
+    if (!this.isReadOnlyFs && process.env.VERCEL !== "1") {
+      try {
+        const dir = path.join(process.cwd(), "uploads", "data");
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        const localPath = path.join(dir, `${collectionName}.json`);
+        fs.writeFileSync(localPath, jsonString, "utf-8");
+        return {
+          success: true,
+          backend: "local_fs",
+          bytesWritten: byteLength,
+          timestamp
+        };
+      } catch (fsErr) {
+        console.warn(`[DurableStorage] Local filesystem write failed:`, fsErr?.message);
+        return {
+          success: false,
+          backend: "local_fs",
+          error: fsErr?.message || "Local filesystem write failed",
+          timestamp
+        };
+      }
+    }
+    console.warn(`[DurableStorage] Running on read-only serverless environment without cloud database configured (B2/Firestore). Data kept in-memory for current container lifetime.`);
+    return {
+      success: false,
+      backend: "in_memory_only",
+      error: "Read-only serverless filesystem detected. B2/Firestore credentials not configured for durable persistence.",
+      timestamp
+    };
+  }
+  /**
+   * Fast synchronous in-memory update with background cloud persistence
+   */
+  saveCollectionBackground(collectionName, items) {
+    const cloned = Array.isArray(items) ? [...items] : [];
+    this.memoryCache.set(collectionName, cloned);
+    this.saveCollection(collectionName, cloned).catch((err) => {
+      console.error(`[DurableStorage] Async saveCollection error for '${collectionName}':`, err);
+    });
+  }
+  /**
+   * Durable Webhook Event Deduplication:
+   * Checks if a webhook messageId or event key has already been processed.
+   */
+  async isDeduplicated(scope, key) {
+    const compositeKey = `${scope}:${key}`;
+    const now = Date.now();
+    const existing = this.dedupCache.get(compositeKey);
+    if (existing) {
+      if (existing.expiresAt > now) {
+        return true;
+      }
+      this.dedupCache.delete(compositeKey);
+    }
+    const dedupList = await this.getCollection("webhook-dedup", []);
+    const found = dedupList.find((d) => d.key === key && d.scope === scope);
+    if (found) {
+      if (found.expiresAt > now) {
+        this.dedupCache.set(compositeKey, found);
+        return true;
+      }
+    }
+    return false;
+  }
+  /**
+   * Synchronously check in-memory dedup cache
+   */
+  isDeduplicatedSync(scope, key) {
+    const compositeKey = `${scope}:${key}`;
+    const existing = this.dedupCache.get(compositeKey);
+    if (existing && existing.expiresAt > Date.now()) {
+      return true;
+    }
+    return false;
+  }
+  /**
+   * Record a processed webhook messageId or event key in durable deduplication store
+   * Default TTL: 7 days (604,800,000 ms)
+   */
+  async recordDedup(scope, key, ttlMs = 7 * 24 * 60 * 60 * 1e3) {
+    const compositeKey = `${scope}:${key}`;
+    const now = Date.now();
+    const expiresAt = now + ttlMs;
+    const record = {
+      key,
+      scope,
+      recordedAt: new Date(now).toISOString(),
+      expiresAt
+    };
+    this.dedupCache.set(compositeKey, record);
+    let dedupList = await this.getCollection("webhook-dedup", []);
+    dedupList = dedupList.filter((d) => d.expiresAt > now && !(d.key === key && d.scope === scope));
+    dedupList.unshift(record);
+    if (dedupList.length > 2e3) {
+      dedupList = dedupList.slice(0, 2e3);
+    }
+    return this.saveCollection("webhook-dedup", dedupList);
+  }
+  /**
+   * Synchronously record dedup in RAM and flush to cloud storage in background
+   */
+  recordDedupBackground(scope, key, ttlMs = 7 * 24 * 60 * 60 * 1e3) {
+    const compositeKey = `${scope}:${key}`;
+    const now = Date.now();
+    const expiresAt = now + ttlMs;
+    const record = {
+      key,
+      scope,
+      recordedAt: new Date(now).toISOString(),
+      expiresAt
+    };
+    this.dedupCache.set(compositeKey, record);
+    this.recordDedup(scope, key, ttlMs).catch((err) => {
+      console.warn(`[DurableStorage] Async recordDedup error for '${key}':`, err);
+    });
+  }
+};
+var durableStorageService = DurableStorageService.getInstance();
+
+// src/services/whatsappNotificationService.ts
 var WhatsAppNotificationService = class _WhatsAppNotificationService {
   constructor() {
     this.notifications = [];
-    this.filePath = path.join(process.cwd(), "uploads", "data", "notifications.json");
     this.loadNotifications();
   }
   static getInstance() {
@@ -374,30 +912,40 @@ var WhatsAppNotificationService = class _WhatsAppNotificationService {
     return _WhatsAppNotificationService.instance;
   }
   loadNotifications() {
-    try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = fs.readFileSync(this.filePath, "utf-8");
-        this.notifications = JSON.parse(raw);
-      } else {
+    this.notifications = durableStorageService.getCollectionSync("notifications", []);
+    if (this.notifications.length === 0) {
+      try {
+        const filePath = path2.join(process.cwd(), "uploads", "data", "notifications.json");
+        if (fs2.existsSync(filePath)) {
+          const raw = fs2.readFileSync(filePath, "utf-8");
+          this.notifications = JSON.parse(raw);
+        }
+      } catch (e) {
         this.notifications = [];
       }
-    } catch (e) {
-      console.warn("[WhatsAppNotificationService] Error loading notifications:", e);
-      this.notifications = [];
     }
   }
+  /**
+   * Save notifications safely using DurableStorageService without local disk writes
+   */
   saveNotifications() {
-    try {
-      const dir = path.dirname(this.filePath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(this.filePath, JSON.stringify(this.notifications, null, 2), "utf-8");
-    } catch (e) {
-      console.error("[WhatsAppNotificationService] Error saving notifications:", e);
-    }
+    durableStorageService.saveCollectionBackground("notifications", this.notifications);
+  }
+  /**
+   * Explicit awaitable durable persistence
+   */
+  async saveNotificationsDurable() {
+    const res = await durableStorageService.saveCollection("notifications", this.notifications);
+    return {
+      success: res.success,
+      error: res.error
+    };
   }
   getAllNotifications() {
     this.loadNotifications();
-    return [...this.notifications].sort((a, b) => new Date(b.lastAttemptAt).getTime() - new Date(a.lastAttemptAt).getTime());
+    return [...this.notifications].sort(
+      (a, b) => new Date(b.lastAttemptAt).getTime() - new Date(a.lastAttemptAt).getTime()
+    );
   }
   getNotificationByMessageId(messageId) {
     this.loadNotifications();
@@ -471,7 +1019,7 @@ Team Wits Lingo`;
     const templateName = whatsappCloudApiService.confirmationTemplateName;
     if (whatsappCloudApiService.phoneNumberId && whatsappCloudApiService.accessToken) {
       try {
-        console.log(`[WhatsAppNotificationService] Attempting template message '${templateName}' to ${cleanRecipient}...`);
+        console.log(`[WhatsAppNotificationService] Attempting official template '${templateName}' to ${cleanRecipient}...`);
         sendResult = await whatsappCloudApiService.sendTemplateMessage(
           cleanRecipient,
           templateName,
@@ -491,8 +1039,15 @@ Team Wits Lingo`;
           ]
         );
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.errorCode === 100 || sendResult.error?.includes("template"))) {
-          console.warn(`[WhatsAppNotificationService] Meta template '${templateName}' not found or unapproved (Code ${sendResult.errorCode}). Falling back to transactional text message.`);
-          sendResult = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullMessageText);
+          console.warn(`[WhatsAppNotificationService] Meta template '${templateName}' not found or unapproved (Code ${sendResult.errorCode}). Attempting transactional text fallback.`);
+          const textResult = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullMessageText);
+          if (textResult.success) {
+            sendResult = textResult;
+          } else {
+            const combinedError = textResult.isCustomerServiceWindowExpired ? `Template '${templateName}' unapproved (#${sendResult.errorCode || "N/A"}). Direct text fallback failed: 24h customer window is closed (#131047). An approved Meta template is required.` : textResult.sanitizedError || sendResult.sanitizedError || "WhatsApp dispatch rejected by Meta";
+            sendResult.error = combinedError;
+            sendResult.sanitizedError = combinedError;
+          }
         }
       } catch (err) {
         console.warn("[WhatsAppNotificationService] Template attempt failed, falling back to text:", err);
@@ -502,7 +1057,7 @@ Team Wits Lingo`;
       sendResult = {
         success: false,
         status: "failed",
-        error: "WhatsApp Cloud API credentials not configured in environment variables."
+        error: "WhatsApp Cloud API credentials not configured in environment variables (WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_ACCESS_TOKEN)."
       };
     }
     const notifRecord = {
@@ -518,7 +1073,7 @@ Team Wits Lingo`;
       sentAt: sendResult.success ? now : void 0,
       lastAttemptAt: now,
       retryCount: 1,
-      errorDetails: sendResult.error,
+      errorDetails: sendResult.sanitizedError || sendResult.error,
       messageBody: fullMessageText
     };
     this.notifications.unshift(notifRecord);
@@ -526,7 +1081,7 @@ Team Wits Lingo`;
     return {
       success: sendResult.success,
       messageId: sendResult.messageId,
-      error: sendResult.error
+      error: sendResult.sanitizedError || sendResult.error
     };
   }
   /**
@@ -547,23 +1102,23 @@ Team Wits Lingo`;
       notif.sentAt = (/* @__PURE__ */ new Date()).toISOString();
       notif.errorDetails = void 0;
     } else {
-      notif.errorDetails = sendRes.error || "Retry failed via Meta Cloud API";
+      notif.errorDetails = sendRes.sanitizedError || sendRes.error || "Retry failed via Meta Cloud API";
     }
     this.saveNotifications();
-    return { success: sendRes.success, error: sendRes.error };
+    return { success: sendRes.success, error: notif.errorDetails };
   }
 };
 var whatsappNotificationService = WhatsAppNotificationService.getInstance();
 
 // src/services/studentSupportService.ts
-import fs4 from "fs";
-import path4 from "path";
+import fs5 from "fs";
+import path5 from "path";
 
 // src/services/aiSupportService.ts
-import fs2 from "fs";
-import path2 from "path";
-var DATA_DIR = path2.join(process.cwd(), "uploads", "data");
-var KB_FILE = path2.join(DATA_DIR, "knowledge-base.json");
+import fs3 from "fs";
+import path3 from "path";
+var DATA_DIR = path3.join(process.cwd(), "uploads", "data");
+var KB_FILE = path3.join(DATA_DIR, "knowledge-base.json");
 var DEFAULT_KNOWLEDGE_BASE = [
   {
     id: "kb-course-foundation",
@@ -663,11 +1218,8 @@ var AiSupportService = class {
   }
   loadKnowledgeBase() {
     try {
-      if (!fs2.existsSync(DATA_DIR)) {
-        fs2.mkdirSync(DATA_DIR, { recursive: true });
-      }
-      if (fs2.existsSync(KB_FILE)) {
-        const raw = fs2.readFileSync(KB_FILE, "utf-8");
+      if (fs3.existsSync(KB_FILE)) {
+        const raw = fs3.readFileSync(KB_FILE, "utf-8");
         const data = JSON.parse(raw);
         if (Array.isArray(data) && data.length > 0) {
           this.knowledgeBase = data;
@@ -675,9 +1227,14 @@ var AiSupportService = class {
         }
       }
       this.knowledgeBase = [...DEFAULT_KNOWLEDGE_BASE];
-      fs2.writeFileSync(KB_FILE, JSON.stringify(this.knowledgeBase, null, 2), "utf-8");
+      if (process.env.VERCEL !== "1") {
+        if (!fs3.existsSync(DATA_DIR)) {
+          fs3.mkdirSync(DATA_DIR, { recursive: true });
+        }
+        fs3.writeFileSync(KB_FILE, JSON.stringify(this.knowledgeBase, null, 2), "utf-8");
+      }
     } catch (err) {
-      console.warn("[AI Support] Error loading knowledge base, using in-memory defaults:", err);
+      console.warn("[AI Support] Using in-memory knowledge base defaults:", err);
       this.knowledgeBase = [...DEFAULT_KNOWLEDGE_BASE];
     }
   }
@@ -686,11 +1243,14 @@ var AiSupportService = class {
   }
   saveKnowledgeBase(items) {
     this.knowledgeBase = items;
+    if (process.env.VERCEL === "1") {
+      return;
+    }
     try {
-      if (!fs2.existsSync(DATA_DIR)) {
-        fs2.mkdirSync(DATA_DIR, { recursive: true });
+      if (!fs3.existsSync(DATA_DIR)) {
+        fs3.mkdirSync(DATA_DIR, { recursive: true });
       }
-      fs2.writeFileSync(KB_FILE, JSON.stringify(items, null, 2), "utf-8");
+      fs3.writeFileSync(KB_FILE, JSON.stringify(items, null, 2), "utf-8");
     } catch (err) {
       console.error("[AI Support] Error saving knowledge base to disk:", err);
     }
@@ -971,12 +1531,11 @@ function getAiSupportService() {
 var aiSupportService = getAiSupportService();
 
 // src/services/supportTicketService.ts
-import fs3 from "fs";
-import path3 from "path";
+import fs4 from "fs";
+import path4 from "path";
 var SupportTicketService = class _SupportTicketService {
   constructor() {
     this.tickets = [];
-    this.filePath = path3.join(process.cwd(), "uploads", "data", "support-tickets.json");
     this.loadTickets();
   }
   static getInstance() {
@@ -986,26 +1545,34 @@ var SupportTicketService = class _SupportTicketService {
     return _SupportTicketService.instance;
   }
   loadTickets() {
-    try {
-      if (fs3.existsSync(this.filePath)) {
-        const raw = fs3.readFileSync(this.filePath, "utf-8");
-        this.tickets = JSON.parse(raw);
-      } else {
+    this.tickets = durableStorageService.getCollectionSync("support-tickets", []);
+    if (this.tickets.length === 0) {
+      try {
+        const filePath = path4.join(process.cwd(), "uploads", "data", "support-tickets.json");
+        if (fs4.existsSync(filePath)) {
+          const raw = fs4.readFileSync(filePath, "utf-8");
+          this.tickets = JSON.parse(raw);
+        }
+      } catch (e) {
         this.tickets = [];
       }
-    } catch (e) {
-      console.warn("[SupportTicketService] Error loading tickets, initializing empty:", e);
-      this.tickets = [];
     }
   }
+  /**
+   * Save tickets safely using DurableStorageService without local EROFS failures
+   */
   saveTickets() {
-    try {
-      const dir = path3.dirname(this.filePath);
-      if (!fs3.existsSync(dir)) fs3.mkdirSync(dir, { recursive: true });
-      fs3.writeFileSync(this.filePath, JSON.stringify(this.tickets, null, 2), "utf-8");
-    } catch (e) {
-      console.error("[SupportTicketService] Error saving tickets:", e);
-    }
+    durableStorageService.saveCollectionBackground("support-tickets", this.tickets);
+  }
+  /**
+   * Explicit awaitable durable persistence
+   */
+  async saveTicketsDurable() {
+    const res = await durableStorageService.saveCollection("support-tickets", this.tickets);
+    return {
+      success: res.success,
+      error: res.error
+    };
   }
   getAllTickets(filter) {
     this.loadTickets();
@@ -1111,9 +1678,10 @@ ${replyText}`
     ticket.updatedAt = now;
     this.saveTickets();
     if (!sendRes.success) {
+      const errorDetail = sendRes.isCustomerServiceWindowExpired ? "Customer 24h service window expired. Meta requires an approved template message to re-engage." : sendRes.sanitizedError || sendRes.error || "Failed to dispatch WhatsApp message via Meta Cloud API";
       return {
         success: false,
-        error: sendRes.error || "Failed to dispatch WhatsApp message via Meta Cloud API",
+        error: errorDetail,
         ticket
       };
     }
@@ -1127,9 +1695,6 @@ var StudentSupportService = class _StudentSupportService {
   constructor() {
     this.conversations = [];
     this.messages = [];
-    this.processedMessageIds = /* @__PURE__ */ new Set();
-    this.conversationsPath = path4.join(process.cwd(), "uploads", "data", "conversations.json");
-    this.messagesPath = path4.join(process.cwd(), "uploads", "data", "messages.json");
     this.loadData();
   }
   static getInstance() {
@@ -1139,37 +1704,56 @@ var StudentSupportService = class _StudentSupportService {
     return _StudentSupportService.instance;
   }
   loadData() {
-    try {
-      if (fs4.existsSync(this.conversationsPath)) {
-        this.conversations = JSON.parse(fs4.readFileSync(this.conversationsPath, "utf-8"));
-      }
-    } catch (e) {
-      this.conversations = [];
-    }
-    try {
-      if (fs4.existsSync(this.messagesPath)) {
-        this.messages = JSON.parse(fs4.readFileSync(this.messagesPath, "utf-8"));
-        for (const m of this.messages.slice(0, 1e3)) {
-          this.processedMessageIds.add(m.id);
+    this.conversations = durableStorageService.getCollectionSync("conversations", []);
+    this.messages = durableStorageService.getCollectionSync("messages", []);
+    if (this.conversations.length === 0) {
+      try {
+        const convPath = path5.join(process.cwd(), "uploads", "data", "conversations.json");
+        if (fs5.existsSync(convPath)) {
+          this.conversations = JSON.parse(fs5.readFileSync(convPath, "utf-8"));
         }
+      } catch {
+        this.conversations = [];
       }
-    } catch (e) {
-      this.messages = [];
+    }
+    if (this.messages.length === 0) {
+      try {
+        const msgPath = path5.join(process.cwd(), "uploads", "data", "messages.json");
+        if (fs5.existsSync(msgPath)) {
+          this.messages = JSON.parse(fs5.readFileSync(msgPath, "utf-8"));
+        }
+      } catch {
+        this.messages = [];
+      }
     }
   }
+  /**
+   * Save conversations and messages using Durable Storage (B2 / Firestore / Local FS when writable).
+   * NEVER throws EROFS on Vercel.
+   */
   saveData() {
-    try {
-      const dir = path4.dirname(this.conversationsPath);
-      if (!fs4.existsSync(dir)) fs4.mkdirSync(dir, { recursive: true });
-      fs4.writeFileSync(this.conversationsPath, JSON.stringify(this.conversations, null, 2), "utf-8");
-      fs4.writeFileSync(this.messagesPath, JSON.stringify(this.messages, null, 2), "utf-8");
-    } catch (e) {
-      console.error("[StudentSupportService] Error saving conversations/messages:", e);
+    durableStorageService.saveCollectionBackground("conversations", this.conversations);
+    durableStorageService.saveCollectionBackground("messages", this.messages);
+  }
+  /**
+   * Explicit awaitable save that reports true persistence status
+   */
+  async saveDataDurable() {
+    const res1 = await durableStorageService.saveCollection("conversations", this.conversations);
+    const res2 = await durableStorageService.saveCollection("messages", this.messages);
+    if (!res1.success || !res2.success) {
+      return {
+        success: false,
+        error: res1.error || res2.error || "Durable persistence write failed"
+      };
     }
+    return { success: true };
   }
   getConversations() {
     this.loadData();
-    return [...this.conversations].sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+    return [...this.conversations].sort(
+      (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+    );
   }
   getMessagesForConversation(convId) {
     this.loadData();
@@ -1183,40 +1767,46 @@ var StudentSupportService = class _StudentSupportService {
     let matchedName;
     let enrolledCourses = [];
     try {
-      const ordersPath = path4.join(process.cwd(), "uploads", "data", "orders.json");
-      if (fs4.existsSync(ordersPath)) {
-        const orders2 = JSON.parse(fs4.readFileSync(ordersPath, "utf-8"));
-        const studentOrders = orders2.filter((o) => {
-          const oPhone = whatsappCloudApiService.normalizePhone(o.studentPhone || "");
-          return oPhone && (oPhone === cleanPhone || oPhone.endsWith(cleanPhone) || cleanPhone.endsWith(oPhone));
-        });
-        if (studentOrders.length > 0) {
-          const latest = studentOrders[0];
-          matchedName = latest.studentName;
-          enrolledCourses = studentOrders.filter((o) => o.orderStatus === "paid").map((o) => ({
-            courseName: o.courseName,
-            courseId: o.courseId,
-            paymentStatus: o.orderStatus,
-            amountPaid: o.expectedAmount,
-            transactionId: o.razorpayPaymentId || o.id,
-            startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE
-          }));
+      let orders2 = durableStorageService.getCollectionSync("orders", []);
+      if (orders2.length === 0) {
+        const ordersPath = path5.join(process.cwd(), "uploads", "data", "orders.json");
+        if (fs5.existsSync(ordersPath)) {
+          orders2 = JSON.parse(fs5.readFileSync(ordersPath, "utf-8"));
         }
+      }
+      const studentOrders = orders2.filter((o) => {
+        const oPhone = whatsappCloudApiService.normalizePhone(o.studentPhone || "");
+        return oPhone && (oPhone === cleanPhone || oPhone.endsWith(cleanPhone) || cleanPhone.endsWith(oPhone));
+      });
+      if (studentOrders.length > 0) {
+        const latest = studentOrders[0];
+        matchedName = latest.studentName;
+        enrolledCourses = studentOrders.filter((o) => o.orderStatus === "paid").map((o) => ({
+          courseName: o.courseName,
+          courseId: o.courseId,
+          paymentStatus: o.orderStatus,
+          amountPaid: o.expectedAmount,
+          transactionId: o.razorpayPaymentId || o.id,
+          startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE
+        }));
       }
     } catch (e) {
     }
     if (!matchedName) {
       try {
-        const regPath = path4.join(process.cwd(), "uploads", "data", "registrations.json");
-        if (fs4.existsSync(regPath)) {
-          const registrations2 = JSON.parse(fs4.readFileSync(regPath, "utf-8"));
-          const match = registrations2.find((r) => {
-            const rPhone = whatsappCloudApiService.normalizePhone(r.phone || r.whatsappPhone || "");
-            return rPhone && (rPhone === cleanPhone || rPhone.endsWith(cleanPhone) || cleanPhone.endsWith(rPhone));
-          });
-          if (match) {
-            matchedName = match.name || match.fullName;
+        let registrations2 = durableStorageService.getCollectionSync("registrations", []);
+        if (registrations2.length === 0) {
+          const regPath = path5.join(process.cwd(), "uploads", "data", "registrations.json");
+          if (fs5.existsSync(regPath)) {
+            registrations2 = JSON.parse(fs5.readFileSync(regPath, "utf-8"));
           }
+        }
+        const match = registrations2.find((r) => {
+          const rPhone = whatsappCloudApiService.normalizePhone(r.phone || r.whatsappPhone || "");
+          return rPhone && (rPhone === cleanPhone || rPhone.endsWith(cleanPhone) || cleanPhone.endsWith(rPhone));
+        });
+        if (match) {
+          matchedName = match.name || match.fullName;
         }
       } catch (e) {
       }
@@ -1233,11 +1823,12 @@ var StudentSupportService = class _StudentSupportService {
    */
   async handleInboundMessage(event) {
     const { messageId, senderPhone, timestamp, textBody } = event;
-    if (this.processedMessageIds.has(messageId)) {
-      console.log(`[StudentSupportService] Duplicate message ID ${messageId} ignored.`);
+    const isDup = await durableStorageService.isDeduplicated("whatsapp_inbound", messageId);
+    if (isDup) {
+      console.log(`[StudentSupportService] Duplicate message ID ${messageId} ignored across invocations.`);
       return { handled: true, reason: "duplicate_message_id" };
     }
-    this.processedMessageIds.add(messageId);
+    durableStorageService.recordDedupBackground("whatsapp_inbound", messageId);
     const text = (textBody || "").trim();
     if (!text) {
       return { handled: true, reason: "empty_body" };
@@ -1245,6 +1836,7 @@ var StudentSupportService = class _StudentSupportService {
     const cleanSender = whatsappCloudApiService.normalizePhone(senderPhone);
     const convId = `conv_${cleanSender}`;
     const now = timestamp || (/* @__PURE__ */ new Date()).toISOString();
+    whatsappCloudApiService.recordCustomerInbound(cleanSender, now);
     const { studentName, studentContext } = this.findStudentContext(cleanSender);
     const finalStudentName = studentName || "Student";
     let conv = this.conversations.find((c) => c.id === convId);
@@ -1309,6 +1901,20 @@ var StudentSupportService = class _StudentSupportService {
     }
     const replyText = aiResult.replyText;
     const sendRes = await whatsappCloudApiService.sendTextMessage(cleanSender, replyText);
+    if (sendRes.isCustomerServiceWindowExpired && !ticketCreated) {
+      console.warn(`[StudentSupportService] Outbound reply to ${cleanSender} failed due to expired 24h customer window. Escalating to support ticket.`);
+      conv.isEscalated = true;
+      conv.status = "escalated";
+      supportTicketService.createTicket({
+        studentName: finalStudentName,
+        studentPhone: cleanSender,
+        category: "human_handover",
+        priority: "high",
+        description: `Customer service window (24h) expired. Direct message failed (#131047). Student inquired: "${text.substring(0, 100)}..."`,
+        courseName: studentContext?.enrolledCourses?.[0]?.courseName
+      });
+      ticketCreated = true;
+    }
     const outboundMsgRecord = {
       id: sendRes.messageId || `msg_ai_${Date.now()}`,
       conversationId: convId,
@@ -1318,15 +1924,19 @@ var StudentSupportService = class _StudentSupportService {
       text: replyText,
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
       provider: "meta_cloud_api",
-      status: sendRes.success ? "sent" : "failed"
+      status: sendRes.success ? "sent" : "failed",
+      errorDetails: sendRes.sanitizedError || sendRes.error
     };
     this.messages.unshift(outboundMsgRecord);
     this.saveData();
-    console.log(`[StudentSupportService] Replied to ${cleanSender} via Meta Cloud API (${sendRes.success ? "Success" : "Failed: " + sendRes.error})`);
+    console.log(
+      `[StudentSupportService] Outbound dispatch to ${cleanSender}: ${sendRes.success ? "Accepted by Meta" : "Failed: " + (sendRes.sanitizedError || sendRes.error)}`
+    );
     return {
       handled: true,
       replySent: sendRes.success,
-      ticketCreated
+      ticketCreated,
+      reason: sendRes.success ? void 0 : sendRes.sanitizedError
     };
   }
 };
@@ -1348,7 +1958,7 @@ function getBackblazeConfig() {
   const regionMatch = cleanEndpoint.match(/^s3\.([a-z0-9-]+)\.backblazeb2\.com/i);
   const region = regionMatch ? regionMatch[1] : "us-east-005";
   if (!s3ClientInstance) {
-    s3ClientInstance = new S3Client({
+    s3ClientInstance = new S3Client2({
       endpoint: formattedEndpoint,
       region,
       credentials: {
@@ -1482,7 +2092,7 @@ async function uploadBufferToB2(fileName, buffer, mimeType = "application/pdf") 
   if (s3Config && s3Config.keyId && s3Config.keyId.length > 15) {
     try {
       await s3Config.client.send(
-        new PutObjectCommand({
+        new PutObjectCommand2({
           Bucket: s3Config.bucket,
           Key: fileName,
           Body: buffer,
@@ -1545,9 +2155,9 @@ async function downloadBufferFromB2(fileId, fileName) {
   const s3Config = getBackblazeConfig();
   if (s3Config && fileName) {
     try {
-      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+      const { GetObjectCommand: GetObjectCommand2 } = await import("@aws-sdk/client-s3");
       const s3Res = await s3Config.client.send(
-        new GetObjectCommand({
+        new GetObjectCommand2({
           Bucket: s3Config.bucket,
           Key: fileName
         })
@@ -1607,7 +2217,7 @@ async function deleteFileFromB2(fileId, fileName) {
 }
 var FORBIDDEN_EXEC_EXTS = /* @__PURE__ */ new Set([".exe", ".sh", ".bat", ".cmd", ".js", ".ts", ".vbs", ".msi", ".jar", ".py", ".bin"]);
 function getSafeFileMimeType(filename, providedMime) {
-  const ext = path5.extname(filename).toLowerCase();
+  const ext = path6.extname(filename).toLowerCase();
   if (ext === ".pdf") return "application/pdf";
   if (ext === ".doc") return "application/msword";
   if (ext === ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -2670,27 +3280,27 @@ function verifyPlaybackToken(token) {
     return null;
   }
 }
-var DATA_STORAGE_DIR = path5.join(process.cwd(), "uploads", "data");
+var DATA_STORAGE_DIR = path6.join(process.cwd(), "uploads", "data");
 try {
-  if (!fs5.existsSync(DATA_STORAGE_DIR)) {
-    fs5.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
+  if (!fs6.existsSync(DATA_STORAGE_DIR)) {
+    fs6.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
   }
 } catch (e) {
   console.warn("Could not create data storage directory:", e);
 }
-var REGISTRATIONS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "registrations.json");
-var USERS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "users.json");
-var BATCHES_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "batches.json");
-var PAYMENTS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "payments.json");
-var CMS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "cms-content.json");
-var ANNOUNCEMENTS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "announcements.json");
-var MATERIALS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "materials.json");
-var GALLERY_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "gallery.json");
-var ORDERS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "orders.json");
-var NOTIFICATIONS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "notifications.json");
-var CONVERSATIONS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "conversations.json");
-var MESSAGES_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "messages.json");
-var SUPPORT_TICKETS_STORAGE_FILE = path5.join(DATA_STORAGE_DIR, "support-tickets.json");
+var REGISTRATIONS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "registrations.json");
+var USERS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "users.json");
+var BATCHES_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "batches.json");
+var PAYMENTS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "payments.json");
+var CMS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "cms-content.json");
+var ANNOUNCEMENTS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "announcements.json");
+var MATERIALS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "materials.json");
+var GALLERY_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "gallery.json");
+var ORDERS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "orders.json");
+var NOTIFICATIONS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "notifications.json");
+var CONVERSATIONS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "conversations.json");
+var MESSAGES_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "messages.json");
+var SUPPORT_TICKETS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "support-tickets.json");
 var payments = [];
 var orders = [];
 var notifications = [];
@@ -2767,8 +3377,8 @@ var galleryItems = [
 ];
 function loadAllPersistedData() {
   try {
-    if (fs5.existsSync(REGISTRATIONS_STORAGE_FILE)) {
-      const data = JSON.parse(fs5.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
+    if (fs6.existsSync(REGISTRATIONS_STORAGE_FILE)) {
+      const data = JSON.parse(fs6.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         const existingIds = new Set(data.map((r) => r.id || r.admissionId));
         for (const r of registrations) {
@@ -2781,8 +3391,8 @@ function loadAllPersistedData() {
         console.log(`[Persistence] Loaded ${registrations.length} student registrations.`);
       }
     }
-    if (fs5.existsSync(USERS_STORAGE_FILE)) {
-      const data = JSON.parse(fs5.readFileSync(USERS_STORAGE_FILE, "utf-8"));
+    if (fs6.existsSync(USERS_STORAGE_FILE)) {
+      const data = JSON.parse(fs6.readFileSync(USERS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         const existingEmails = new Set(data.map((u) => u.email?.toLowerCase()));
         for (const u of users) {
@@ -2795,8 +3405,8 @@ function loadAllPersistedData() {
         console.log(`[Persistence] Loaded ${users.length} users.`);
       }
     }
-    if (fs5.existsSync(BATCHES_STORAGE_FILE)) {
-      const data = JSON.parse(fs5.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
+    if (fs6.existsSync(BATCHES_STORAGE_FILE)) {
+      const data = JSON.parse(fs6.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         const existingIds = new Set(data.map((b) => b.id));
         for (const b of batches) {
@@ -2809,16 +3419,16 @@ function loadAllPersistedData() {
         console.log(`[Persistence] Loaded ${batches.length} batches.`);
       }
     }
-    if (fs5.existsSync(PAYMENTS_STORAGE_FILE)) {
-      const data = JSON.parse(fs5.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
+    if (fs6.existsSync(PAYMENTS_STORAGE_FILE)) {
+      const data = JSON.parse(fs6.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         payments.length = 0;
         payments.push(...data);
         console.log(`[Persistence] Loaded ${payments.length} verified payment transactions.`);
       }
     }
-    if (fs5.existsSync(CMS_STORAGE_FILE)) {
-      const data = JSON.parse(fs5.readFileSync(CMS_STORAGE_FILE, "utf-8"));
+    if (fs6.existsSync(CMS_STORAGE_FILE)) {
+      const data = JSON.parse(fs6.readFileSync(CMS_STORAGE_FILE, "utf-8"));
       if (data && typeof data === "object") {
         cmsContent = {
           ...cmsContent,
@@ -2831,8 +3441,8 @@ function loadAllPersistedData() {
         console.log(`[Persistence] Loaded custom CMS content & settings.`);
       }
     }
-    if (fs5.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
-      const data = JSON.parse(fs5.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
+    if (fs6.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
+      const data = JSON.parse(fs6.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         announcements.length = 0;
         announcements.push(...data);
@@ -2840,9 +3450,9 @@ function loadAllPersistedData() {
       }
     }
     let materialsLoaded = false;
-    if (fs5.existsSync(MATERIALS_STORAGE_FILE)) {
+    if (fs6.existsSync(MATERIALS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs5.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs6.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data) && data.length > 0) {
           const existingIds = new Set(data.map((m) => m.id));
           for (const m of studyMaterials) {
@@ -2868,10 +3478,10 @@ function loadAllPersistedData() {
       }
     }
     if (!materialsLoaded) {
-      const legacyPath = path5.join(process.cwd(), "uploads", "study-materials.json");
-      if (fs5.existsSync(legacyPath)) {
+      const legacyPath = path6.join(process.cwd(), "uploads", "study-materials.json");
+      if (fs6.existsSync(legacyPath)) {
         try {
-          const data = JSON.parse(fs5.readFileSync(legacyPath, "utf-8"));
+          const data = JSON.parse(fs6.readFileSync(legacyPath, "utf-8"));
           if (Array.isArray(data) && data.length > 0) {
             for (const m of data) {
               if (!m.downloadUrl || m.downloadUrl === "#") {
@@ -2888,9 +3498,9 @@ function loadAllPersistedData() {
       }
     }
     let galleryLoaded = false;
-    if (fs5.existsSync(GALLERY_STORAGE_FILE)) {
+    if (fs6.existsSync(GALLERY_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs5.readFileSync(GALLERY_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs6.readFileSync(GALLERY_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data) && data.length > 0) {
           galleryItems.length = 0;
           galleryItems.push(...data);
@@ -2902,10 +3512,10 @@ function loadAllPersistedData() {
       }
     }
     if (!galleryLoaded) {
-      const legacyPath = path5.join(process.cwd(), "uploads", "gallery.json");
-      if (fs5.existsSync(legacyPath)) {
+      const legacyPath = path6.join(process.cwd(), "uploads", "gallery.json");
+      if (fs6.existsSync(legacyPath)) {
         try {
-          const data = JSON.parse(fs5.readFileSync(legacyPath, "utf-8"));
+          const data = JSON.parse(fs6.readFileSync(legacyPath, "utf-8"));
           if (Array.isArray(data) && data.length > 0) {
             galleryItems.length = 0;
             galleryItems.push(...data);
@@ -2918,9 +3528,9 @@ function loadAllPersistedData() {
         savePersistedGallery();
       }
     }
-    if (fs5.existsSync(ORDERS_STORAGE_FILE)) {
+    if (fs6.existsSync(ORDERS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs5.readFileSync(ORDERS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs6.readFileSync(ORDERS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           orders.length = 0;
           orders.push(...data);
@@ -2930,9 +3540,9 @@ function loadAllPersistedData() {
         console.warn("[Persistence] Could not parse orders.json:", e);
       }
     }
-    if (fs5.existsSync(NOTIFICATIONS_STORAGE_FILE)) {
+    if (fs6.existsSync(NOTIFICATIONS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs5.readFileSync(NOTIFICATIONS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs6.readFileSync(NOTIFICATIONS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           notifications.length = 0;
           notifications.push(...data);
@@ -2942,9 +3552,9 @@ function loadAllPersistedData() {
         console.warn("[Persistence] Could not parse notifications.json:", e);
       }
     }
-    if (fs5.existsSync(CONVERSATIONS_STORAGE_FILE)) {
+    if (fs6.existsSync(CONVERSATIONS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs5.readFileSync(CONVERSATIONS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs6.readFileSync(CONVERSATIONS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           conversations.length = 0;
           conversations.push(...data);
@@ -2952,9 +3562,9 @@ function loadAllPersistedData() {
       } catch (e) {
       }
     }
-    if (fs5.existsSync(MESSAGES_STORAGE_FILE)) {
+    if (fs6.existsSync(MESSAGES_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs5.readFileSync(MESSAGES_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs6.readFileSync(MESSAGES_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           messages.length = 0;
           messages.push(...data);
@@ -2962,9 +3572,9 @@ function loadAllPersistedData() {
       } catch (e) {
       }
     }
-    if (fs5.existsSync(SUPPORT_TICKETS_STORAGE_FILE)) {
+    if (fs6.existsSync(SUPPORT_TICKETS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs5.readFileSync(SUPPORT_TICKETS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs6.readFileSync(SUPPORT_TICKETS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           supportTickets.length = 0;
           supportTickets.push(...data);
@@ -2979,80 +3589,113 @@ function loadAllPersistedData() {
   }
 }
 function savePersistedGallery() {
-  try {
-    fs5.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save gallery.json:", e);
+  durableStorageService.saveCollectionBackground("gallery", galleryItems);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save gallery.json:", e);
+    }
   }
 }
 function saveRegistrations() {
-  try {
-    fs5.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save registrations:", e);
+  durableStorageService.saveCollectionBackground("registrations", registrations);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save registrations:", e);
+    }
   }
 }
 function saveUsers() {
-  try {
-    fs5.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save users:", e);
+  durableStorageService.saveCollectionBackground("users", users);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save users:", e);
+    }
   }
 }
 function saveBatches() {
-  try {
-    fs5.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save batches:", e);
+  durableStorageService.saveCollectionBackground("batches", batches);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save batches:", e);
+    }
   }
 }
 function savePayments() {
-  try {
-    fs5.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save payments:", e);
+  durableStorageService.saveCollectionBackground("payments", payments);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save payments:", e);
+    }
   }
 }
 function saveCmsContent() {
-  try {
-    fs5.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save cmsContent:", e);
+  durableStorageService.saveCollectionBackground("cmsContent", cmsContent);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save cmsContent:", e);
+    }
   }
 }
 function savePersistedMaterials() {
-  try {
-    fs5.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save materials:", e);
+  durableStorageService.saveCollectionBackground("materials", studyMaterials);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save materials:", e);
+    }
   }
 }
 function saveOrders() {
-  try {
-    fs5.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save orders:", e);
+  durableStorageService.saveCollectionBackground("orders", orders);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save orders:", e);
+    }
   }
 }
 function saveConversations() {
-  try {
-    fs5.writeFileSync(CONVERSATIONS_STORAGE_FILE, JSON.stringify(conversations, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save conversations:", e);
+  durableStorageService.saveCollectionBackground("conversations", conversations);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(CONVERSATIONS_STORAGE_FILE, JSON.stringify(conversations, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save conversations:", e);
+    }
   }
 }
 function saveMessages() {
-  try {
-    fs5.writeFileSync(MESSAGES_STORAGE_FILE, JSON.stringify(messages, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save messages:", e);
+  durableStorageService.saveCollectionBackground("messages", messages);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(MESSAGES_STORAGE_FILE, JSON.stringify(messages, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save messages:", e);
+    }
   }
 }
 function saveSupportTickets() {
-  try {
-    fs5.writeFileSync(SUPPORT_TICKETS_STORAGE_FILE, JSON.stringify(supportTickets, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save support tickets:", e);
+  durableStorageService.saveCollectionBackground("support-tickets", supportTickets);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(SUPPORT_TICKETS_STORAGE_FILE, JSON.stringify(supportTickets, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save support tickets:", e);
+    }
   }
 }
 loadAllPersistedData();
@@ -3088,89 +3731,50 @@ async function sendWhatsAppEnrollmentMessage(data) {
     }
     return { success: false, error: errMsg };
   }
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
-  const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
-  const version = process.env.WHATSAPP_API_VERSION?.trim() || "v21.0";
-  const templateName = "wits_lingo_enrollment_confirmation";
-  const templateLang = "en";
-  if (!phoneId || !token) {
-    console.log("[WhatsApp] Meta Cloud API credentials not configured in server environment. Marked as pending.");
-    if (studentReg) {
-      studentReg.whatsappDeliveryStatus = "pending";
-      studentReg.whatsappError = "Meta Cloud API credentials (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID) not configured";
-      studentReg.facilities = rawFacilities;
-      saveRegistrations();
-    }
-    return { success: false, error: "WhatsApp credentials not configured" };
-  }
-  const payload = {
-    messaging_product: "whatsapp",
-    recipient_type: "individual",
-    to: cleanRecipient,
-    type: "template",
-    template: {
-      name: templateName,
-      language: { code: templateLang },
-      components: [
-        {
-          type: "body",
-          parameters: [
-            { type: "text", text: data.studentName || "Student" },
-            { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
-            { type: "text", text: data.batchName || foundBatch?.name || "Active Batch" },
-            { type: "text", text: startDate },
-            { type: "text", text: classTime },
-            { type: "text", text: facilitiesText },
-            { type: "text", text: meetLink },
-            { type: "text", text: data.admissionId }
-          ]
-        }
-      ]
-    }
-  };
-  try {
-    const res = await fetch(`https://graph.facebook.com/${version}/${phoneId}/messages`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
-    const resData = await res.json();
-    if (!res.ok) {
-      const errDetail = resData?.error?.message || "WhatsApp dispatch rejected by Meta Cloud API";
-      console.warn(`[WhatsApp] Delivery failure to ${cleanRecipient}: ${errDetail}`);
-      if (studentReg) {
-        studentReg.whatsappDeliveryStatus = "failed";
-        studentReg.whatsappError = errDetail;
-        studentReg.facilities = rawFacilities;
-        saveRegistrations();
+  const templateName = whatsappCloudApiService.confirmationTemplateName;
+  const templateLang = whatsappCloudApiService.templateLanguage;
+  const sendRes = await whatsappCloudApiService.sendTemplateMessage(
+    cleanRecipient,
+    templateName,
+    templateLang,
+    [
+      {
+        type: "body",
+        parameters: [
+          { type: "text", text: data.studentName || "Student" },
+          { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
+          { type: "text", text: data.batchName || foundBatch?.name || "Active Batch" },
+          { type: "text", text: startDate },
+          { type: "text", text: classTime },
+          { type: "text", text: facilitiesText },
+          { type: "text", text: meetLink },
+          { type: "text", text: data.admissionId }
+        ]
       }
-      return { success: false, error: errDetail };
-    }
-    const msgId = resData?.messages?.[0]?.id || `wa_msg_${Date.now()}`;
-    console.log(`[WhatsApp] Automated enrollment notification sent to ${cleanRecipient} (Message ID: ${msgId})`);
-    if (studentReg) {
-      studentReg.whatsappDeliveryStatus = "sent";
-      studentReg.whatsappMessageId = msgId;
-      studentReg.whatsappSentAt = (/* @__PURE__ */ new Date()).toISOString();
-      studentReg.whatsappError = void 0;
-      studentReg.facilities = rawFacilities;
-      saveRegistrations();
-    }
-    return { success: true, messageId: msgId };
-  } catch (err) {
-    const errMsg = err?.message || "Network exception during WhatsApp dispatch";
-    console.warn(`[WhatsApp] Network exception: ${errMsg}`);
+    ]
+  );
+  if (!sendRes.success) {
+    const errDetail = sendRes.sanitizedError || sendRes.error || "WhatsApp dispatch rejected by Meta Cloud API";
+    console.warn(`[WhatsApp] Delivery failure to ${cleanRecipient}: ${errDetail}`);
     if (studentReg) {
       studentReg.whatsappDeliveryStatus = "failed";
-      studentReg.whatsappError = errMsg;
+      studentReg.whatsappError = errDetail;
       studentReg.facilities = rawFacilities;
       saveRegistrations();
     }
-    return { success: false, error: errMsg };
+    return { success: false, error: errDetail };
   }
+  const msgId = sendRes.messageId || `wa_msg_${Date.now()}`;
+  console.log(`[WhatsApp] Automated enrollment notification sent to ${cleanRecipient} (Message ID: ${msgId})`);
+  if (studentReg) {
+    studentReg.whatsappDeliveryStatus = "sent";
+    studentReg.whatsappMessageId = msgId;
+    studentReg.whatsappSentAt = (/* @__PURE__ */ new Date()).toISOString();
+    studentReg.whatsappError = void 0;
+    studentReg.facilities = rawFacilities;
+    saveRegistrations();
+  }
+  return { success: true, messageId: msgId };
 }
 async function sendPaymentConfirmationWhatsApp(order, payment, forceResend = false) {
   return whatsappNotificationService.sendPaymentConfirmation({
@@ -3309,10 +3913,10 @@ async function handleInboundStudentMessage(recipientPhone, messageText, provider
 }
 var app = express();
 var PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3e3;
-var uploadsDir = path5.join(process.cwd(), "uploads");
+var uploadsDir = path6.join(process.cwd(), "uploads");
 try {
-  if (!fs5.existsSync(uploadsDir)) {
-    fs5.mkdirSync(uploadsDir, { recursive: true });
+  if (!fs6.existsSync(uploadsDir)) {
+    fs6.mkdirSync(uploadsDir, { recursive: true });
   }
 } catch (e) {
 }
@@ -4690,9 +5294,9 @@ app.post("/api/admin/hero-video/upload", async (req, res) => {
   const rawBase64 = dataBase64.includes(",") ? dataBase64.split(",")[1] : dataBase64;
   const buffer = Buffer.from(rawBase64, "base64");
   const safeFilename = (filename || "hero-video.mp4").replace(/[^a-zA-Z0-9._-]/g, "_");
-  const diskPath = path5.join(uploadsDir, "hero-video.mp4");
+  const diskPath = path6.join(uploadsDir, "hero-video.mp4");
   try {
-    fs5.writeFileSync(diskPath, buffer);
+    fs6.writeFileSync(diskPath, buffer);
   } catch (diskErr) {
     console.warn("Could not save hero video to disk:", diskErr);
   }
@@ -4733,11 +5337,11 @@ app.post("/api/admin/hero-video/reset", (req, res) => {
   });
 });
 app.get("/api/files/hero-video/:filename?", (req, res) => {
-  const diskPath = path5.join(uploadsDir, "hero-video.mp4");
-  if (!fs5.existsSync(diskPath)) {
+  const diskPath = path6.join(uploadsDir, "hero-video.mp4");
+  if (!fs6.existsSync(diskPath)) {
     return res.redirect("/video/wits-lingo-intro.mp4");
   }
-  const stat = fs5.statSync(diskPath);
+  const stat = fs6.statSync(diskPath);
   const fileSize = stat.size;
   const range = req.headers.range;
   if (range) {
@@ -4745,7 +5349,7 @@ app.get("/api/files/hero-video/:filename?", (req, res) => {
     const start = parseInt(parts[0], 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
     const chunksize = end - start + 1;
-    const file = fs5.createReadStream(diskPath, { start, end });
+    const file = fs6.createReadStream(diskPath, { start, end });
     const head = {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
@@ -4761,7 +5365,7 @@ app.get("/api/files/hero-video/:filename?", (req, res) => {
       "Accept-Ranges": "bytes"
     };
     res.writeHead(200, head);
-    fs5.createReadStream(diskPath).pipe(res);
+    fs6.createReadStream(diskPath).pipe(res);
   }
 });
 app.post("/api/admin/logo/upload", async (req, res) => {
@@ -4795,11 +5399,11 @@ app.post("/api/admin/logo/upload", async (req, res) => {
     if (buffer.length > 8 * 1024 * 1024) {
       return res.status(400).json({ error: "Logo file size exceeds 8MB limit." });
     }
-    const ext = path5.extname(filename || "logo.png") || (cleanMime.includes("svg") ? ".svg" : ".png");
+    const ext = path6.extname(filename || "logo.png") || (cleanMime.includes("svg") ? ".svg" : ".png");
     const safeFilename = `wits-lingo-logo-${Date.now()}${ext}`.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const diskPath = path5.join(uploadsDir, safeFilename);
+    const diskPath = path6.join(uploadsDir, safeFilename);
     try {
-      fs5.writeFileSync(diskPath, buffer);
+      fs6.writeFileSync(diskPath, buffer);
     } catch (diskErr) {
       console.warn("[Logo] Could not save logo to disk:", diskErr);
     }
@@ -4857,10 +5461,10 @@ app.post("/api/admin/logo/reset", (req, res) => {
   });
 });
 app.get("/api/files/logo/:filename?", (req, res) => {
-  const requestedFile = req.params.filename ? path5.basename(req.params.filename) : "";
+  const requestedFile = req.params.filename ? path6.basename(req.params.filename) : "";
   if (requestedFile) {
-    const diskPath = path5.join(uploadsDir, requestedFile);
-    if (fs5.existsSync(diskPath)) {
+    const diskPath = path6.join(uploadsDir, requestedFile);
+    if (fs6.existsSync(diskPath)) {
       res.setHeader("Cache-Control", "public, max-age=86400");
       return res.sendFile(diskPath);
     }
@@ -4968,9 +5572,9 @@ app.post("/api/admin/gallery/upload", async (req, res) => {
       const id = `gal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const safeOriginalName = (item.filename || `photo-${Date.now()}.jpg`).replace(/[^a-zA-Z0-9._-]/g, "_");
       const diskFilename = `${id}-${safeOriginalName}`;
-      const diskPath = path5.join(uploadsDir, diskFilename);
+      const diskPath = path6.join(uploadsDir, diskFilename);
       try {
-        fs5.writeFileSync(diskPath, buffer);
+        fs6.writeFileSync(diskPath, buffer);
       } catch (diskErr) {
         console.warn("[Gallery] Could not cache image on disk:", diskErr);
       }
@@ -5083,12 +5687,12 @@ app.delete("/api/admin/gallery/:id", async (req, res) => {
   galleryItems.splice(idx, 1);
   savePersistedGallery();
   try {
-    if (fs5.existsSync(uploadsDir)) {
-      const files = fs5.readdirSync(uploadsDir);
+    if (fs6.existsSync(uploadsDir)) {
+      const files = fs6.readdirSync(uploadsDir);
       for (const file of files) {
         if (file.startsWith(id) || file.startsWith(`gal-${id}`)) {
           try {
-            fs5.unlinkSync(path5.join(uploadsDir, file));
+            fs6.unlinkSync(path6.join(uploadsDir, file));
           } catch (unlinkErr) {
           }
         }
@@ -5111,19 +5715,19 @@ app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
   const { id, filename } = req.params;
   let foundPath = null;
   try {
-    if (fs5.existsSync(uploadsDir)) {
-      const files = fs5.readdirSync(uploadsDir);
+    if (fs6.existsSync(uploadsDir)) {
+      const files = fs6.readdirSync(uploadsDir);
       for (const f of files) {
         if (f.startsWith(id)) {
-          foundPath = path5.join(uploadsDir, f);
+          foundPath = path6.join(uploadsDir, f);
           break;
         }
       }
     }
   } catch (e) {
   }
-  if (foundPath && fs5.existsSync(foundPath)) {
-    const ext = path5.extname(foundPath).toLowerCase();
+  if (foundPath && fs6.existsSync(foundPath)) {
+    const ext = path6.extname(foundPath).toLowerCase();
     const mimeTypes = {
       ".jpg": "image/jpeg",
       ".jpeg": "image/jpeg",
@@ -5135,7 +5739,7 @@ app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
     };
     res.setHeader("Content-Type", mimeTypes[ext] || "image/jpeg");
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    return fs5.createReadStream(foundPath).pipe(res);
+    return fs6.createReadStream(foundPath).pipe(res);
   }
   const item = galleryItems.find((g) => g.id === id);
   if (item && (item.b2FileId || item.b2FileName)) {
@@ -5143,8 +5747,8 @@ app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
       const b2Res = await downloadBufferFromB2(item.b2FileId, item.b2FileName);
       if (b2Res.success && b2Res.buffer) {
         try {
-          const diskSave = path5.join(uploadsDir, `${id}-${filename || "image.jpg"}`);
-          fs5.writeFileSync(diskSave, b2Res.buffer);
+          const diskSave = path6.join(uploadsDir, `${id}-${filename || "image.jpg"}`);
+          fs6.writeFileSync(diskSave, b2Res.buffer);
         } catch (e) {
         }
         res.setHeader("Content-Type", b2Res.contentType || "image/jpeg");
@@ -5952,11 +6556,11 @@ app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], as
     });
   }
   try {
-    const diskPath1 = path5.join(uploadsDir, `${id}.pdf`);
-    if (fs5.existsSync(diskPath1)) fs5.unlinkSync(diskPath1);
+    const diskPath1 = path6.join(uploadsDir, `${id}.pdf`);
+    if (fs6.existsSync(diskPath1)) fs6.unlinkSync(diskPath1);
     if (mat.b2FileName) {
-      const diskPath2 = path5.join(uploadsDir, path5.basename(mat.b2FileName));
-      if (fs5.existsSync(diskPath2)) fs5.unlinkSync(diskPath2);
+      const diskPath2 = path6.join(uploadsDir, path6.basename(mat.b2FileName));
+      if (fs6.existsSync(diskPath2)) fs6.unlinkSync(diskPath2);
     }
   } catch (e) {
   }
@@ -6005,7 +6609,7 @@ app.post("/api/admin/upload-file", async (req, res) => {
     return res.status(400).json({ error: "No file data received." });
   }
   const rawFilename = (filename || "document.pdf").trim();
-  const ext = path5.extname(rawFilename).toLowerCase() || ".pdf";
+  const ext = path6.extname(rawFilename).toLowerCase() || ".pdf";
   if (FORBIDDEN_EXEC_EXTS.has(ext)) {
     return res.status(400).json({ error: `File type ${ext} is not allowed for security reasons.` });
   }
@@ -6018,10 +6622,10 @@ app.post("/api/admin/upload-file", async (req, res) => {
     return res.status(400).json({ error: "File exceeds maximum allowed size of 50 MB." });
   }
   try {
-    const diskPath = path5.join(uploadsDir, `${fileId}-${safeFilename}`);
-    fs5.writeFileSync(diskPath, buffer);
-    const diskPathShort = path5.join(uploadsDir, `${fileId}.pdf`);
-    fs5.writeFileSync(diskPathShort, buffer);
+    const diskPath = path6.join(uploadsDir, `${fileId}-${safeFilename}`);
+    fs6.writeFileSync(diskPath, buffer);
+    const diskPathShort = path6.join(uploadsDir, `${fileId}.pdf`);
+    fs6.writeFileSync(diskPathShort, buffer);
   } catch (err) {
     console.warn("Failed saving upload to disk:", err);
   }
@@ -6090,17 +6694,17 @@ app.get("/api/files/pdf/:id/:filename?", async (req, res) => {
     if (match) extractedFileId = match[1];
   }
   const possibleDiskPaths = [
-    path5.join(uploadsDir, `${id}.pdf`),
-    path5.join(uploadsDir, `${id}-${filename}`),
-    extractedFileId ? path5.join(uploadsDir, `${extractedFileId}.pdf`) : "",
-    extractedFileId ? path5.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
-    mat?.b2FileName ? path5.join(uploadsDir, path5.basename(mat.b2FileName)) : "",
-    memFile?.b2FileName ? path5.join(uploadsDir, path5.basename(memFile.b2FileName)) : ""
+    path6.join(uploadsDir, `${id}.pdf`),
+    path6.join(uploadsDir, `${id}-${filename}`),
+    extractedFileId ? path6.join(uploadsDir, `${extractedFileId}.pdf`) : "",
+    extractedFileId ? path6.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
+    mat?.b2FileName ? path6.join(uploadsDir, path6.basename(mat.b2FileName)) : "",
+    memFile?.b2FileName ? path6.join(uploadsDir, path6.basename(memFile.b2FileName)) : ""
   ].filter(Boolean);
   for (const dp of possibleDiskPaths) {
-    if (fs5.existsSync(dp)) {
+    if (fs6.existsSync(dp)) {
       try {
-        buffer = fs5.readFileSync(dp);
+        buffer = fs6.readFileSync(dp);
         break;
       } catch (e) {
       }
@@ -6109,10 +6713,10 @@ app.get("/api/files/pdf/:id/:filename?", async (req, res) => {
   if (!buffer && (id || extractedFileId)) {
     const searchPrefix = extractedFileId || id;
     try {
-      const files = fs5.readdirSync(uploadsDir);
+      const files = fs6.readdirSync(uploadsDir);
       const matchFile = files.find((f) => f.startsWith(searchPrefix));
       if (matchFile) {
-        buffer = fs5.readFileSync(path5.join(uploadsDir, matchFile));
+        buffer = fs6.readFileSync(path6.join(uploadsDir, matchFile));
       }
     } catch (e) {
     }
@@ -6177,17 +6781,17 @@ app.get("/api/files/download/:id", async (req, res) => {
       if (match) extractedFileId = match[1];
     }
     const possibleDiskPaths = [
-      path5.join(uploadsDir, `${id}.pdf`),
-      path5.join(uploadsDir, `${id}-${filename}`),
-      extractedFileId ? path5.join(uploadsDir, `${extractedFileId}.pdf`) : "",
-      extractedFileId ? path5.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
-      mat?.b2FileName ? path5.join(uploadsDir, path5.basename(mat.b2FileName)) : "",
-      memFile?.b2FileName ? path5.join(uploadsDir, path5.basename(memFile.b2FileName)) : ""
+      path6.join(uploadsDir, `${id}.pdf`),
+      path6.join(uploadsDir, `${id}-${filename}`),
+      extractedFileId ? path6.join(uploadsDir, `${extractedFileId}.pdf`) : "",
+      extractedFileId ? path6.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
+      mat?.b2FileName ? path6.join(uploadsDir, path6.basename(mat.b2FileName)) : "",
+      memFile?.b2FileName ? path6.join(uploadsDir, path6.basename(memFile.b2FileName)) : ""
     ].filter(Boolean);
     for (const dp of possibleDiskPaths) {
-      if (fs5.existsSync(dp)) {
+      if (fs6.existsSync(dp)) {
         try {
-          buffer = fs5.readFileSync(dp);
+          buffer = fs6.readFileSync(dp);
           break;
         } catch (e) {
         }
@@ -6196,10 +6800,10 @@ app.get("/api/files/download/:id", async (req, res) => {
     if (!buffer && (id || extractedFileId)) {
       const searchPrefix = extractedFileId || id;
       try {
-        const files = fs5.readdirSync(uploadsDir);
+        const files = fs6.readdirSync(uploadsDir);
         const matchFile = files.find((f) => f.startsWith(searchPrefix));
         if (matchFile) {
-          buffer = fs5.readFileSync(path5.join(uploadsDir, matchFile));
+          buffer = fs6.readFileSync(path6.join(uploadsDir, matchFile));
         }
       } catch (e) {
       }
@@ -6280,7 +6884,7 @@ app.get("/api/proxy-pdf", async (req, res) => {
     const contentType = fetchRes.headers.get("content-type") || "application/pdf";
     const buffer = Buffer.from(await fetchRes.arrayBuffer());
     const pathname = parsedUrl.pathname;
-    const basename = path5.basename(pathname) || "document.pdf";
+    const basename = path6.basename(pathname) || "document.pdf";
     const safeBasename = basename.endsWith(".pdf") ? basename : `${basename}.pdf`;
     res.setHeader("Content-Type", contentType.includes("pdf") ? "application/pdf" : contentType);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(safeBasename)}"`);
@@ -6657,11 +7261,11 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path5.join(process.cwd(), "dist");
-    if (fs5.existsSync(distPath)) {
+    const distPath = path6.join(process.cwd(), "dist");
+    if (fs6.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get("*", (req, res) => {
-        res.sendFile(path5.join(distPath, "index.html"));
+        res.sendFile(path6.join(distPath, "index.html"));
       });
     }
   }

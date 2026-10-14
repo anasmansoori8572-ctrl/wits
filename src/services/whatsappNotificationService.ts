@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { whatsappCloudApiService, MetaSendResult } from './whatsappCloudApiService';
+import { durableStorageService } from './durableStorageService';
 import { WITS_LINGO_CONFIG } from '../config/witsLingoConfig';
 
 export interface DBNotification {
@@ -38,11 +39,9 @@ export interface PaymentConfirmationPayload {
 
 export class WhatsAppNotificationService {
   private static instance: WhatsAppNotificationService;
-  private filePath: string;
   private notifications: DBNotification[] = [];
 
   private constructor() {
-    this.filePath = path.join(process.cwd(), 'uploads', 'data', 'notifications.json');
     this.loadNotifications();
   }
 
@@ -54,32 +53,46 @@ export class WhatsAppNotificationService {
   }
 
   private loadNotifications(): void {
-    try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = fs.readFileSync(this.filePath, 'utf-8');
-        this.notifications = JSON.parse(raw);
-      } else {
+    // 1. Read from DurableStorage memory cache or seed
+    this.notifications = durableStorageService.getCollectionSync<DBNotification>('notifications', []);
+
+    // 2. Fallback read from local file if memory cache empty
+    if (this.notifications.length === 0) {
+      try {
+        const filePath = path.join(process.cwd(), 'uploads', 'data', 'notifications.json');
+        if (fs.existsSync(filePath)) {
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          this.notifications = JSON.parse(raw);
+        }
+      } catch (e) {
         this.notifications = [];
       }
-    } catch (e) {
-      console.warn('[WhatsAppNotificationService] Error loading notifications:', e);
-      this.notifications = [];
     }
   }
 
+  /**
+   * Save notifications safely using DurableStorageService without local disk writes
+   */
   private saveNotifications(): void {
-    try {
-      const dir = path.dirname(this.filePath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(this.filePath, JSON.stringify(this.notifications, null, 2), 'utf-8');
-    } catch (e) {
-      console.error('[WhatsAppNotificationService] Error saving notifications:', e);
-    }
+    durableStorageService.saveCollectionBackground('notifications', this.notifications);
+  }
+
+  /**
+   * Explicit awaitable durable persistence
+   */
+  public async saveNotificationsDurable(): Promise<{ success: boolean; error?: string }> {
+    const res = await durableStorageService.saveCollection('notifications', this.notifications);
+    return {
+      success: res.success,
+      error: res.error
+    };
   }
 
   public getAllNotifications(): DBNotification[] {
     this.loadNotifications();
-    return [...this.notifications].sort((a, b) => new Date(b.lastAttemptAt).getTime() - new Date(a.lastAttemptAt).getTime());
+    return [...this.notifications].sort(
+      (a, b) => new Date(b.lastAttemptAt).getTime() - new Date(a.lastAttemptAt).getTime()
+    );
   }
 
   public getNotificationByMessageId(messageId: string): DBNotification | undefined {
@@ -175,11 +188,11 @@ Team Wits Lingo`;
     let sendResult: MetaSendResult;
     const templateName = whatsappCloudApiService.confirmationTemplateName;
 
-    // 2. Attempt Template Send if Meta Cloud API is configured
+    // 2. Meta Cloud API Send Attempt
     if (whatsappCloudApiService.phoneNumberId && whatsappCloudApiService.accessToken) {
-      // First try sending template message if templateName configured
+      // Outbound business messages MUST use an approved Meta template unless customer messaged within 24h
       try {
-        console.log(`[WhatsAppNotificationService] Attempting template message '${templateName}' to ${cleanRecipient}...`);
+        console.log(`[WhatsAppNotificationService] Attempting official template '${templateName}' to ${cleanRecipient}...`);
         sendResult = await whatsappCloudApiService.sendTemplateMessage(
           cleanRecipient,
           templateName,
@@ -199,10 +212,20 @@ Team Wits Lingo`;
           ]
         );
 
-        // If template doesn't exist on Meta yet or is pending approval, gracefully fall back to text message
+        // If template doesn't exist on Meta yet (132001) or is pending approval, attempt text message fallback
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.errorCode === 100 || sendResult.error?.includes('template'))) {
-          console.warn(`[WhatsAppNotificationService] Meta template '${templateName}' not found or unapproved (Code ${sendResult.errorCode}). Falling back to transactional text message.`);
-          sendResult = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullMessageText);
+          console.warn(`[WhatsAppNotificationService] Meta template '${templateName}' not found or unapproved (Code ${sendResult.errorCode}). Attempting transactional text fallback.`);
+          const textResult = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullMessageText);
+          if (textResult.success) {
+            sendResult = textResult;
+          } else {
+            // Free-form text was rejected (e.g. #131047: customer window not open)
+            const combinedError = textResult.isCustomerServiceWindowExpired
+              ? `Template '${templateName}' unapproved (#${sendResult.errorCode || 'N/A'}). Direct text fallback failed: 24h customer window is closed (#131047). An approved Meta template is required.`
+              : (textResult.sanitizedError || sendResult.sanitizedError || 'WhatsApp dispatch rejected by Meta');
+            sendResult.error = combinedError;
+            sendResult.sanitizedError = combinedError;
+          }
         }
       } catch (err: any) {
         console.warn('[WhatsAppNotificationService] Template attempt failed, falling back to text:', err);
@@ -212,11 +235,11 @@ Team Wits Lingo`;
       sendResult = {
         success: false,
         status: 'failed',
-        error: 'WhatsApp Cloud API credentials not configured in environment variables.'
+        error: 'WhatsApp Cloud API credentials not configured in environment variables (WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_ACCESS_TOKEN).'
       };
     }
 
-    // 3. Record or update notification record
+    // 3. Record notification record
     const notifRecord: DBNotification = {
       id: notifId,
       orderId: payload.orderId,
@@ -230,7 +253,7 @@ Team Wits Lingo`;
       sentAt: sendResult.success ? now : undefined,
       lastAttemptAt: now,
       retryCount: 1,
-      errorDetails: sendResult.error,
+      errorDetails: sendResult.sanitizedError || sendResult.error,
       messageBody: fullMessageText
     };
 
@@ -240,7 +263,7 @@ Team Wits Lingo`;
     return {
       success: sendResult.success,
       messageId: sendResult.messageId,
-      error: sendResult.error
+      error: sendResult.sanitizedError || sendResult.error
     };
   }
 
@@ -265,11 +288,11 @@ Team Wits Lingo`;
       notif.sentAt = new Date().toISOString();
       notif.errorDetails = undefined;
     } else {
-      notif.errorDetails = sendRes.error || 'Retry failed via Meta Cloud API';
+      notif.errorDetails = sendRes.sanitizedError || sendRes.error || 'Retry failed via Meta Cloud API';
     }
 
     this.saveNotifications();
-    return { success: sendRes.success, error: sendRes.error };
+    return { success: sendRes.success, error: notif.errorDetails };
   }
 }
 

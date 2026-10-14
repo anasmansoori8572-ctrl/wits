@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { whatsappCloudApiService } from '../../services/whatsappCloudApiService';
 import { whatsappNotificationService } from '../../services/whatsappNotificationService';
 import { studentSupportService } from '../../services/studentSupportService';
+import { durableStorageService } from '../../services/durableStorageService';
 
 // Disable Vercel's default body parser so we can capture the exact raw byte buffer for HMAC signature verification
 export const config = {
@@ -33,7 +34,7 @@ export default async function handler(req: any, res: any) {
   const method = req.method?.toUpperCase();
 
   // --------------------------------------------------------------------------
-  // 1. GET: Meta Webhook Verification Handshake & Status Check
+  // 1. GET: Meta Webhook Verification Handshake & Diagnostic Health Check
   // --------------------------------------------------------------------------
   if (method === 'GET') {
     try {
@@ -61,11 +62,7 @@ export default async function handler(req: any, res: any) {
       const challenge = (queryParams['hub.challenge'] || queryParams['challenge'] || '').trim();
 
       // Read configured token securely from environment or official fallback
-      const rawConfiguredToken = 
-        process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 
-        process.env.WHATSAPP_VERIFY_TOKEN || 
-        'witslingo_meta_verify_token_2026';
-      const configuredToken = rawConfiguredToken.trim().replace(/^["']|["']$/g, '');
+      const configuredToken = whatsappCloudApiService.verifyToken;
 
       // Browser visit / Direct health check without Meta handshake parameters
       if (!mode && !token && !challenge) {
@@ -85,7 +82,9 @@ export default async function handler(req: any, res: any) {
             ],
             response: 'HTTP 200 with hub.challenge as plain text upon token match'
           },
-          tokenConfigured: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN)
+          tokenConfigured: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN),
+          whatsAppApi: whatsappCloudApiService.getDiagnostics(),
+          persistence: durableStorageService.getDiagnostics()
         };
         if (typeof res.status === 'function') {
           return res.status(200).json(healthPayload);
@@ -153,8 +152,8 @@ export default async function handler(req: any, res: any) {
       const rawBodyBuffer = await getRawBody(req);
       const signature = (req.headers?.['x-hub-signature-256'] || req.headers?.['X-Hub-Signature-256']) as string | undefined;
 
-      // 2. Validate HMAC SHA-256 signature using WHATSAPP_APP_SECRET (if configured)
-      const appSecret = process.env.WHATSAPP_APP_SECRET?.trim();
+      // 2. Validate HMAC SHA-256 signature using WHATSAPP_APP_SECRET
+      const appSecret = whatsappCloudApiService.appSecret;
       if (appSecret) {
         if (!signature || !signature.startsWith('sha256=')) {
           console.warn('[Meta Webhook POST] Missing or malformed X-Hub-Signature-256 header.');
@@ -177,43 +176,54 @@ export default async function handler(req: any, res: any) {
         }
       }
 
-      // 3. Immediately return HTTP 200 OK to Meta to prevent delivery retries/timeouts
-      if (typeof res.setHeader === 'function') {
-        res.setHeader('Content-Type', 'application/json');
-      }
-      if (typeof res.status === 'function') {
-        res.status(200).json({ status: 'ok' });
-      } else {
-        res.statusCode = 200;
-        res.end(JSON.stringify({ status: 'ok' }));
-      }
-
-      // 4. Parse payload and process asynchronously in background
+      // 3. Parse JSON payload
       let payload: any;
       try {
         payload = JSON.parse(rawBodyBuffer.toString('utf-8'));
       } catch (parseErr) {
         console.warn('[Meta Webhook POST] Failed to parse JSON body:', parseErr);
-        return;
+        return res.status(400).json({ error: 'Invalid JSON payload' });
       }
 
       const { messages: inboundMessages, statuses } = whatsappCloudApiService.parseWebhookPayload(payload);
 
-      // Handle delivery status updates (sent -> delivered -> read -> failed)
-      for (const st of statuses) {
-        const errorText = st.errors?.[0] ? `${st.errors[0].code}: ${st.errors[0].title}` : undefined;
-        whatsappNotificationService.updateDeliveryStatus(st.messageId, st.status, st.timestamp, errorText);
-      }
+      // 4. Process events within a safe execution deadline before responding to prevent serverless freeze
+      const processEventsPromise = async () => {
+        // Handle delivery status updates (sent -> delivered -> read -> failed)
+        for (const st of statuses) {
+          const isDup = await durableStorageService.isDeduplicated('delivery_status', `${st.messageId}_${st.status}`);
+          if (isDup) continue;
 
-      // Handle student incoming messages via AI Support Service
-      for (const msg of inboundMessages) {
-        console.log(`[Meta Webhook Inbound] Received message from ${msg.senderPhone} (type: ${msg.type})`);
-        studentSupportService.handleInboundMessage(msg).catch(err => {
-          console.error('[Meta Webhook Inbound] Exception processing message:', err);
-        });
-      }
+          durableStorageService.recordDedupBackground('delivery_status', `${st.messageId}_${st.status}`);
+          const errorText = st.errors?.[0] ? `${st.errors[0].code}: ${st.errors[0].title}` : undefined;
+          whatsappNotificationService.updateDeliveryStatus(st.messageId, st.status, st.timestamp, errorText);
+        }
 
-      return;
+        // Handle student incoming messages via AI Support Service
+        for (const msg of inboundMessages) {
+          console.log(`[Meta Webhook Inbound] Received message from ${msg.senderPhone} (type: ${msg.type})`);
+          try {
+            await studentSupportService.handleInboundMessage(msg);
+          } catch (msgErr) {
+            console.error('[Meta Webhook Inbound] Exception processing message:', msgErr);
+          }
+        }
+      };
+
+      // Ensure execution completes or safely times out before Vercel container closes
+      // 7.5s deadline leaves safe margin for 10s serverless timeout
+      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 7500));
+      await Promise.race([processEventsPromise(), timeoutPromise]);
+
+      // Respond HTTP 200 OK to Meta confirming event ingestion
+      if (typeof res.setHeader === 'function') {
+        res.setHeader('Content-Type', 'application/json');
+      }
+      if (typeof res.status === 'function') {
+        return res.status(200).json({ status: 'ok', received: true });
+      }
+      res.statusCode = 200;
+      return res.end(JSON.stringify({ status: 'ok', received: true }));
     } catch (err: any) {
       console.error('[Meta Webhook POST] Fatal handler error:', err);
       if (!res.headersSent) {

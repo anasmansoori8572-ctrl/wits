@@ -10,6 +10,7 @@ import { whatsappNotificationService } from "./src/services/whatsappNotification
 import { studentSupportService } from "./src/services/studentSupportService";
 import { supportTicketService } from "./src/services/supportTicketService";
 import { getAiSupportService } from "./src/services/aiSupportService";
+import { durableStorageService } from "./src/services/durableStorageService";
 
 let s3ClientInstance: S3Client | null = null;
 
@@ -2115,106 +2116,145 @@ function loadAllPersistedData(): void {
 }
 
 function savePersistedGallery(): void {
-  try {
-    fs.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save gallery.json:", e);
+  durableStorageService.saveCollectionBackground("gallery", galleryItems);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save gallery.json:", e);
+    }
   }
 }
 
 function saveRegistrations(): void {
-  try {
-    fs.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save registrations:", e);
+  durableStorageService.saveCollectionBackground("registrations", registrations);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save registrations:", e);
+    }
   }
 }
 
 function saveUsers(): void {
-  try {
-    fs.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save users:", e);
+  durableStorageService.saveCollectionBackground("users", users);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save users:", e);
+    }
   }
 }
 
 function saveBatches(): void {
-  try {
-    fs.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save batches:", e);
+  durableStorageService.saveCollectionBackground("batches", batches);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save batches:", e);
+    }
   }
 }
 
 function savePayments(): void {
-  try {
-    fs.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save payments:", e);
+  durableStorageService.saveCollectionBackground("payments", payments);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save payments:", e);
+    }
   }
 }
 
 function saveCmsContent(): void {
-  try {
-    fs.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save cmsContent:", e);
+  durableStorageService.saveCollectionBackground("cmsContent", cmsContent);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save cmsContent:", e);
+    }
   }
 }
 
 function saveAnnouncements(): void {
-  try {
-    fs.writeFileSync(ANNOUNCEMENTS_STORAGE_FILE, JSON.stringify(announcements, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save announcements:", e);
+  durableStorageService.saveCollectionBackground("announcements", announcements);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(ANNOUNCEMENTS_STORAGE_FILE, JSON.stringify(announcements, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save announcements:", e);
+    }
   }
 }
 
 function savePersistedMaterials(): void {
-  try {
-    fs.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save materials:", e);
+  durableStorageService.saveCollectionBackground("materials", studyMaterials);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save materials:", e);
+    }
   }
 }
 
 function saveOrders(): void {
-  try {
-    fs.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save orders:", e);
+  durableStorageService.saveCollectionBackground("orders", orders);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save orders:", e);
+    }
   }
 }
 
 function saveNotifications(): void {
-  try {
-    fs.writeFileSync(NOTIFICATIONS_STORAGE_FILE, JSON.stringify(notifications, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save notifications:", e);
+  durableStorageService.saveCollectionBackground("notifications", notifications);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(NOTIFICATIONS_STORAGE_FILE, JSON.stringify(notifications, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save notifications:", e);
+    }
   }
 }
 
 function saveConversations(): void {
-  try {
-    fs.writeFileSync(CONVERSATIONS_STORAGE_FILE, JSON.stringify(conversations, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save conversations:", e);
+  durableStorageService.saveCollectionBackground("conversations", conversations);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(CONVERSATIONS_STORAGE_FILE, JSON.stringify(conversations, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save conversations:", e);
+    }
   }
 }
 
 function saveMessages(): void {
-  try {
-    fs.writeFileSync(MESSAGES_STORAGE_FILE, JSON.stringify(messages, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save messages:", e);
+  durableStorageService.saveCollectionBackground("messages", messages);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(MESSAGES_STORAGE_FILE, JSON.stringify(messages, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save messages:", e);
+    }
   }
 }
 
 function saveSupportTickets(): void {
-  try {
-    fs.writeFileSync(SUPPORT_TICKETS_STORAGE_FILE, JSON.stringify(supportTickets, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("[Persistence] Could not save support tickets:", e);
+  durableStorageService.saveCollectionBackground("support-tickets", supportTickets);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(SUPPORT_TICKETS_STORAGE_FILE, JSON.stringify(supportTickets, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save support tickets:", e);
+    }
   }
 }
 
@@ -2287,97 +2327,56 @@ async function sendWhatsAppEnrollmentMessage(data: {
     return { success: false, error: errMsg };
   }
 
-  // 4. Server-Side Environment Secrets (Meta Cloud API)
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
-  const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
-  const version = process.env.WHATSAPP_API_VERSION?.trim() || "v21.0";
-  const templateName = "wits_lingo_enrollment_confirmation";
-  const templateLang = "en";
+  // 4. Dispatch official template message through WhatsApp Cloud API Service
+  const templateName = whatsappCloudApiService.confirmationTemplateName;
+  const templateLang = whatsappCloudApiService.templateLanguage;
 
-  if (!phoneId || !token) {
-    console.log("[WhatsApp] Meta Cloud API credentials not configured in server environment. Marked as pending.");
-    if (studentReg) {
-      studentReg.whatsappDeliveryStatus = "pending";
-      studentReg.whatsappError = "Meta Cloud API credentials (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID) not configured";
-      studentReg.facilities = rawFacilities;
-      saveRegistrations();
-    }
-    return { success: false, error: "WhatsApp credentials not configured" };
-  }
-
-  const payload = {
-    messaging_product: "whatsapp",
-    recipient_type: "individual",
-    to: cleanRecipient,
-    type: "template",
-    template: {
-      name: templateName,
-      language: { code: templateLang },
-      components: [
-        {
-          type: "body",
-          parameters: [
-            { type: "text", text: data.studentName || "Student" },
-            { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
-            { type: "text", text: data.batchName || foundBatch?.name || "Active Batch" },
-            { type: "text", text: startDate },
-            { type: "text", text: classTime },
-            { type: "text", text: facilitiesText },
-            { type: "text", text: meetLink },
-            { type: "text", text: data.admissionId }
-          ]
-        }
-      ]
-    }
-  };
-
-  try {
-    const res = await fetch(`https://graph.facebook.com/${version}/${phoneId}/messages`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const resData = (await res.json()) as any;
-    if (!res.ok) {
-      const errDetail = resData?.error?.message || "WhatsApp dispatch rejected by Meta Cloud API";
-      console.warn(`[WhatsApp] Delivery failure to ${cleanRecipient}: ${errDetail}`);
-      if (studentReg) {
-        studentReg.whatsappDeliveryStatus = "failed";
-        studentReg.whatsappError = errDetail;
-        studentReg.facilities = rawFacilities;
-        saveRegistrations();
+  const sendRes = await whatsappCloudApiService.sendTemplateMessage(
+    cleanRecipient,
+    templateName,
+    templateLang,
+    [
+      {
+        type: "body",
+        parameters: [
+          { type: "text", text: data.studentName || "Student" },
+          { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
+          { type: "text", text: data.batchName || foundBatch?.name || "Active Batch" },
+          { type: "text", text: startDate },
+          { type: "text", text: classTime },
+          { type: "text", text: facilitiesText },
+          { type: "text", text: meetLink },
+          { type: "text", text: data.admissionId }
+        ]
       }
-      return { success: false, error: errDetail };
-    }
+    ]
+  );
 
-    const msgId = resData?.messages?.[0]?.id || `wa_msg_${Date.now()}`;
-    console.log(`[WhatsApp] Automated enrollment notification sent to ${cleanRecipient} (Message ID: ${msgId})`);
-
-    if (studentReg) {
-      studentReg.whatsappDeliveryStatus = "sent";
-      studentReg.whatsappMessageId = msgId;
-      studentReg.whatsappSentAt = new Date().toISOString();
-      studentReg.whatsappError = undefined;
-      studentReg.facilities = rawFacilities;
-      saveRegistrations();
-    }
-
-    return { success: true, messageId: msgId };
-  } catch (err: any) {
-    const errMsg = err?.message || "Network exception during WhatsApp dispatch";
-    console.warn(`[WhatsApp] Network exception: ${errMsg}`);
+  if (!sendRes.success) {
+    const errDetail = sendRes.sanitizedError || sendRes.error || "WhatsApp dispatch rejected by Meta Cloud API";
+    console.warn(`[WhatsApp] Delivery failure to ${cleanRecipient}: ${errDetail}`);
     if (studentReg) {
       studentReg.whatsappDeliveryStatus = "failed";
-      studentReg.whatsappError = errMsg;
+      studentReg.whatsappError = errDetail;
       studentReg.facilities = rawFacilities;
       saveRegistrations();
     }
-    return { success: false, error: errMsg };
+    return { success: false, error: errDetail };
   }
+
+  const msgId = sendRes.messageId || `wa_msg_${Date.now()}`;
+  console.log(`[WhatsApp] Automated enrollment notification sent to ${cleanRecipient} (Message ID: ${msgId})`);
+
+  if (studentReg) {
+    studentReg.whatsappDeliveryStatus = "sent";
+    studentReg.whatsappMessageId = msgId;
+    studentReg.whatsappSentAt = new Date().toISOString();
+    studentReg.whatsappError = undefined;
+    studentReg.facilities = rawFacilities;
+    saveRegistrations();
+  }
+
+  return { success: true, messageId: msgId };
 }
 
 // =========================================================================

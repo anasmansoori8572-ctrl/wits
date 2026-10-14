@@ -141,9 +141,6 @@ export class AiSupportService {
 
   public loadKnowledgeBase(): void {
     try {
-      if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-      }
       if (fs.existsSync(KB_FILE)) {
         const raw = fs.readFileSync(KB_FILE, 'utf-8');
         const data = JSON.parse(raw);
@@ -154,9 +151,14 @@ export class AiSupportService {
       }
       // Seed default knowledge base
       this.knowledgeBase = [...DEFAULT_KNOWLEDGE_BASE];
-      fs.writeFileSync(KB_FILE, JSON.stringify(this.knowledgeBase, null, 2), 'utf-8');
+      if (process.env.VERCEL !== '1') {
+        if (!fs.existsSync(DATA_DIR)) {
+          fs.mkdirSync(DATA_DIR, { recursive: true });
+        }
+        fs.writeFileSync(KB_FILE, JSON.stringify(this.knowledgeBase, null, 2), 'utf-8');
+      }
     } catch (err) {
-      console.warn('[AI Support] Error loading knowledge base, using in-memory defaults:', err);
+      console.warn('[AI Support] Using in-memory knowledge base defaults:', err);
       this.knowledgeBase = [...DEFAULT_KNOWLEDGE_BASE];
     }
   }
@@ -167,6 +169,9 @@ export class AiSupportService {
 
   public saveKnowledgeBase(items: KnowledgeItem[]): void {
     this.knowledgeBase = items;
+    if (process.env.VERCEL === '1') {
+      return; // Do not write to deployment disk on Vercel Lambda
+    }
     try {
       if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
