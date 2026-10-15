@@ -2639,6 +2639,36 @@ try {
     }
   });
 
+  // 4. Test Durable Cloud Storage Roundtrip for All Critical Collections
+  app.get("/api/whatsapp/test-persistence", async (_req, res) => {
+    try {
+      const collections = [
+        "materials",
+        "conversations",
+        "messages",
+        "support-tickets",
+        "notifications",
+        "webhook-dedup"
+      ];
+      const results: Record<string, any> = {};
+      let allPassed = true;
+
+      for (const coll of collections) {
+        const roundtrip = await durableStorageService.testCollectionRoundtrip(coll);
+        results[coll] = roundtrip;
+        if (!roundtrip.success) allPassed = false;
+      }
+
+      res.status(allPassed ? 200 : 500).json({
+        success: allPassed,
+        diagnostics: durableStorageService.getDiagnostics(),
+        collections: results
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
   // 1. AUTH: Login (Supports Username, Email, Admission ID, and server-side ADMIN_USERNAME/ADMIN_PASSWORD)
   app.post(["/api/auth/login", "/api/admin/auth/login", "/api/admin/login"], (req, res) => {
     const { email, username, password, adminPasskey } = req.body;

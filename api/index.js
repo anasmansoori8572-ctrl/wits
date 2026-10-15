@@ -4180,6 +4180,32 @@ app.post("/api/whatsapp/test-message", async (req, res) => {
     });
   }
 });
+app.get("/api/whatsapp/test-persistence", async (_req, res) => {
+  try {
+    const collections = [
+      "materials",
+      "conversations",
+      "messages",
+      "support-tickets",
+      "notifications",
+      "webhook-dedup"
+    ];
+    const results = {};
+    let allPassed = true;
+    for (const coll of collections) {
+      const roundtrip = await durableStorageService.testCollectionRoundtrip(coll);
+      results[coll] = roundtrip;
+      if (!roundtrip.success) allPassed = false;
+    }
+    res.status(allPassed ? 200 : 500).json({
+      success: allPassed,
+      diagnostics: durableStorageService.getDiagnostics(),
+      collections: results
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
 app.post(["/api/auth/login", "/api/admin/auth/login", "/api/admin/login"], (req, res) => {
   const { email, username, password, adminPasskey } = req.body;
   const loginIdentifier = (username || email || "").trim();
