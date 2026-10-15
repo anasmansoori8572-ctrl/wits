@@ -2,7 +2,7 @@
 import "dotenv/config";
 import express from "express";
 import path6 from "path";
-import crypto2 from "crypto";
+import crypto3 from "crypto";
 import fs6 from "fs";
 import { S3Client as S3Client2, PutObjectCommand as PutObjectCommand2 } from "@aws-sdk/client-s3";
 
@@ -497,6 +497,7 @@ import path2 from "path";
 // src/services/durableStorageService.ts
 import fs from "fs";
 import path from "path";
+import crypto2 from "crypto";
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 var DurableStorageService = class _DurableStorageService {
   constructor() {
@@ -504,11 +505,18 @@ var DurableStorageService = class _DurableStorageService {
     this.s3Client = null;
     this.s3Configured = false;
     this.s3Bucket = "";
+    this.s3Endpoint = "";
+    this.keyId = "";
+    this.appKey = "";
+    this.b2AuthCache = null;
     this.firestoreConfigured = false;
     this.firestoreProjectId = "";
     this.isReadOnlyFs = false;
     this.dedupCache = /* @__PURE__ */ new Map();
+    // In-process serialization mutex per collection to prevent race conditions during concurrent serverless writes
+    this.collectionLocks = /* @__PURE__ */ new Map();
     this.detectEnvironment();
+    this.initCredentials();
     this.initS3Client();
     this.initFirestore();
     this.loadInitialData();
@@ -541,33 +549,168 @@ var DurableStorageService = class _DurableStorageService {
     }
   }
   /**
-   * Initialize S3 / Backblaze B2 client from environment variables
+   * Read and sanitize credentials from environment
+   */
+  initCredentials() {
+    const rawBucket = process.env.B2_BUCKET_NAME || process.env.AWS_S3_BUCKET || "wits-lingo-materials";
+    this.s3Bucket = rawBucket.trim().replace(/^["']|["']$/g, "");
+    const rawEndpoint = process.env.B2_ENDPOINT || process.env.AWS_ENDPOINT || "s3.us-east-005.backblazeb2.com";
+    this.s3Endpoint = rawEndpoint.trim().replace(/^["']|["']$/g, "").replace(/^https?:\/\//i, "");
+    const rawKeyId = process.env.B2_KEY_ID || process.env.AWS_ACCESS_KEY_ID || "";
+    this.keyId = rawKeyId.trim().replace(/^["']|["']$/g, "");
+    const rawAppKey = process.env.B2_APPLICATION_KEY || process.env.AWS_SECRET_ACCESS_KEY || "";
+    this.appKey = rawAppKey.trim().replace(/^["']|["']$/g, "");
+  }
+  /**
+   * Initialize S3 / Backblaze B2 client with S3-compatible fixes:
+   * 1. requestChecksumCalculation: 'WHEN_REQUIRED' (disables AWS SDK v3 chunked checksum trailers that B2 rejects with "body was too small")
+   * 2. responseChecksumValidation: 'WHEN_REQUIRED'
+   * 3. forcePathStyle: true (ensures direct bucket path addressing)
    */
   initS3Client() {
-    const bucket = (process.env.B2_BUCKET_NAME || process.env.AWS_S3_BUCKET || "").trim();
-    const rawEndpoint = (process.env.B2_ENDPOINT || process.env.AWS_ENDPOINT || "s3.us-east-005.backblazeb2.com").trim();
-    const keyId = (process.env.B2_KEY_ID || process.env.AWS_ACCESS_KEY_ID || "").trim();
-    const appKey = (process.env.B2_APPLICATION_KEY || process.env.AWS_SECRET_ACCESS_KEY || "").trim();
-    if (bucket && keyId && appKey) {
+    if (this.s3Bucket && this.keyId && this.appKey) {
       try {
-        const cleanEndpoint = rawEndpoint.replace(/^https?:\/\//i, "");
-        const regionMatch = cleanEndpoint.match(/^s3\.([a-z0-9-]+)\.backblazeb2\.com/i);
+        const regionMatch = this.s3Endpoint.match(/^s3\.([a-z0-9-]+)\.backblazeb2\.com/i);
         const region = regionMatch ? regionMatch[1] : process.env.AWS_REGION || "us-east-005";
         this.s3Client = new S3Client({
-          endpoint: `https://${cleanEndpoint}`,
+          endpoint: `https://${this.s3Endpoint}`,
           region,
           credentials: {
-            accessKeyId: keyId,
-            secretAccessKey: appKey
-          }
+            accessKeyId: this.keyId,
+            secretAccessKey: this.appKey
+          },
+          // CRITICAL: Backblaze B2 S3 API does not accept automatic flexible checksum trailers.
+          // Setting WHEN_REQUIRED prevents the SDK from altering body length or sending chunked trailers.
+          requestChecksumCalculation: "WHEN_REQUIRED",
+          responseChecksumValidation: "WHEN_REQUIRED",
+          forcePathStyle: true,
+          maxAttempts: 3
         });
-        this.s3Bucket = bucket;
         this.s3Configured = true;
       } catch (err) {
         console.warn("[DurableStorage] Could not initialize S3/B2 client:", err);
         this.s3Configured = false;
       }
     }
+  }
+  /**
+   * Backblaze B2 Native REST Authentication (Zero-dependency fallback that never has S3 checksum quirks)
+   */
+  async getB2NativeAuth() {
+    if (!this.keyId || !this.appKey) return null;
+    if (this.b2AuthCache && this.b2AuthCache.expiresAt > Date.now() + 60 * 60 * 1e3) {
+      return this.b2AuthCache;
+    }
+    try {
+      const authHeader = "Basic " + Buffer.from(`${this.keyId}:${this.appKey}`).toString("base64");
+      const authRes = await fetch("https://api.backblazeb2.com/b2api/v3/b2_authorize_account", {
+        headers: { Authorization: authHeader }
+      });
+      if (!authRes.ok) {
+        console.warn("[DurableStorage] B2 Native Auth failed with HTTP status:", authRes.status);
+        return null;
+      }
+      const authData = await authRes.json();
+      const apiUrl = authData.apiInfo.storageApi.apiUrl;
+      const downloadUrl = authData.apiInfo.storageApi.downloadUrl;
+      const authToken = authData.authorizationToken;
+      const accountId = authData.accountId;
+      let bucketId;
+      let actualBucketName = this.s3Bucket;
+      try {
+        const listRes = await fetch(`${apiUrl}/b2api/v3/b2_list_buckets`, {
+          method: "POST",
+          headers: { Authorization: authToken, "Content-Type": "application/json" },
+          body: JSON.stringify({ accountId })
+        });
+        if (listRes.ok) {
+          const bucketData = await listRes.json();
+          const buckets = bucketData.buckets || [];
+          const normalizedConfig = this.s3Bucket.replace(/[_]/g, "-").toLowerCase();
+          const matched = buckets.find(
+            (b) => b.bucketName.toLowerCase() === this.s3Bucket.toLowerCase() || b.bucketName.replace(/[_]/g, "-").toLowerCase() === normalizedConfig
+          ) || buckets[0];
+          if (matched) {
+            bucketId = matched.bucketId;
+            actualBucketName = matched.bucketName;
+          }
+        }
+      } catch (listErr) {
+        console.warn("[DurableStorage] Could not list B2 buckets:", listErr);
+      }
+      this.b2AuthCache = {
+        apiUrl,
+        downloadUrl,
+        authorizationToken: authToken,
+        accountId,
+        bucketId,
+        bucketName: actualBucketName,
+        expiresAt: Date.now() + 20 * 60 * 60 * 1e3
+      };
+      return this.b2AuthCache;
+    } catch (err) {
+      console.warn("[DurableStorage] Error authenticating with B2 Native API:", err?.message);
+      return null;
+    }
+  }
+  /**
+   * Upload Buffer to Backblaze B2 using Native REST API
+   */
+  async uploadViaB2Native(fileName, buffer, mimeType = "application/json; charset=utf-8") {
+    const b2 = await this.getB2NativeAuth();
+    if (!b2 || !b2.bucketId) {
+      return { success: false, error: "B2 Native credentials or bucketId unavailable" };
+    }
+    try {
+      const upUrlRes = await fetch(`${b2.apiUrl}/b2api/v3/b2_get_upload_url`, {
+        method: "POST",
+        headers: { Authorization: b2.authorizationToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ bucketId: b2.bucketId })
+      });
+      if (!upUrlRes.ok) {
+        return { success: false, error: `B2 get_upload_url failed with HTTP ${upUrlRes.status}` };
+      }
+      const upUrlData = await upUrlRes.json();
+      const sha1 = crypto2.createHash("sha1").update(buffer).digest("hex");
+      const uploadRes = await fetch(upUrlData.uploadUrl, {
+        method: "POST",
+        headers: {
+          Authorization: upUrlData.authorizationToken,
+          "X-Bz-File-Name": encodeURIComponent(fileName),
+          "Content-Type": mimeType,
+          "Content-Length": buffer.length.toString(),
+          "X-Bz-Content-Sha1": sha1
+        },
+        body: new Uint8Array(buffer)
+      });
+      if (uploadRes.ok) {
+        return { success: true };
+      } else {
+        const errText = await uploadRes.text();
+        return { success: false, error: `B2 Native upload failed (${uploadRes.status}): ${errText}` };
+      }
+    } catch (err) {
+      return { success: false, error: err?.message || "B2 Native upload network exception" };
+    }
+  }
+  /**
+   * Download file content from Backblaze B2 using Native REST API
+   */
+  async downloadViaB2Native(fileName) {
+    const b2 = await this.getB2NativeAuth();
+    if (!b2) return null;
+    try {
+      const url = `${b2.downloadUrl}/file/${b2.bucketName}/${encodeURIComponent(fileName)}`;
+      const res = await fetch(url, {
+        headers: { Authorization: b2.authorizationToken }
+      });
+      if (res.ok) {
+        return await res.text();
+      }
+    } catch (err) {
+      console.warn("[DurableStorage] B2 Native download exception for", fileName, err);
+    }
+    return null;
   }
   /**
    * Initialize Firestore if configured in environment
@@ -590,6 +733,7 @@ var DurableStorageService = class _DurableStorageService {
       "notifications",
       "registrations",
       "orders",
+      "materials",
       "webhook-dedup"
     ];
     for (const coll of seedCollections) {
@@ -619,6 +763,8 @@ var DurableStorageService = class _DurableStorageService {
     let primaryBackend;
     if (this.s3Configured) {
       primaryBackend = "b2_s3";
+    } else if (Boolean(this.keyId && this.appKey)) {
+      primaryBackend = "b2_native";
     } else if (this.firestoreConfigured) {
       primaryBackend = "firestore";
     } else if (!this.isReadOnlyFs) {
@@ -630,9 +776,10 @@ var DurableStorageService = class _DurableStorageService {
       isVercel: process.env.VERCEL === "1",
       isFileSystemReadOnly: this.isReadOnlyFs,
       primaryBackend,
-      b2Configured: this.s3Configured,
+      b2Configured: this.s3Configured || Boolean(this.keyId && this.appKey),
       b2Bucket: this.s3Bucket || void 0,
-      b2Endpoint: process.env.B2_ENDPOINT || void 0,
+      b2Endpoint: this.s3Endpoint || void 0,
+      b2NativeConfigured: Boolean(this.keyId && this.appKey),
       firestoreConfigured: this.firestoreConfigured,
       firestoreProjectId: this.firestoreProjectId || void 0,
       cachedCollections: Array.from(this.memoryCache.keys()),
@@ -645,17 +792,19 @@ var DurableStorageService = class _DurableStorageService {
   async getCollection(collectionName, defaultValue = []) {
     if (this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
-      if (Array.isArray(cached)) {
+      if (Array.isArray(cached) && cached.length > 0) {
         return [...cached];
       }
     }
+    const key = `data/${collectionName}.json`;
     if (this.s3Configured && this.s3Client) {
       try {
-        const key = `data/${collectionName}.json`;
-        const res = await this.s3Client.send(new GetObjectCommand({
-          Bucket: this.s3Bucket,
-          Key: key
-        }));
+        const res = await this.s3Client.send(
+          new GetObjectCommand({
+            Bucket: this.s3Bucket,
+            Key: key
+          })
+        );
         if (res.Body) {
           const chunks = [];
           for await (const chunk of res.Body) {
@@ -670,8 +819,21 @@ var DurableStorageService = class _DurableStorageService {
         }
       } catch (s3Err) {
         if (s3Err?.name !== "NoSuchKey" && s3Err?.$metadata?.httpStatusCode !== 404) {
-          console.warn(`[DurableStorage] B2 read error for ${collectionName}:`, s3Err?.message);
+          console.warn(`[DurableStorage] B2 S3 read error for ${collectionName}:`, s3Err?.message);
         }
+      }
+    }
+    if (this.keyId && this.appKey) {
+      try {
+        const nativeContent = await this.downloadViaB2Native(key);
+        if (nativeContent) {
+          const parsed = JSON.parse(nativeContent);
+          if (Array.isArray(parsed)) {
+            this.memoryCache.set(collectionName, parsed);
+            return [...parsed];
+          }
+        }
+      } catch (nativeReadErr) {
       }
     }
     try {
@@ -702,113 +864,136 @@ var DurableStorageService = class _DurableStorageService {
     return [...defaultValue];
   }
   /**
-   * Persist collection to durable cloud storage and update memory cache.
-   * NEVER writes to read-only disk on Vercel.
-   * Reports exact status and never silently claims success on failure.
+   * Persist collection to durable cloud storage with concurrent execution serialization.
+   * Eliminates S3 "The request body was too small" errors by:
+   * 1. Passing exact byte Buffer and explicit ContentLength header.
+   * 2. Automatically falling back to Native Backblaze B2 REST API if S3 returns any 400/InvalidRequest.
+   * 3. Serializing writes to the same collection to avoid race-condition overwrite.
    */
   async saveCollection(collectionName, items) {
-    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
-    const cloned = Array.isArray(items) ? [...items] : [];
-    this.memoryCache.set(collectionName, cloned);
-    const jsonString = JSON.stringify(cloned, null, 2);
-    const byteLength = Buffer.byteLength(jsonString, "utf-8");
-    if (this.s3Configured && this.s3Client) {
-      try {
-        const key = `data/${collectionName}.json`;
-        await this.s3Client.send(new PutObjectCommand({
-          Bucket: this.s3Bucket,
-          Key: key,
-          Body: Buffer.from(jsonString, "utf-8"),
-          ContentType: "application/json; charset=utf-8"
-        }));
-        return {
-          success: true,
-          backend: "b2_s3",
-          bytesWritten: byteLength,
-          timestamp
-        };
-      } catch (s3Err) {
-        const errMsg = s3Err?.message || "B2 PutObject failed";
-        console.error(`[DurableStorage] B2 persistence failed for collection '${collectionName}':`, errMsg);
-        return {
-          success: false,
-          backend: "b2_s3",
-          error: errMsg,
-          timestamp
-        };
-      }
-    }
-    if (this.firestoreConfigured && this.firestoreProjectId) {
-      try {
-        const url = `https://firestore.googleapis.com/v1/projects/${this.firestoreProjectId}/databases/(default)/documents/app_collections/${collectionName}`;
-        const res = await fetch(url, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fields: {
-              data: { stringValue: jsonString },
-              updatedAt: { timestampValue: timestamp }
-            }
-          })
-        });
-        if (res.ok) {
+    const previousLock = this.collectionLocks.get(collectionName) || Promise.resolve();
+    const executeSave = async () => {
+      const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+      const cloned = Array.isArray(items) ? [...items] : [];
+      this.memoryCache.set(collectionName, cloned);
+      const jsonString = JSON.stringify(cloned, null, 2);
+      const bodyBuffer = Buffer.from(jsonString, "utf-8");
+      const contentLength = bodyBuffer.byteLength;
+      const key = `data/${collectionName}.json`;
+      if (this.s3Configured && this.s3Client) {
+        let s3Error;
+        try {
+          if (!this.s3Client) this.initS3Client();
+          await this.s3Client.send(
+            new PutObjectCommand({
+              Bucket: this.s3Bucket,
+              Key: key,
+              Body: bodyBuffer,
+              ContentLength: contentLength,
+              // CRITICAL: Fixes "The request body was too small"
+              ContentType: "application/json; charset=utf-8"
+            })
+          );
           return {
             success: true,
-            backend: "firestore",
-            bytesWritten: byteLength,
+            backend: "b2_s3",
+            bytesWritten: contentLength,
             timestamp
           };
-        } else {
-          const errBody = await res.text();
-          console.error(`[DurableStorage] Firestore REST error (${res.status}):`, errBody);
+        } catch (s3Err) {
+          s3Error = s3Err?.message || "B2 PutObject failed";
+          console.warn(
+            `[DurableStorage] B2 S3 upload failed for '${collectionName}' (${s3Error}). Attempting Backblaze B2 Native REST fallback...`
+          );
+        }
+        if (this.keyId && this.appKey) {
+          try {
+            const nativeRes = await this.uploadViaB2Native(key, bodyBuffer, "application/json; charset=utf-8");
+            if (nativeRes.success) {
+              console.log(`[DurableStorage] Collection '${collectionName}' successfully persisted via B2 Native REST API.`);
+              return {
+                success: true,
+                backend: "b2_native",
+                bytesWritten: contentLength,
+                timestamp
+              };
+            } else {
+              console.error(`[DurableStorage] B2 Native fallback also failed for '${collectionName}':`, nativeRes.error);
+            }
+          } catch (nativeErr) {
+            console.error(`[DurableStorage] B2 Native exception for '${collectionName}':`, nativeErr?.message);
+          }
+        }
+        if (process.env.VERCEL === "1") {
           return {
             success: false,
-            backend: "firestore",
-            error: `Firestore HTTP ${res.status}`,
+            backend: "b2_s3",
+            error: s3Error || "B2 persistence failed",
             timestamp
           };
         }
-      } catch (fsErr) {
-        console.error(`[DurableStorage] Firestore persistence failed:`, fsErr);
-        return {
-          success: false,
-          backend: "firestore",
-          error: fsErr?.message || "Firestore write failed",
-          timestamp
-        };
       }
-    }
-    if (!this.isReadOnlyFs && process.env.VERCEL !== "1") {
-      try {
-        const dir = path.join(process.cwd(), "uploads", "data");
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
+      if (this.firestoreConfigured && this.firestoreProjectId) {
+        try {
+          const url = `https://firestore.googleapis.com/v1/projects/${this.firestoreProjectId}/databases/(default)/documents/app_collections/${collectionName}`;
+          const res = await fetch(url, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fields: {
+                data: { stringValue: jsonString },
+                updatedAt: { timestampValue: timestamp }
+              }
+            })
+          });
+          if (res.ok) {
+            return {
+              success: true,
+              backend: "firestore",
+              bytesWritten: contentLength,
+              timestamp
+            };
+          }
+        } catch (fsErr) {
+          console.error(`[DurableStorage] Firestore persistence failed:`, fsErr?.message);
         }
-        const localPath = path.join(dir, `${collectionName}.json`);
-        fs.writeFileSync(localPath, jsonString, "utf-8");
-        return {
-          success: true,
-          backend: "local_fs",
-          bytesWritten: byteLength,
-          timestamp
-        };
-      } catch (fsErr) {
-        console.warn(`[DurableStorage] Local filesystem write failed:`, fsErr?.message);
-        return {
-          success: false,
-          backend: "local_fs",
-          error: fsErr?.message || "Local filesystem write failed",
-          timestamp
-        };
       }
-    }
-    console.warn(`[DurableStorage] Running on read-only serverless environment without cloud database configured (B2/Firestore). Data kept in-memory for current container lifetime.`);
-    return {
-      success: false,
-      backend: "in_memory_only",
-      error: "Read-only serverless filesystem detected. B2/Firestore credentials not configured for durable persistence.",
-      timestamp
+      if (!this.isReadOnlyFs && process.env.VERCEL !== "1") {
+        try {
+          const dir = path.join(process.cwd(), "uploads", "data");
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          const localPath = path.join(dir, `${collectionName}.json`);
+          fs.writeFileSync(localPath, jsonString, "utf-8");
+          return {
+            success: true,
+            backend: "local_fs",
+            bytesWritten: contentLength,
+            timestamp
+          };
+        } catch (fsErr) {
+          return {
+            success: false,
+            backend: "local_fs",
+            error: fsErr?.message || "Local filesystem write failed",
+            timestamp
+          };
+        }
+      }
+      const warnMsg = "Read-only serverless filesystem detected. B2/Firestore credentials not configured or rejected upload. Data kept in-memory for container lifetime.";
+      console.warn(`[DurableStorage] ${warnMsg}`);
+      return {
+        success: false,
+        backend: "in_memory_only",
+        error: warnMsg,
+        timestamp
+      };
     };
+    const taskPromise = previousLock.catch(() => {
+    }).then(() => executeSave());
+    this.collectionLocks.set(collectionName, taskPromise);
+    return taskPromise;
   }
   /**
    * Fast synchronous in-memory update with background cloud persistence
@@ -895,6 +1080,35 @@ var DurableStorageService = class _DurableStorageService {
     this.recordDedup(scope, key, ttlMs).catch((err) => {
       console.warn(`[DurableStorage] Async recordDedup error for '${key}':`, err);
     });
+  }
+  /**
+   * Automated verification test utility:
+   * Performs an isolated write -> read -> verify roundtrip for critical collections.
+   */
+  async testCollectionRoundtrip(collectionName) {
+    const testKey = `_test_roundtrip_${Date.now()}`;
+    const testItem = {
+      id: testKey,
+      _testTimestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      testCollection: collectionName
+    };
+    const existing = await this.getCollection(collectionName, []);
+    const updated = [testItem, ...existing.filter((i) => !i.id?.startsWith("_test_roundtrip_"))];
+    const writeRes = await this.saveCollection(collectionName, updated);
+    if (!writeRes.success) {
+      return { success: false, backend: writeRes.backend, error: writeRes.error };
+    }
+    this.memoryCache.delete(collectionName);
+    const refetched = await this.getCollection(collectionName, []);
+    const verified = refetched.some((i) => i.id === testKey);
+    const cleaned = refetched.filter((i) => i.id !== testKey);
+    await this.saveCollection(collectionName, cleaned);
+    return {
+      success: verified,
+      backend: writeRes.backend,
+      bytesWritten: writeRes.bytesWritten,
+      error: verified ? void 0 : "Verification failed: Written test item not found on refetch"
+    };
   }
 };
 var durableStorageService = DurableStorageService.getInstance();
@@ -2041,7 +2255,7 @@ async function uploadBufferToB2(fileName, buffer, mimeType = "application/pdf") 
       });
       if (upUrlRes.ok) {
         const upUrlData = await upUrlRes.json();
-        const sha1 = crypto2.createHash("sha1").update(buffer).digest("hex");
+        const sha1 = crypto3.createHash("sha1").update(buffer).digest("hex");
         const uploadRes = await fetch(upUrlData.uploadUrl, {
           method: "POST",
           headers: {
@@ -2238,7 +2452,7 @@ var JWT_SECRET = process.env.JWT_SECRET || "witslingo_academy_secure_signing_key
 var ADMIN_USERNAME = process.env.ADMIN_USERNAME?.trim() || "admin";
 var ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim() || "admin";
 function hashPassword(password, salt = "witslingo_salt_2026") {
-  return crypto2.pbkdf2Sync(password, salt, 1e4, 64, "sha512").toString("hex");
+  return crypto3.pbkdf2Sync(password, salt, 1e4, 64, "sha512").toString("hex");
 }
 function verifyPassword(inputPassword, storedHashOrPlain, salt = "witslingo_salt_2026") {
   if (!inputPassword || !storedHashOrPlain) return false;
@@ -3208,7 +3422,7 @@ function generateAuthToken(user) {
     // 24 hours validity
   };
   const str = Buffer.from(JSON.stringify(payload)).toString("base64");
-  const signature = crypto2.createHmac("sha256", JWT_SECRET).update(str).digest("hex");
+  const signature = crypto3.createHmac("sha256", JWT_SECRET).update(str).digest("hex");
   return `${str}.${signature}`;
 }
 function verifyAuthToken(reqOrHeader) {
@@ -3234,7 +3448,7 @@ function verifyAuthToken(reqOrHeader) {
   const parts = token.split(".");
   if (parts.length !== 2) return null;
   const [dataB64, sig] = parts;
-  const expectedSig = crypto2.createHmac("sha256", JWT_SECRET).update(dataB64).digest("hex");
+  const expectedSig = crypto3.createHmac("sha256", JWT_SECRET).update(dataB64).digest("hex");
   if (sig !== expectedSig) return null;
   try {
     const payload = JSON.parse(Buffer.from(dataB64, "base64").toString("utf-8"));
@@ -3261,14 +3475,14 @@ function generateSignedPlaybackToken(studentId, classId, batchId) {
   const expiresAt = Date.now() + 60 * 60 * 1e3;
   const payload = { studentId, classId, batchId, expiresAt };
   const str = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const sig = crypto2.createHmac("sha256", JWT_SECRET).update(str).digest("hex");
+  const sig = crypto3.createHmac("sha256", JWT_SECRET).update(str).digest("hex");
   return `${str}.${sig}`;
 }
 function verifyPlaybackToken(token) {
   const parts = token.split(".");
   if (parts.length !== 2) return null;
   const [str, sig] = parts;
-  const expectedSig = crypto2.createHmac("sha256", JWT_SECRET).update(str).digest("hex");
+  const expectedSig = crypto3.createHmac("sha256", JWT_SECRET).update(str).digest("hex");
   if (sig !== expectedSig) return null;
   try {
     const payload = JSON.parse(Buffer.from(str, "base64url").toString("utf-8"));
@@ -4476,7 +4690,7 @@ app.post("/api/payments/razorpay/verify", async (req, res) => {
     if (!keySecret) {
       return res.status(503).json({ error: "Razorpay secret key not configured on server." });
     }
-    const generatedSignature = crypto2.createHmac("sha256", keySecret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest("hex");
+    const generatedSignature = crypto3.createHmac("sha256", keySecret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest("hex");
     if (generatedSignature !== razorpaySignature) {
       console.warn(`[Razorpay] Invalid signature attempt. Provided: ${razorpaySignature}, Generated: ${generatedSignature}`);
       return res.status(400).json({
@@ -4688,7 +4902,7 @@ app.post("/api/webhooks/razorpay", (req, res) => {
     const signature = req.headers["x-razorpay-signature"];
     if (webhookSecret && signature) {
       const rawBody = req.rawBody || (typeof req.body === "string" ? req.body : JSON.stringify(req.body));
-      const expectedSignature = crypto2.createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
+      const expectedSignature = crypto3.createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
       if (expectedSignature !== signature) {
         console.warn("[Razorpay Webhook] Invalid signature rejected.");
         return res.status(400).json({ error: "Invalid webhook signature." });
@@ -4954,7 +5168,7 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
     }
     const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
     if (keySecret && razorpayOrderId && razorpaySignature && !razorpayOrderId.startsWith("order_test_")) {
-      const generatedSignature = crypto2.createHmac("sha256", keySecret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest("hex");
+      const generatedSignature = crypto3.createHmac("sha256", keySecret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest("hex");
       if (generatedSignature !== razorpaySignature) {
         console.warn("[Razorpay] Order signature verification failed:", { received: razorpaySignature, expected: generatedSignature });
         return res.status(400).json({ success: false, error: "Payment signature verification failed." });

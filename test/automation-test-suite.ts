@@ -316,6 +316,23 @@ async function runFullTestSuite() {
   const hasMetaConfirmation = Boolean((unacceptedResponse as any)?.messages?.[0]?.id);
   assertTest('Message is not claimed sent without explicit Meta acceptance ID', !hasMetaConfirmation);
 
+  // -------------------------------------------------------------
+  // 24. Critical Collections Write -> Read -> Verify Roundtrip
+  // -------------------------------------------------------------
+  const criticalCollections = [
+    'materials',
+    'conversations',
+    'messages',
+    'support-tickets',
+    'notifications',
+    'webhook-dedup'
+  ];
+
+  for (const coll of criticalCollections) {
+    const res = await durableStorageService.testCollectionRoundtrip(coll);
+    assertTest(`Collection '${coll}' write -> read -> verify roundtrip succeeds`, res.success, res.error);
+  }
+
   console.log('\n===========================================================');
   console.log(`   ALL ${passed}/${total} AUTOMATION TESTS PASSED SUCCESSFULLY!    `);
   console.log('===========================================================\n');

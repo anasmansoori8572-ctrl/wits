@@ -93,6 +93,43 @@ export default async function handler(req: any, res: any) {
         return res.end(JSON.stringify(healthPayload));
       }
 
+      // Authorized B2 Persistence Test & Verification Probe
+      const action = (queryParams['action'] || '').trim();
+      if (action === 'test_b2' && token === configuredToken) {
+        if (typeof res.setHeader === 'function') {
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        }
+        const collectionsToTest = [
+          'materials',
+          'conversations',
+          'messages',
+          'support-tickets',
+          'notifications',
+          'webhook-dedup'
+        ];
+        const results: Record<string, any> = {};
+        let allPassed = true;
+
+        for (const coll of collectionsToTest) {
+          const roundtrip = await durableStorageService.testCollectionRoundtrip(coll);
+          results[coll] = roundtrip;
+          if (!roundtrip.success) allPassed = false;
+        }
+
+        const report = {
+          success: allPassed,
+          testTimestamp: new Date().toISOString(),
+          b2Diagnostics: durableStorageService.getDiagnostics(),
+          collectionResults: results
+        };
+
+        if (typeof res.status === 'function') {
+          return res.status(allPassed ? 200 : 500).json(report);
+        }
+        res.statusCode = allPassed ? 200 : 500;
+        return res.end(JSON.stringify(report));
+      }
+
       // Meta Handshake: Validate mode === 'subscribe'
       if (mode !== 'subscribe') {
         console.warn(`[Meta Webhook GET] Handshake rejected: invalid hub.mode "${mode}". Expected "subscribe".`);

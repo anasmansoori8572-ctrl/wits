@@ -1,5 +1,17 @@
 [
   {
+    "key": "wa_msg_unique_1792072658046",
+    "scope": "whatsapp_inbound",
+    "recordedAt": "2026-10-15T13:57:38.046Z",
+    "expiresAt": 1792677458046
+  },
+  {
+    "key": "meta_msg_1792072658039_test",
+    "scope": "whatsapp_inbound",
+    "recordedAt": "2026-10-15T13:57:38.040Z",
+    "expiresAt": 1792677458040
+  },
+  {
     "key": "wa_msg_unique_1791968076343",
     "scope": "whatsapp_inbound",
     "recordedAt": "2026-10-14T08:54:36.343Z",
