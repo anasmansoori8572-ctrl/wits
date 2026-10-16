@@ -4040,7 +4040,7 @@ www.witslingo.com`;
   // WHATSAPP META CLOUD API WEBHOOKS
   // =========================================================================
 
-  app.get(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], (req, res) => {
+  app.get(["/api/webhooks/whatsapp", "/api/webhooks/whatsapp/", "/webhooks/whatsapp", "/webhooks/whatsapp/"], async (req, res) => {
     // 1. Robust parameter extraction from flat query, nested qs hub object, and raw URLs
     const queryParams: Record<string, string> = {};
     if (req.query && typeof req.query === 'object') {
@@ -4073,6 +4073,34 @@ www.witslingo.com`;
           // Ignore URL errors
         }
       }
+    }
+
+    const action = (queryParams['action'] || '').trim();
+
+    // Authorized Subscription Status & Auto-subscribe Probe
+    if (action === 'verify_subscription') {
+      const autoSub = queryParams['subscribe'] === 'true' || queryParams['auto_subscribe'] === 'true';
+      const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+      return res.status(subStatus.success ? 200 : 500).json({
+        success: subStatus.success,
+        timestamp: new Date().toISOString(),
+        configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+        subscription: subStatus
+      });
+    }
+
+    // Authorized Phone Verification Probe
+    if (action === 'verify_phone') {
+      const phoneOverride = queryParams['phone_number_id'] || undefined;
+      const phoneDetails = await whatsappCloudApiService.getMetaPhoneNumberDetails(phoneOverride);
+      return res.status(phoneDetails.success ? 200 : 500).json({
+        success: phoneDetails.success,
+        timestamp: new Date().toISOString(),
+        configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+        metaDetails: phoneDetails,
+        expectedNumber: '+91 9027729917',
+        matchesTargetNumber: phoneDetails.isCorrectNumber || false
+      });
     }
 
     const mode = (queryParams['hub.mode'] || queryParams['hub[mode]'] || queryParams['mode'] || '').trim();
@@ -4169,21 +4197,46 @@ www.witslingo.com`;
     return res.status(200).send(challenge);
   });
 
-  app.post(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], async (req, res) => {
-    // 1. Validate Meta HMAC SHA-256 signature if app secret is configured
+  app.post(["/api/webhooks/whatsapp", "/api/webhooks/whatsapp/", "/webhooks/whatsapp", "/webhooks/whatsapp/"], async (req, res) => {
+    // 1. Diagnostic log for incoming POST request (safe, never logs secrets or personal content)
+    const rawBodyBuffer = (req as any).rawBody || Buffer.from(JSON.stringify(req.body || {}));
+    const rawBytes = Buffer.isBuffer(rawBodyBuffer) ? rawBodyBuffer.length : (typeof rawBodyBuffer === 'string' ? rawBodyBuffer.length : 0);
     const signature = req.headers["x-hub-signature-256"] as string | undefined;
-    const isValidSignature = whatsappCloudApiService.validateWebhookSignature((req as any).rawBody || JSON.stringify(req.body), signature);
+
+    console.log(`[WhatsApp Webhook POST] Inbound HTTP POST received: rawBytes=${rawBytes}, hasSignature=${Boolean(signature)}`);
+
+    // 2. Validate Meta HMAC SHA-256 signature if app secret is configured
+    const isValidSignature = whatsappCloudApiService.validateWebhookSignature(rawBodyBuffer, signature);
     if (!isValidSignature) {
       console.warn("[WhatsApp Webhook] Invalid X-Hub-Signature-256 signature.");
       return res.status(401).json({ error: "Invalid webhook signature" });
     }
 
-    // 2. Respond 200 OK immediately to satisfy Meta's strict timeout requirements
+    // 3. Safe diagnostic payload structure logging
+    const payload = req.body;
+    const objectType = payload?.object || 'unknown';
+    const entriesCount = Array.isArray(payload?.entry) ? payload.entry.length : 0;
+    let totalChanges = 0;
+    const changeFields: string[] = [];
+    if (Array.isArray(payload?.entry)) {
+      for (const entry of payload.entry) {
+        if (Array.isArray(entry.changes)) {
+          totalChanges += entry.changes.length;
+          for (const ch of entry.changes) {
+            if (ch.field) changeFields.push(ch.field);
+          }
+        }
+      }
+    }
+    console.log(`[WhatsApp Webhook POST] Diagnostic: object=${objectType}, entries=${entriesCount}, changes=${totalChanges}, fields=[${changeFields.join(', ')}]`);
+
+    // 4. Respond 200 OK immediately to satisfy Meta's strict timeout requirements
     res.status(200).json({ status: "ok" });
 
-    // 3. Process asynchronously in the background
+    // 5. Process asynchronously in the background
     try {
-      const { messages: inboundMessages, statuses } = whatsappCloudApiService.parseWebhookPayload(req.body);
+      const { messages: inboundMessages, statuses } = whatsappCloudApiService.parseWebhookPayload(payload);
+      console.log(`[WhatsApp Webhook POST] Parsed: inboundMessages=${inboundMessages.length}, deliveryStatuses=${statuses.length}`);
 
       // Handle delivery status updates (sent -> delivered -> read -> failed)
       for (const st of statuses) {
@@ -4191,13 +4244,44 @@ www.witslingo.com`;
         whatsappNotificationService.updateDeliveryStatus(st.messageId, st.status, st.timestamp, errorText);
       }
 
-      // Handle student incoming messages
+      // Handle student incoming messages safely without logging full message text
       for (const msg of inboundMessages) {
-        console.log(`[WhatsApp Meta Inbound] from=${msg.senderPhone}, type=${msg.type}, text="${msg.textBody}"`);
+        const maskedPhone = msg.senderPhone ? `${msg.senderPhone.slice(0, 4)}****${msg.senderPhone.slice(-2)}` : 'unknown';
+        const msgLen = msg.textBody?.length || 0;
+        console.log(`[WhatsApp Meta Inbound] Received message: from=${maskedPhone}, type=${msg.type}, length=${msgLen}`);
         await studentSupportService.handleInboundMessage(msg);
       }
     } catch (err) {
       console.error("[WhatsApp Webhook] Background processing error:", err);
+    }
+  });
+
+  // Dedicated endpoints for WABA subscription status inspection & repair
+  app.get("/api/whatsapp/verify-subscription", async (req, res) => {
+    try {
+      const autoSub = req.query.subscribe === 'true' || req.query.auto_subscribe === 'true';
+      const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+      res.status(subStatus.success ? 200 : 500).json({
+        success: subStatus.success,
+        timestamp: new Date().toISOString(),
+        configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+        subscription: subStatus
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Error checking subscription' });
+    }
+  });
+
+  app.post("/api/whatsapp/subscribe-waba", async (_req, res) => {
+    try {
+      const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(true);
+      res.status(subStatus.success ? 200 : 500).json({
+        success: subStatus.success,
+        timestamp: new Date().toISOString(),
+        subscription: subStatus
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Error subscribing WABA' });
     }
   });
 

@@ -13,14 +13,41 @@ export const config = {
 };
 
 /**
- * Collect raw byte buffer from incoming request stream
+ * Collect raw byte buffer from incoming request stream, pre-parsed buffer, string, or object
  */
-function getRawBody(req: IncomingMessage): Promise<Buffer> {
+async function getRawBody(req: any): Promise<Buffer> {
+  // If already provided as a Buffer or string or pre-parsed rawBody
+  if (Buffer.isBuffer(req.rawBody)) return req.rawBody;
+  if (typeof req.rawBody === 'string') return Buffer.from(req.rawBody, 'utf-8');
+  if (Buffer.isBuffer(req.body)) return req.body;
+  if (typeof req.body === 'string') return Buffer.from(req.body, 'utf-8');
+
+  // If body is already an object (e.g. pre-parsed by body-parser or passed directly)
+  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+    return Buffer.from(JSON.stringify(req.body), 'utf-8');
+  }
+
+  // If req.on is not a function (mock object or non-stream)
+  if (typeof req.on !== 'function') {
+    if (req.body) {
+      return Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body), 'utf-8');
+    }
+    return Buffer.alloc(0);
+  }
+
+  // If stream has already ended
+  if (req.readableEnded || req.complete) {
+    if (req.body) {
+      return Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body), 'utf-8');
+    }
+    return Buffer.alloc(0);
+  }
+
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('data', (chunk: any) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
     req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', (err) => reject(err));
+    req.on('error', (err: any) => reject(err));
   });
 }
 
@@ -151,37 +178,53 @@ export default async function handler(req: any, res: any) {
         }
       };
 
-      // Browser visit / Direct health check without Meta handshake parameters
-      if (!mode && !token && !challenge) {
+      // Authorized Action Probes (handled regardless of handshake params)
+      const action = (queryParams['action'] || '').trim();
+
+      // Authorized Subscription Status & Auto-subscribe Probe
+      if (action === 'verify_subscription') {
         if (typeof res.setHeader === 'function') {
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
         }
-        const healthPayload = {
-          status: 'ready',
-          endpoint: 'Official Meta WhatsApp Cloud API Webhook',
-          message: 'Webhook endpoint is active and awaiting Meta Cloud API verification challenge or events.',
-          verificationProtocol: {
-            method: 'GET',
-            requiredParams: [
-              'hub.mode=subscribe',
-              'hub.verify_token=<your_configured_verify_token>',
-              'hub.challenge=<random_challenge_string>'
-            ],
-            response: 'HTTP 200 with hub.challenge as plain text upon token match'
-          },
-          tokenConfigured: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN),
-          whatsAppApi: whatsappCloudApiService.getDiagnostics(),
-          persistence: durableStorageService.getDiagnostics()
+        const autoSub = queryParams['subscribe'] === 'true' || queryParams['auto_subscribe'] === 'true';
+        const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+        const report = {
+          success: subStatus.success,
+          timestamp: new Date().toISOString(),
+          configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+          subscription: subStatus
         };
         if (typeof res.status === 'function') {
-          return res.status(200).json(healthPayload);
+          return res.status(subStatus.success ? 200 : 500).json(report);
         }
-        res.statusCode = 200;
-        return res.end(JSON.stringify(healthPayload));
+        res.statusCode = subStatus.success ? 200 : 500;
+        return res.end(JSON.stringify(report));
+      }
+
+      // Authorized Phone Verification Probe
+      if (action === 'verify_phone') {
+        if (typeof res.setHeader === 'function') {
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        }
+        const phoneOverride = queryParams['phone_number_id'] || undefined;
+        const phoneDetails = await whatsappCloudApiService.getMetaPhoneNumberDetails(phoneOverride);
+        const report = {
+          success: phoneDetails.success,
+          timestamp: new Date().toISOString(),
+          configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+          metaDetails: phoneDetails,
+          expectedNumber: '+91 9027729917',
+          matchesTargetNumber: phoneDetails.isCorrectNumber || false
+        };
+
+        if (typeof res.status === 'function') {
+          return res.status(phoneDetails.success ? 200 : 500).json(report);
+        }
+        res.statusCode = phoneDetails.success ? 200 : 500;
+        return res.end(JSON.stringify(report));
       }
 
       // Authorized B2 Persistence Test & Verification Probe
-      const action = (queryParams['action'] || '').trim();
       if (action === 'test_b2' && isTokenMatch(token)) {
         if (typeof res.setHeader === 'function') {
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -217,27 +260,33 @@ export default async function handler(req: any, res: any) {
         return res.end(JSON.stringify(report));
       }
 
-      // Authorized Phone Verification Probe
-      if (action === 'verify_phone') {
+      // Browser visit / Direct health check without Meta handshake parameters
+      if (!mode && !token && !challenge) {
         if (typeof res.setHeader === 'function') {
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
         }
-        const phoneOverride = queryParams['phone_number_id'] || undefined;
-        const phoneDetails = await whatsappCloudApiService.getMetaPhoneNumberDetails(phoneOverride);
-        const report = {
-          success: phoneDetails.success,
-          timestamp: new Date().toISOString(),
-          configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
-          metaDetails: phoneDetails,
-          expectedNumber: '+91 9027729917',
-          matchesTargetNumber: phoneDetails.isCorrectNumber || false
+        const healthPayload = {
+          status: 'ready',
+          endpoint: 'Official Meta WhatsApp Cloud API Webhook',
+          message: 'Webhook endpoint is active and awaiting Meta Cloud API verification challenge or events.',
+          verificationProtocol: {
+            method: 'GET',
+            requiredParams: [
+              'hub.mode=subscribe',
+              'hub.verify_token=<your_configured_verify_token>',
+              'hub.challenge=<random_challenge_string>'
+            ],
+            response: 'HTTP 200 with hub.challenge as plain text upon token match'
+          },
+          tokenConfigured: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN),
+          whatsAppApi: whatsappCloudApiService.getDiagnostics(),
+          persistence: durableStorageService.getDiagnostics()
         };
-
         if (typeof res.status === 'function') {
-          return res.status(phoneDetails.success ? 200 : 500).json(report);
+          return res.status(200).json(healthPayload);
         }
-        res.statusCode = phoneDetails.success ? 200 : 500;
-        return res.end(JSON.stringify(report));
+        res.statusCode = 200;
+        return res.end(JSON.stringify(healthPayload));
       }
 
       // Meta Handshake: Validate mode === 'subscribe'
@@ -299,6 +348,9 @@ export default async function handler(req: any, res: any) {
       const rawBodyBuffer = await getRawBody(req);
       const signature = (req.headers?.['x-hub-signature-256'] || req.headers?.['X-Hub-Signature-256']) as string | undefined;
 
+      // Safe diagnostic log of incoming POST request (never logs secrets or personal content)
+      console.log(`[Meta Webhook POST] Inbound HTTP POST received: rawBytes=${rawBodyBuffer.length}, hasSignature=${Boolean(signature)}`);
+
       // 2. Validate HMAC SHA-256 signature using WHATSAPP_APP_SECRET
       const appSecret = whatsappCloudApiService.appSecret;
       if (appSecret) {
@@ -332,7 +384,25 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Invalid JSON payload' });
       }
 
+      // Safe diagnostic payload structure logging
+      const objectType = payload?.object || 'unknown';
+      const entriesCount = Array.isArray(payload?.entry) ? payload.entry.length : 0;
+      let totalChanges = 0;
+      const changeFields: string[] = [];
+      if (Array.isArray(payload?.entry)) {
+        for (const entry of payload.entry) {
+          if (Array.isArray(entry.changes)) {
+            totalChanges += entry.changes.length;
+            for (const ch of entry.changes) {
+              if (ch.field) changeFields.push(ch.field);
+            }
+          }
+        }
+      }
+      console.log(`[Meta Webhook POST] Diagnostic: object=${objectType}, entries=${entriesCount}, changes=${totalChanges}, fields=[${changeFields.join(', ')}]`);
+
       const { messages: inboundMessages, statuses } = whatsappCloudApiService.parseWebhookPayload(payload);
+      console.log(`[Meta Webhook POST] Parsed: inboundMessages=${inboundMessages.length}, deliveryStatuses=${statuses.length}`);
 
       // 4. Process events within a safe execution deadline before responding to prevent serverless freeze
       const processEventsPromise = async () => {
@@ -348,7 +418,9 @@ export default async function handler(req: any, res: any) {
 
         // Handle student incoming messages via AI Support Service
         for (const msg of inboundMessages) {
-          console.log(`[Meta Webhook Inbound] Received message from ${msg.senderPhone} (type: ${msg.type})`);
+          const maskedPhone = msg.senderPhone ? `${msg.senderPhone.slice(0, 4)}****${msg.senderPhone.slice(-2)}` : 'unknown';
+          const msgLen = msg.textBody?.length || 0;
+          console.log(`[Meta Webhook Inbound] Received message: from=${maskedPhone}, type=${msg.type}, length=${msgLen}`);
           try {
             await studentSupportService.handleInboundMessage(msg);
           } catch (msgErr) {

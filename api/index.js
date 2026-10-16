@@ -198,7 +198,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       };
     }
     try {
-      const url = `https://graph.facebook.com/${this.graphApiVersion}/${id}?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating`;
+      const url = `https://graph.facebook.com/${this.graphApiVersion}/${id}?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating,whatsapp_business_account`;
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${this.accessToken}`
@@ -221,6 +221,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
         verifiedName: data.verified_name,
         qualityRating: data.quality_rating,
         codeVerificationStatus: data.code_verification_status,
+        wabaId: data.whatsapp_business_account?.id || void 0,
         isCorrectNumber: cleanMetaPhone === expectedPhone
       };
     } catch (err) {
@@ -228,6 +229,89 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
         success: false,
         phoneNumberId: id,
         error: sanitizeMetaError(err?.message || "Network error querying Meta Graph API")
+      };
+    }
+  }
+  /**
+   * Verify WABA association and Meta App Webhook Subscription
+   * Optionally auto-subscribes app to WABA if autoSubscribe is true
+   */
+  async getMetaSubscriptionStatus(autoSubscribe = false) {
+    const phoneDetails = await this.getMetaPhoneNumberDetails();
+    if (!phoneDetails.success) {
+      return {
+        success: false,
+        error: phoneDetails.error || "Failed to retrieve phone number details"
+      };
+    }
+    const wabaId = phoneDetails.wabaId || this.businessAccountId;
+    if (!wabaId) {
+      return {
+        success: false,
+        phoneNumberId: phoneDetails.phoneNumberId,
+        displayPhoneNumber: phoneDetails.displayPhoneNumber,
+        error: "WABA ID not found on phone number and WHATSAPP_BUSINESS_ACCOUNT_ID not set"
+      };
+    }
+    try {
+      const subUrl = `https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/subscribed_apps`;
+      const subRes = await fetch(subUrl, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      const subData = await subRes.json();
+      let isSubscribed = false;
+      let apps = [];
+      let fields = [];
+      if (subRes.ok && Array.isArray(subData?.data)) {
+        apps = subData.data;
+        isSubscribed = apps.length > 0;
+        for (const app2 of apps) {
+          const apiData = app2.whatsapp_business_api_data;
+          if (Array.isArray(apiData?.subscribed_fields)) {
+            fields.push(...apiData.subscribed_fields);
+          }
+        }
+      }
+      let autoSubscribed = false;
+      if (autoSubscribe || !isSubscribed) {
+        try {
+          const postSubRes = await fetch(subUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${this.accessToken}`,
+              "Content-Type": "application/json"
+            }
+          });
+          const postSubData = await postSubRes.json();
+          if (postSubRes.ok && postSubData?.success) {
+            autoSubscribed = true;
+            isSubscribed = true;
+          }
+        } catch (e) {
+          console.warn("[WhatsApp Cloud API] Auto-subscribe to WABA failed:", e?.message);
+        }
+      }
+      return {
+        success: true,
+        phoneNumberId: phoneDetails.phoneNumberId,
+        displayPhoneNumber: phoneDetails.displayPhoneNumber,
+        wabaId,
+        isAppSubscribed: isSubscribed,
+        subscribedApps: apps.map((a) => ({
+          id: a.whatsapp_business_api_data?.id || a.id,
+          name: a.whatsapp_business_api_data?.name,
+          link: a.whatsapp_business_api_data?.link
+        })),
+        subscribedFields: fields.length > 0 ? fields : ["messages"],
+        autoSubscribed
+      };
+    } catch (err) {
+      return {
+        success: false,
+        phoneNumberId: phoneDetails.phoneNumberId,
+        displayPhoneNumber: phoneDetails.displayPhoneNumber,
+        wabaId,
+        error: sanitizeMetaError(err?.message || "Error querying WABA subscribed_apps")
       };
     }
   }
@@ -477,7 +561,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
   parseWebhookPayload(body) {
     const messages2 = [];
     const statuses = [];
-    if (!body || body.object !== "whatsapp_business_account") {
+    if (!body || body.object && body.object !== "whatsapp_business_account" && !Array.isArray(body.entry)) {
       return { messages: messages2, statuses };
     }
     const entries = Array.isArray(body.entry) ? body.entry : [];
@@ -485,7 +569,8 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       const changes = Array.isArray(entry?.changes) ? entry.changes : [];
       for (const change of changes) {
         const value = change?.value;
-        if (!value || value.messaging_product !== "whatsapp") continue;
+        if (!value) continue;
+        if (value.messaging_product && value.messaging_product !== "whatsapp") continue;
         if (Array.isArray(value.statuses)) {
           for (const s of value.statuses) {
             if (s.id && s.status) {
@@ -5394,7 +5479,7 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
     res.status(500).json({ success: false, error: "Internal server error verifying order payment." });
   }
 });
-app.get(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], (req, res) => {
+app.get(["/api/webhooks/whatsapp", "/api/webhooks/whatsapp/", "/webhooks/whatsapp", "/webhooks/whatsapp/"], async (req, res) => {
   const queryParams = {};
   if (req.query && typeof req.query === "object") {
     if (req.query.hub && typeof req.query.hub === "object") {
@@ -5424,6 +5509,29 @@ app.get(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], (req, res) => {
       } catch {
       }
     }
+  }
+  const action = (queryParams["action"] || "").trim();
+  if (action === "verify_subscription") {
+    const autoSub = queryParams["subscribe"] === "true" || queryParams["auto_subscribe"] === "true";
+    const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+    return res.status(subStatus.success ? 200 : 500).json({
+      success: subStatus.success,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+      subscription: subStatus
+    });
+  }
+  if (action === "verify_phone") {
+    const phoneOverride = queryParams["phone_number_id"] || void 0;
+    const phoneDetails = await whatsappCloudApiService.getMetaPhoneNumberDetails(phoneOverride);
+    return res.status(phoneDetails.success ? 200 : 500).json({
+      success: phoneDetails.success,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+      metaDetails: phoneDetails,
+      expectedNumber: "+91 9027729917",
+      matchesTargetNumber: phoneDetails.isCorrectNumber || false
+    });
   }
   const mode = (queryParams["hub.mode"] || queryParams["hub[mode]"] || queryParams["mode"] || "").trim();
   let token = (queryParams["hub.verify_token"] || queryParams["hub[verify_token]"] || queryParams["hub.verifyToken"] || queryParams["verify_token"] || queryParams["verifyToken"] || queryParams["token"] || "").trim();
@@ -5492,26 +5600,74 @@ app.get(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], (req, res) => {
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   return res.status(200).send(challenge);
 });
-app.post(["/api/webhooks/whatsapp", "/webhooks/whatsapp"], async (req, res) => {
+app.post(["/api/webhooks/whatsapp", "/api/webhooks/whatsapp/", "/webhooks/whatsapp", "/webhooks/whatsapp/"], async (req, res) => {
+  const rawBodyBuffer = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+  const rawBytes = Buffer.isBuffer(rawBodyBuffer) ? rawBodyBuffer.length : typeof rawBodyBuffer === "string" ? rawBodyBuffer.length : 0;
   const signature = req.headers["x-hub-signature-256"];
-  const isValidSignature = whatsappCloudApiService.validateWebhookSignature(req.rawBody || JSON.stringify(req.body), signature);
+  console.log(`[WhatsApp Webhook POST] Inbound HTTP POST received: rawBytes=${rawBytes}, hasSignature=${Boolean(signature)}`);
+  const isValidSignature = whatsappCloudApiService.validateWebhookSignature(rawBodyBuffer, signature);
   if (!isValidSignature) {
     console.warn("[WhatsApp Webhook] Invalid X-Hub-Signature-256 signature.");
     return res.status(401).json({ error: "Invalid webhook signature" });
   }
+  const payload = req.body;
+  const objectType = payload?.object || "unknown";
+  const entriesCount = Array.isArray(payload?.entry) ? payload.entry.length : 0;
+  let totalChanges = 0;
+  const changeFields = [];
+  if (Array.isArray(payload?.entry)) {
+    for (const entry of payload.entry) {
+      if (Array.isArray(entry.changes)) {
+        totalChanges += entry.changes.length;
+        for (const ch of entry.changes) {
+          if (ch.field) changeFields.push(ch.field);
+        }
+      }
+    }
+  }
+  console.log(`[WhatsApp Webhook POST] Diagnostic: object=${objectType}, entries=${entriesCount}, changes=${totalChanges}, fields=[${changeFields.join(", ")}]`);
   res.status(200).json({ status: "ok" });
   try {
-    const { messages: inboundMessages, statuses } = whatsappCloudApiService.parseWebhookPayload(req.body);
+    const { messages: inboundMessages, statuses } = whatsappCloudApiService.parseWebhookPayload(payload);
+    console.log(`[WhatsApp Webhook POST] Parsed: inboundMessages=${inboundMessages.length}, deliveryStatuses=${statuses.length}`);
     for (const st of statuses) {
       const errorText = st.errors?.[0] ? `${st.errors[0].code}: ${st.errors[0].title}` : void 0;
       whatsappNotificationService.updateDeliveryStatus(st.messageId, st.status, st.timestamp, errorText);
     }
     for (const msg of inboundMessages) {
-      console.log(`[WhatsApp Meta Inbound] from=${msg.senderPhone}, type=${msg.type}, text="${msg.textBody}"`);
+      const maskedPhone = msg.senderPhone ? `${msg.senderPhone.slice(0, 4)}****${msg.senderPhone.slice(-2)}` : "unknown";
+      const msgLen = msg.textBody?.length || 0;
+      console.log(`[WhatsApp Meta Inbound] Received message: from=${maskedPhone}, type=${msg.type}, length=${msgLen}`);
       await studentSupportService.handleInboundMessage(msg);
     }
   } catch (err) {
     console.error("[WhatsApp Webhook] Background processing error:", err);
+  }
+});
+app.get("/api/whatsapp/verify-subscription", async (req, res) => {
+  try {
+    const autoSub = req.query.subscribe === "true" || req.query.auto_subscribe === "true";
+    const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+    res.status(subStatus.success ? 200 : 500).json({
+      success: subStatus.success,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+      subscription: subStatus
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err?.message || "Error checking subscription" });
+  }
+});
+app.post("/api/whatsapp/subscribe-waba", async (_req, res) => {
+  try {
+    const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(true);
+    res.status(subStatus.success ? 200 : 500).json({
+      success: subStatus.success,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      subscription: subStatus
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err?.message || "Error subscribing WABA" });
   }
 });
 app.post("/api/support/chat", async (req, res) => {
