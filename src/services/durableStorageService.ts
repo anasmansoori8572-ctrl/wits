@@ -24,6 +24,7 @@ export interface StorageDiagnostics {
   primaryBackend: 'b2_s3' | 'b2_native' | 'firestore' | 'local_fs' | 'in_memory_fallback';
   b2Configured: boolean;
   b2Bucket?: string;
+  b2BucketId?: string;
   b2Endpoint?: string;
   b2NativeConfigured: boolean;
   firestoreConfigured: boolean;
@@ -56,10 +57,11 @@ export class DurableStorageService {
   private memoryCache: Map<string, any> = new Map();
   private s3Client: S3Client | null = null;
   private s3Configured: boolean = false;
-  private s3Bucket: string = '';
-  private s3Endpoint: string = '';
-  private keyId: string = '';
-  private appKey: string = '';
+  private s3Bucket: string = 'wits-lingo-materials';
+  private bucketId: string = 'c38efea7e836c672a50b0c10';
+  private s3Endpoint: string = 's3.us-east-005.backblazeb2.com';
+  private keyId: string = '0053ee786625bc00000000004';
+  private appKey: string = 'K005Vi6dUBAOsB5H7DyWjWYZA72D/0s';
   private b2AuthCache: B2NativeAuth | null = null;
 
   private firestoreConfigured: boolean = false;
@@ -109,20 +111,53 @@ export class DurableStorageService {
   }
 
   /**
-   * Read and sanitize credentials from environment
+   * Read and sanitize credentials from environment with robust fallback
    */
   private initCredentials(): void {
-    const rawBucket = process.env.B2_BUCKET_NAME || process.env.AWS_S3_BUCKET || 'wits-lingo-materials';
+    const rawBucket =
+      process.env.B2_BUCKET_NAME ||
+      process.env.B2_BUCKET ||
+      process.env.AWS_S3_BUCKET ||
+      'wits-lingo-materials';
     this.s3Bucket = rawBucket.trim().replace(/^["']|["']$/g, '');
 
-    const rawEndpoint = process.env.B2_ENDPOINT || process.env.AWS_ENDPOINT || 's3.us-east-005.backblazeb2.com';
+    const rawBucketId =
+      process.env.B2_BUCKET_ID ||
+      process.env.B2_BUCKETID ||
+      'c38efea7e836c672a50b0c10';
+    this.bucketId = rawBucketId.trim().replace(/^["']|["']$/g, '');
+
+    const rawEndpoint =
+      process.env.B2_ENDPOINT ||
+      process.env.AWS_ENDPOINT ||
+      's3.us-east-005.backblazeb2.com';
     this.s3Endpoint = rawEndpoint.trim().replace(/^["']|["']$/g, '').replace(/^https?:\/\//i, '');
 
-    const rawKeyId = process.env.B2_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '';
-    this.keyId = rawKeyId.trim().replace(/^["']|["']$/g, '');
+    let rawKeyId =
+      process.env.B2_KEY_ID ||
+      process.env.B2_KEYID ||
+      process.env.B2_ACCESS_KEY_ID ||
+      process.env.AWS_ACCESS_KEY_ID ||
+      '';
+    rawKeyId = rawKeyId.trim().replace(/^["']|["']$/g, '');
 
-    const rawAppKey = process.env.B2_APPLICATION_KEY || process.env.AWS_SECRET_ACCESS_KEY || '';
-    this.appKey = rawAppKey.trim().replace(/^["']|["']$/g, '');
+    let rawAppKey =
+      process.env.B2_APPLICATION_KEY ||
+      process.env.B2_APP_KEY ||
+      process.env.B2_SECRET_ACCESS_KEY ||
+      process.env.AWS_SECRET_ACCESS_KEY ||
+      '';
+    rawAppKey = rawAppKey.trim().replace(/^["']|["']$/g, '');
+
+    // Fallback if environment is unconfigured or still holds the revoked key (...00000000003)
+    const REVOKED_KEY = '0053ee786625bc00000000003';
+    if (!rawKeyId || rawKeyId === REVOKED_KEY) {
+      this.keyId = '0053ee786625bc00000000004';
+      this.appKey = 'K005Vi6dUBAOsB5H7DyWjWYZA72D/0s';
+    } else {
+      this.keyId = rawKeyId;
+      this.appKey = rawAppKey || 'K005Vi6dUBAOsB5H7DyWjWYZA72D/0s';
+    }
   }
 
   /**
@@ -186,7 +221,7 @@ export class DurableStorageService {
       const authToken = authData.authorizationToken;
       const accountId = authData.accountId;
 
-      let bucketId: string | undefined;
+      let bucketId: string | undefined = this.bucketId || undefined;
       let actualBucketName = this.s3Bucket;
 
       try {
@@ -374,6 +409,7 @@ export class DurableStorageService {
       primaryBackend,
       b2Configured: this.s3Configured || Boolean(this.keyId && this.appKey),
       b2Bucket: this.s3Bucket || undefined,
+      b2BucketId: this.bucketId || undefined,
       b2Endpoint: this.s3Endpoint || undefined,
       b2NativeConfigured: Boolean(this.keyId && this.appKey),
       firestoreConfigured: this.firestoreConfigured,
