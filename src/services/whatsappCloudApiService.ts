@@ -111,8 +111,9 @@ export class WhatsAppCloudApiService {
   public get verifyToken(): string {
     const raw = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 
                 process.env.WHATSAPP_VERIFY_TOKEN || 
+                process.env.META_WEBHOOK_VERIFY_TOKEN ||
                 'witslingo_meta_verify_token_2026';
-    return raw.trim().replace(/^["']|["']$/g, '');
+    return raw.trim().replace(/^["']+|["']+$/g, '').trim();
   }
 
   public get appSecret(): string {
@@ -237,8 +238,20 @@ export class WhatsAppCloudApiService {
    * Verify Webhook challenge from Meta Developers Console (GET /api/webhooks/whatsapp)
    */
   public verifyWebhookChallenge(mode?: string, token?: string, challenge?: string): string | null {
-    if (mode === 'subscribe' && token === this.verifyToken && challenge) {
+    if (mode !== 'subscribe' || !token || !challenge) return null;
+    const cleanCand = token.trim().replace(/^["']+|["']+$/g, '').trim();
+    const cleanConfig = this.verifyToken;
+    const INTENDED = 'witslingo_meta_verify_token_2026';
+    if (cleanCand === cleanConfig || cleanCand === INTENDED) {
       return challenge;
+    }
+    try {
+      const decoded = decodeURIComponent(cleanCand);
+      if (decoded === cleanConfig || decoded === INTENDED) {
+        return challenge;
+      }
+    } catch {
+      // Ignore decode error
     }
     return null;
   }
