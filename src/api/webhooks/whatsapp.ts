@@ -187,7 +187,8 @@ export default async function handler(req: any, res: any) {
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
         }
         const autoSub = queryParams['subscribe'] === 'true' || queryParams['auto_subscribe'] === 'true';
-        const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+        const wabaOverride = queryParams['waba_id'] || undefined;
+        const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub, wabaOverride);
         const report = {
           success: subStatus.success,
           timestamp: new Date().toISOString(),

@@ -4080,7 +4080,8 @@ www.witslingo.com`;
     // Authorized Subscription Status & Auto-subscribe Probe
     if (action === 'verify_subscription') {
       const autoSub = queryParams['subscribe'] === 'true' || queryParams['auto_subscribe'] === 'true';
-      const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+      const wabaOverride = queryParams['waba_id'] || undefined;
+      const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub, wabaOverride);
       return res.status(subStatus.success ? 200 : 500).json({
         success: subStatus.success,
         timestamp: new Date().toISOString(),
@@ -4260,7 +4261,8 @@ www.witslingo.com`;
   app.get("/api/whatsapp/verify-subscription", async (req, res) => {
     try {
       const autoSub = req.query.subscribe === 'true' || req.query.auto_subscribe === 'true';
-      const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+      const wabaOverride = (req.query.waba_id as string) || undefined;
+      const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub, wabaOverride);
       res.status(subStatus.success ? 200 : 500).json({
         success: subStatus.success,
         timestamp: new Date().toISOString(),

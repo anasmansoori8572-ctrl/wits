@@ -198,7 +198,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       };
     }
     try {
-      const url = `https://graph.facebook.com/${this.graphApiVersion}/${id}?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating,whatsapp_business_account`;
+      const url = `https://graph.facebook.com/${this.graphApiVersion}/${id}?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating`;
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${this.accessToken}`
@@ -221,7 +221,6 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
         verifiedName: data.verified_name,
         qualityRating: data.quality_rating,
         codeVerificationStatus: data.code_verification_status,
-        wabaId: data.whatsapp_business_account?.id || void 0,
         isCorrectNumber: cleanMetaPhone === expectedPhone
       };
     } catch (err) {
@@ -233,10 +232,70 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     }
   }
   /**
+   * Discover WhatsApp Business Account ID (WABA ID) associated with token or businesses
+   */
+  async discoverWabaId() {
+    if (this.businessAccountId) return this.businessAccountId;
+    if (!this.accessToken) return null;
+    try {
+      const debugUrl = `https://graph.facebook.com/${this.graphApiVersion}/debug_token?input_token=${this.accessToken}&access_token=${this.accessToken}`;
+      const debugRes = await fetch(debugUrl);
+      if (debugRes.ok) {
+        const debugData = await debugRes.json();
+        const scopes = debugData?.data?.granular_scopes;
+        if (Array.isArray(scopes)) {
+          for (const s of scopes) {
+            if ((s.scope === "whatsapp_business_management" || s.scope === "whatsapp_business_messaging") && Array.isArray(s.target_ids) && s.target_ids[0]) {
+              return String(s.target_ids[0]);
+            }
+          }
+        }
+      }
+    } catch {
+    }
+    try {
+      const wabaUrl = `https://graph.facebook.com/${this.graphApiVersion}/me/whatsapp_business_accounts`;
+      const wabaRes = await fetch(wabaUrl, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      if (wabaRes.ok) {
+        const wabaData = await wabaRes.json();
+        if (Array.isArray(wabaData?.data) && wabaData.data[0]?.id) {
+          return String(wabaData.data[0].id);
+        }
+      }
+    } catch {
+    }
+    try {
+      const bizUrl = `https://graph.facebook.com/${this.graphApiVersion}/me/businesses`;
+      const bizRes = await fetch(bizUrl, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      if (bizRes.ok) {
+        const bizData = await bizRes.json();
+        if (Array.isArray(bizData?.data) && bizData.data[0]?.id) {
+          const bizId = bizData.data[0].id;
+          const bizWabaUrl = `https://graph.facebook.com/${this.graphApiVersion}/${bizId}/whatsapp_business_accounts`;
+          const bizWabaRes = await fetch(bizWabaUrl, {
+            headers: { Authorization: `Bearer ${this.accessToken}` }
+          });
+          if (bizWabaRes.ok) {
+            const bizWabaData = await bizWabaRes.json();
+            if (Array.isArray(bizWabaData?.data) && bizWabaData.data[0]?.id) {
+              return String(bizWabaData.data[0].id);
+            }
+          }
+        }
+      }
+    } catch {
+    }
+    return null;
+  }
+  /**
    * Verify WABA association and Meta App Webhook Subscription
    * Optionally auto-subscribes app to WABA if autoSubscribe is true
    */
-  async getMetaSubscriptionStatus(autoSubscribe = false) {
+  async getMetaSubscriptionStatus(autoSubscribe = false, wabaIdOverride) {
     const phoneDetails = await this.getMetaPhoneNumberDetails();
     if (!phoneDetails.success) {
       return {
@@ -244,13 +303,16 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
         error: phoneDetails.error || "Failed to retrieve phone number details"
       };
     }
-    const wabaId = phoneDetails.wabaId || this.businessAccountId;
+    let wabaId = wabaIdOverride || this.businessAccountId;
+    if (!wabaId) {
+      wabaId = await this.discoverWabaId() || "";
+    }
     if (!wabaId) {
       return {
         success: false,
         phoneNumberId: phoneDetails.phoneNumberId,
         displayPhoneNumber: phoneDetails.displayPhoneNumber,
-        error: "WABA ID not found on phone number and WHATSAPP_BUSINESS_ACCOUNT_ID not set"
+        error: "WABA ID could not be automatically discovered from access token. Set WHATSAPP_BUSINESS_ACCOUNT_ID."
       };
     }
     try {
@@ -5513,7 +5575,8 @@ app.get(["/api/webhooks/whatsapp", "/api/webhooks/whatsapp/", "/webhooks/whatsap
   const action = (queryParams["action"] || "").trim();
   if (action === "verify_subscription") {
     const autoSub = queryParams["subscribe"] === "true" || queryParams["auto_subscribe"] === "true";
-    const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+    const wabaOverride = queryParams["waba_id"] || void 0;
+    const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub, wabaOverride);
     return res.status(subStatus.success ? 200 : 500).json({
       success: subStatus.success,
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
@@ -5647,7 +5710,8 @@ app.post(["/api/webhooks/whatsapp", "/api/webhooks/whatsapp/", "/webhooks/whatsa
 app.get("/api/whatsapp/verify-subscription", async (req, res) => {
   try {
     const autoSub = req.query.subscribe === "true" || req.query.auto_subscribe === "true";
-    const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub);
+    const wabaOverride = req.query.waba_id || void 0;
+    const subStatus = await whatsappCloudApiService.getMetaSubscriptionStatus(autoSub, wabaOverride);
     res.status(subStatus.success ? 200 : 500).json({
       success: subStatus.success,
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
