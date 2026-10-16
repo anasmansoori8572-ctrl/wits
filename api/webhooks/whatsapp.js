@@ -239,15 +239,16 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       const debugUrl = `https://graph.facebook.com/${this.graphApiVersion}/debug_token?input_token=${this.accessToken}&access_token=${appToken}`;
       const debugRes = await fetch(debugUrl);
       const debugData = await debugRes.json();
+      const scopes = debugData?.data?.granular_scopes;
       steps.debugToken = {
         ok: debugRes.status,
         isValid: debugData?.data?.is_valid,
-        hasGranularScopes: Array.isArray(debugData?.data?.granular_scopes)
+        scopesSummary: Array.isArray(scopes) ? scopes.map((s) => ({ scope: s.scope, target_ids: s.target_ids })) : [],
+        allScopes: debugData?.data?.scopes || []
       };
-      const scopes = debugData?.data?.granular_scopes;
       if (Array.isArray(scopes)) {
         for (const s of scopes) {
-          if ((s.scope === "whatsapp_business_management" || s.scope === "whatsapp_business_messaging") && Array.isArray(s.target_ids) && s.target_ids[0]) {
+          if (Array.isArray(s.target_ids) && s.target_ids.length > 0 && s.target_ids[0]) {
             return { wabaId: String(s.target_ids[0]), steps };
           }
         }
