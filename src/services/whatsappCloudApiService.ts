@@ -320,72 +320,95 @@ export class WhatsAppCloudApiService {
   /**
    * Discover WhatsApp Business Account ID (WABA ID) associated with token or businesses
    */
-  public async discoverWabaId(): Promise<string | null> {
-    if (this.businessAccountId) return this.businessAccountId;
-    if (!this.accessToken) return null;
+  public async discoverWabaId(): Promise<{ wabaId: string | null; steps: Record<string, any> }> {
+    const steps: Record<string, any> = {};
+    if (this.businessAccountId) {
+      return { wabaId: this.businessAccountId, steps: { configured: true } };
+    }
+    if (!this.accessToken) {
+      return { wabaId: null, steps: { error: 'No access token' } };
+    }
 
-    // 1. Try GET /debug_token to inspect granular_scopes for WABA ID
+    // 1. Query /app to get App ID
+    let appId = '';
     try {
-      const debugUrl = `https://graph.facebook.com/${this.graphApiVersion}/debug_token?input_token=${this.accessToken}&access_token=${this.accessToken}`;
+      const appRes = await fetch(`https://graph.facebook.com/${this.graphApiVersion}/app`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      const appData = (await appRes.json()) as any;
+      steps.appQuery = { ok: appRes.status, hasId: Boolean(appData?.id) };
+      if (appRes.ok && appData?.id) {
+        appId = appData.id;
+      }
+    } catch (e: any) {
+      steps.appQuery = { error: e?.message };
+    }
+
+    // 2. Query /debug_token with app access token (${appId}|${this.appSecret}) or access token
+    const appToken = appId && this.appSecret ? `${appId}|${this.appSecret}` : this.accessToken;
+    try {
+      const debugUrl = `https://graph.facebook.com/${this.graphApiVersion}/debug_token?input_token=${this.accessToken}&access_token=${appToken}`;
       const debugRes = await fetch(debugUrl);
-      if (debugRes.ok) {
-        const debugData = (await debugRes.json()) as any;
-        const scopes = debugData?.data?.granular_scopes;
-        if (Array.isArray(scopes)) {
-          for (const s of scopes) {
-            if ((s.scope === 'whatsapp_business_management' || s.scope === 'whatsapp_business_messaging') && Array.isArray(s.target_ids) && s.target_ids[0]) {
-              return String(s.target_ids[0]);
-            }
+      const debugData = (await debugRes.json()) as any;
+      steps.debugToken = {
+        ok: debugRes.status,
+        isValid: debugData?.data?.is_valid,
+        hasGranularScopes: Array.isArray(debugData?.data?.granular_scopes)
+      };
+      const scopes = debugData?.data?.granular_scopes;
+      if (Array.isArray(scopes)) {
+        for (const s of scopes) {
+          if ((s.scope === 'whatsapp_business_management' || s.scope === 'whatsapp_business_messaging') && Array.isArray(s.target_ids) && s.target_ids[0]) {
+            return { wabaId: String(s.target_ids[0]), steps };
           }
         }
       }
-    } catch {
-      // Ignore debug_token error
+    } catch (e: any) {
+      steps.debugToken = { error: e?.message };
     }
 
-    // 2. Try GET /me/whatsapp_business_accounts
+    // 3. Try GET /me/whatsapp_business_accounts
     try {
       const wabaUrl = `https://graph.facebook.com/${this.graphApiVersion}/me/whatsapp_business_accounts`;
       const wabaRes = await fetch(wabaUrl, {
         headers: { Authorization: `Bearer ${this.accessToken}` }
       });
-      if (wabaRes.ok) {
-        const wabaData = (await wabaRes.json()) as any;
-        if (Array.isArray(wabaData?.data) && wabaData.data[0]?.id) {
-          return String(wabaData.data[0].id);
-        }
+      const wabaData = (await wabaRes.json()) as any;
+      steps.meWabas = { ok: wabaRes.status, count: Array.isArray(wabaData?.data) ? wabaData.data.length : 0 };
+      if (wabaRes.ok && Array.isArray(wabaData?.data) && wabaData.data[0]?.id) {
+        return { wabaId: String(wabaData.data[0].id), steps };
       }
-    } catch {
-      // Ignore me/whatsapp_business_accounts error
+    } catch (e: any) {
+      steps.meWabas = { error: e?.message };
     }
 
-    // 3. Try GET /me/businesses
+    // 4. Try GET /me/businesses and owned_whatsapp_business_accounts
     try {
       const bizUrl = `https://graph.facebook.com/${this.graphApiVersion}/me/businesses`;
       const bizRes = await fetch(bizUrl, {
         headers: { Authorization: `Bearer ${this.accessToken}` }
       });
-      if (bizRes.ok) {
-        const bizData = (await bizRes.json()) as any;
-        if (Array.isArray(bizData?.data) && bizData.data[0]?.id) {
-          const bizId = bizData.data[0].id;
-          const bizWabaUrl = `https://graph.facebook.com/${this.graphApiVersion}/${bizId}/whatsapp_business_accounts`;
-          const bizWabaRes = await fetch(bizWabaUrl, {
-            headers: { Authorization: `Bearer ${this.accessToken}` }
-          });
-          if (bizWabaRes.ok) {
+      const bizData = (await bizRes.json()) as any;
+      steps.meBusinesses = { ok: bizRes.status, count: Array.isArray(bizData?.data) ? bizData.data.length : 0 };
+      if (bizRes.ok && Array.isArray(bizData?.data)) {
+        for (const b of bizData.data) {
+          if (b.id) {
+            const bizWabaUrl = `https://graph.facebook.com/${this.graphApiVersion}/${b.id}/owned_whatsapp_business_accounts`;
+            const bizWabaRes = await fetch(bizWabaUrl, {
+              headers: { Authorization: `Bearer ${this.accessToken}` }
+            });
             const bizWabaData = (await bizWabaRes.json()) as any;
-            if (Array.isArray(bizWabaData?.data) && bizWabaData.data[0]?.id) {
-              return String(bizWabaData.data[0].id);
+            if (bizWabaRes.ok && Array.isArray(bizWabaData?.data) && bizWabaData.data[0]?.id) {
+              return { wabaId: String(bizWabaData.data[0].id), steps };
             }
           }
         }
       }
-    } catch {
-      // Ignore businesses error
+    } catch (e: any) {
+      steps.meBusinesses = { error: e?.message };
     }
 
-    return null;
+    return { wabaId: null, steps };
   }
 
   /**
@@ -401,6 +424,7 @@ export class WhatsAppCloudApiService {
     subscribedApps?: Array<{ id?: string; name?: string; link?: string }>;
     subscribedFields?: string[];
     autoSubscribed?: boolean;
+    discoverySteps?: Record<string, any>;
     error?: string;
   }> {
     const phoneDetails = await this.getMetaPhoneNumberDetails();
@@ -412,8 +436,11 @@ export class WhatsAppCloudApiService {
     }
 
     let wabaId = wabaIdOverride || this.businessAccountId;
+    let discoverySteps: Record<string, any> | undefined;
     if (!wabaId) {
-      wabaId = (await this.discoverWabaId()) || '';
+      const discovery = await this.discoverWabaId();
+      wabaId = discovery.wabaId || '';
+      discoverySteps = discovery.steps;
     }
 
     if (!wabaId) {
@@ -421,7 +448,8 @@ export class WhatsAppCloudApiService {
         success: false,
         phoneNumberId: phoneDetails.phoneNumberId,
         displayPhoneNumber: phoneDetails.displayPhoneNumber,
-        error: 'WABA ID could not be automatically discovered from access token. Set WHATSAPP_BUSINESS_ACCOUNT_ID.'
+        error: 'WABA ID could not be automatically discovered from access token. Set WHATSAPP_BUSINESS_ACCOUNT_ID.',
+        discoverySteps
       };
     }
 
