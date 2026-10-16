@@ -222,17 +222,45 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       return { wabaId: null, steps: { error: "No access token" } };
     }
     let appId = "";
+    let bizId = "";
     try {
-      const appRes = await fetch(`https://graph.facebook.com/${this.graphApiVersion}/app`, {
+      const appRes = await fetch(`https://graph.facebook.com/${this.graphApiVersion}/app?fields=id,name,business`, {
         headers: { Authorization: `Bearer ${this.accessToken}` }
       });
       const appData = await appRes.json();
-      steps.appQuery = { ok: appRes.status, hasId: Boolean(appData?.id) };
-      if (appRes.ok && appData?.id) {
-        appId = appData.id;
+      steps.appQuery = { ok: appRes.status, hasId: Boolean(appData?.id), hasBusiness: Boolean(appData?.business?.id) };
+      if (appRes.ok) {
+        if (appData?.id) appId = appData.id;
+        if (appData?.business?.id) bizId = appData.business.id;
       }
     } catch (e) {
       steps.appQuery = { error: e?.message };
+    }
+    if (bizId) {
+      try {
+        const bizWabaRes = await fetch(`https://graph.facebook.com/${this.graphApiVersion}/${bizId}/owned_whatsapp_business_accounts?fields=id,name`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` }
+        });
+        const bizWabaData = await bizWabaRes.json();
+        steps.appBizWabas = { ok: bizWabaRes.status, count: Array.isArray(bizWabaData?.data) ? bizWabaData.data.length : 0 };
+        if (bizWabaRes.ok && Array.isArray(bizWabaData?.data) && bizWabaData.data[0]?.id) {
+          return { wabaId: String(bizWabaData.data[0].id), steps };
+        }
+      } catch (e) {
+        steps.appBizWabas = { error: e?.message };
+      }
+      try {
+        const clientWabaRes = await fetch(`https://graph.facebook.com/${this.graphApiVersion}/${bizId}/client_whatsapp_business_accounts?fields=id,name`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` }
+        });
+        const clientWabaData = await clientWabaRes.json();
+        steps.appClientWabas = { ok: clientWabaRes.status, count: Array.isArray(clientWabaData?.data) ? clientWabaData.data.length : 0 };
+        if (clientWabaRes.ok && Array.isArray(clientWabaData?.data) && clientWabaData.data[0]?.id) {
+          return { wabaId: String(clientWabaData.data[0].id), steps };
+        }
+      } catch (e) {
+        steps.appClientWabas = { error: e?.message };
+      }
     }
     const appToken = appId && this.appSecret ? `${appId}|${this.appSecret}` : this.accessToken;
     try {
