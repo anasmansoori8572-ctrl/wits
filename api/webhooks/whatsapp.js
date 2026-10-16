@@ -53,7 +53,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get supportPhone() {
-    const raw = process.env.WHATSAPP_SUPPORT_PHONE || "918791287575";
+    const raw = process.env.WHATSAPP_SUPPORT_PHONE || "919027729917";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   /**
@@ -152,6 +152,52 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       return challenge;
     }
     return null;
+  }
+  /**
+   * Query Meta Graph API for the verified details of the configured Phone Number ID
+   */
+  async getMetaPhoneNumberDetails(phoneNumberIdOverride) {
+    const id = phoneNumberIdOverride || this.phoneNumberId;
+    if (!id || !this.accessToken) {
+      return {
+        success: false,
+        phoneNumberId: id || void 0,
+        error: "Phone Number ID or Access Token not configured in environment"
+      };
+    }
+    try {
+      const url = `https://graph.facebook.com/${this.graphApiVersion}/${id}?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return {
+          success: false,
+          phoneNumberId: id,
+          error: data?.error?.message ? sanitizeMetaError(data.error.message) : `Meta HTTP ${res.status}`
+        };
+      }
+      const cleanMetaPhone = this.normalizePhone(data.display_phone_number || "");
+      const expectedPhone = "919027729917";
+      return {
+        success: true,
+        phoneNumberId: data.id,
+        displayPhoneNumber: data.display_phone_number,
+        verifiedName: data.verified_name,
+        qualityRating: data.quality_rating,
+        codeVerificationStatus: data.code_verification_status,
+        isCorrectNumber: cleanMetaPhone === expectedPhone
+      };
+    } catch (err) {
+      return {
+        success: false,
+        phoneNumberId: id,
+        error: sanitizeMetaError(err?.message || "Network error querying Meta Graph API")
+      };
+    }
   }
   /**
    * Validate Meta webhook HMAC SHA-256 signature using WHATSAPP_APP_SECRET
@@ -1107,8 +1153,8 @@ var durableStorageService = DurableStorageService.getInstance();
 // src/config/witsLingoConfig.ts
 var WITS_LINGO_CONFIG = {
   // Fixed permanent WhatsApp Business sender number
-  WHATSAPP_BUSINESS_NUMBER: "+91 87912 87575",
-  WHATSAPP_BUSINESS_NUMBER_CLEAN: "918791287575",
+  WHATSAPP_BUSINESS_NUMBER: "+91 90277 29917",
+  WHATSAPP_BUSINESS_NUMBER_CLEAN: "919027729917",
   // Fixed permanent Google Meet class link
   GOOGLE_MEET_LINK: "https://meet.google.com/wwu-zohu-yij",
   // Academy Metadata
@@ -1212,7 +1258,7 @@ var WhatsAppNotificationService = class _WhatsAppNotificationService {
     const startDate = payload.startDate || WITS_LINGO_CONFIG.FALLBACK_START_DATE;
     const scheduleTime = payload.scheduleTime || WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME;
     const meetLink = payload.meetLink || WITS_LINGO_CONFIG.GOOGLE_MEET_LINK;
-    const supportPhone = WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN || "918791287575";
+    const supportPhone = WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN || "919027729917";
     const fullMessageText = `Hi ${studentName},
 
 Congratulations! Your payment for Wits Lingo has been confirmed successfully.
@@ -2258,6 +2304,26 @@ async function handler(req, res) {
           return res.status(allPassed ? 200 : 500).json(report);
         }
         res.statusCode = allPassed ? 200 : 500;
+        return res.end(JSON.stringify(report));
+      }
+      if (action === "verify_phone") {
+        if (typeof res.setHeader === "function") {
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+        }
+        const phoneOverride = queryParams["phone_number_id"] || void 0;
+        const phoneDetails = await whatsappCloudApiService.getMetaPhoneNumberDetails(phoneOverride);
+        const report = {
+          success: phoneDetails.success,
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+          metaDetails: phoneDetails,
+          expectedNumber: "+91 9027729917",
+          matchesTargetNumber: phoneDetails.isCorrectNumber || false
+        };
+        if (typeof res.status === "function") {
+          return res.status(phoneDetails.success ? 200 : 500).json(report);
+        }
+        res.statusCode = phoneDetails.success ? 200 : 500;
         return res.end(JSON.stringify(report));
       }
       if (mode !== "subscribe") {

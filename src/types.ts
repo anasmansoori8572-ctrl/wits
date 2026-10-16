@@ -310,7 +310,7 @@ export interface SiteSettings {
   bankBranch?: string;
   bankAccountType?: string;
   bankSwiftBic?: string; // International SWIFT / BIC code for all country currency transactions
-  upiId?: string; // Primary UPI ID (e.g. 8791287575@ybl)
+  upiId?: string; // Primary UPI ID (e.g. 9027729917@ybl)
   upiNumber?: string; // Google Pay / PhonePe / Paytm registered number
   razorpayPaymentLink?: string;
   paypalEmailOrLink?: string;

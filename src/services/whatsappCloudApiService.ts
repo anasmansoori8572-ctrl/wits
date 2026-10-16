@@ -131,7 +131,7 @@ export class WhatsAppCloudApiService {
   }
 
   public get supportPhone(): string {
-    const raw = process.env.WHATSAPP_SUPPORT_PHONE || '918791287575';
+    const raw = process.env.WHATSAPP_SUPPORT_PHONE || '919027729917';
     return raw.trim().replace(/^["']|["']$/g, '');
   }
 
@@ -241,6 +241,66 @@ export class WhatsAppCloudApiService {
       return challenge;
     }
     return null;
+  }
+
+  /**
+   * Query Meta Graph API for the verified details of the configured Phone Number ID
+   */
+  public async getMetaPhoneNumberDetails(phoneNumberIdOverride?: string): Promise<{
+    success: boolean;
+    phoneNumberId?: string;
+    displayPhoneNumber?: string;
+    verifiedName?: string;
+    qualityRating?: string;
+    codeVerificationStatus?: string;
+    isCorrectNumber?: boolean;
+    error?: string;
+  }> {
+    const id = phoneNumberIdOverride || this.phoneNumberId;
+    if (!id || !this.accessToken) {
+      return {
+        success: false,
+        phoneNumberId: id || undefined,
+        error: 'Phone Number ID or Access Token not configured in environment'
+      };
+    }
+
+    try {
+      const url = `https://graph.facebook.com/${this.graphApiVersion}/${id}?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`
+        }
+      });
+
+      const data = (await res.json()) as any;
+      if (!res.ok) {
+        return {
+          success: false,
+          phoneNumberId: id,
+          error: data?.error?.message ? sanitizeMetaError(data.error.message) : `Meta HTTP ${res.status}`
+        };
+      }
+
+      const cleanMetaPhone = this.normalizePhone(data.display_phone_number || '');
+      const expectedPhone = '919027729917';
+
+      return {
+        success: true,
+        phoneNumberId: data.id,
+        displayPhoneNumber: data.display_phone_number,
+        verifiedName: data.verified_name,
+        qualityRating: data.quality_rating,
+        codeVerificationStatus: data.code_verification_status,
+        isCorrectNumber: cleanMetaPhone === expectedPhone
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        phoneNumberId: id,
+        error: sanitizeMetaError(err?.message || 'Network error querying Meta Graph API')
+      };
+    }
   }
 
   /**

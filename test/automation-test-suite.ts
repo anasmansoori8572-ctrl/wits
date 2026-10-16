@@ -110,17 +110,23 @@ async function runFullTestSuite() {
   );
 
   // -------------------------------------------------------------
-  // 8. Missing Meta configuration handling
+  // 8. Missing Meta configuration handling & Business Phone ID
   // -------------------------------------------------------------
   const diagnostics = whatsappCloudApiService.getDiagnostics();
   assertTest('Diagnostics correctly detects provider', diagnostics.provider === 'cloud_api');
   assertTest('Diagnostics reports configured state cleanly', typeof diagnostics.configured === 'boolean');
+  assertTest(
+    'Official WhatsApp Business Number is updated to +91 90277 29917',
+    WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER === '+91 90277 29917' &&
+    WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN === '919027729917' &&
+    diagnostics.supportPhone === '919027729917'
+  );
 
   // -------------------------------------------------------------
   // 9. Meta API rejection and rate limits
   // -------------------------------------------------------------
-  const phoneNormalization = whatsappCloudApiService.normalizePhone('+91 (857) 689-7694');
-  assertTest('Phone normalizer produces clean E.164 digits', phoneNormalization === '918576897694');
+  const phoneNormalization = whatsappCloudApiService.normalizePhone('+91 (902) 772-9917');
+  assertTest('Phone normalizer produces clean E.164 digits for new business number', phoneNormalization === '919027729917');
 
   // -------------------------------------------------------------
   // 10. Duplicate incoming WhatsApp messages

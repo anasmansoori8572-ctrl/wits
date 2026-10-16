@@ -67,7 +67,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
 
   // 5. Live AI Assistant Tester
   const [testQuestion, setTestQuestion] = useState('How much is the Spoken English course fee?');
-  const [testPhone, setTestPhone] = useState('918791287575');
+  const [testPhone, setTestPhone] = useState('919027729917');
   const [testAiResponse, setTestAiResponse] = useState<any | null>(null);
   const [isTestingAi, setIsTestingAi] = useState(false);
 
@@ -315,7 +315,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: testQuestion.trim(),
-          phone: testPhone.trim() || '918791287575'
+          phone: testPhone.trim() || '919027729917'
         })
       });
 

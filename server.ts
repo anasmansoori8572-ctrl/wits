@@ -1488,7 +1488,7 @@ let cmsContent: any = {
   settings: {
     youtubeUrl: "https://www.youtube.com/@witslingoeng"
   },
-  phoneNumbers: ["7310952271", "8791287575"],
+  phoneNumbers: ["7310952271", "9027729917"],
   email: "Witslingo@gmail.com",
   location: "Wits Lingo Academy, Dhakka, Amroha, Uttar Pradesh, India",
   whatsappChannel: "https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k",
@@ -2618,7 +2618,7 @@ try {
   // 3. Send Official WhatsApp Test Message
   app.post("/api/whatsapp/test-message", async (req, res) => {
     try {
-      const phone = req.body?.phone?.trim() || process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "918791287575";
+      const phone = req.body?.phone?.trim() || process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "919027729917";
       const message = req.body?.message?.trim() || "This is a test message from Wits Lingo official WhatsApp Cloud API.";
 
       if (!phone) {
@@ -2663,6 +2663,23 @@ try {
         success: allPassed,
         diagnostics: durableStorageService.getDiagnostics(),
         collections: results
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // 5. Verify Meta Cloud API Phone Number ID & Ownership
+  app.get("/api/whatsapp/verify-phone", async (req, res) => {
+    try {
+      const phoneOverride = req.query.phone_number_id as string | undefined;
+      const details = await whatsappCloudApiService.getMetaPhoneNumberDetails(phoneOverride);
+      res.status(details.success ? 200 : 500).json({
+        success: details.success,
+        configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+        metaDetails: details,
+        expectedNumber: "+91 9027729917",
+        matchesTargetNumber: details.isCorrectNumber || false
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message });
@@ -4112,7 +4129,7 @@ www.witslingo.com`;
       }
 
       const result = await handleInboundStudentMessage(
-        phone || "918791287575",
+        phone || "919027729917",
         message.trim(),
         "chat_ui"
       );

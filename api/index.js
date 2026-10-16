@@ -9,8 +9,8 @@ import { S3Client as S3Client2, PutObjectCommand as PutObjectCommand2 } from "@a
 // src/config/witsLingoConfig.ts
 var WITS_LINGO_CONFIG = {
   // Fixed permanent WhatsApp Business sender number
-  WHATSAPP_BUSINESS_NUMBER: "+91 87912 87575",
-  WHATSAPP_BUSINESS_NUMBER_CLEAN: "918791287575",
+  WHATSAPP_BUSINESS_NUMBER: "+91 90277 29917",
+  WHATSAPP_BUSINESS_NUMBER_CLEAN: "919027729917",
   // Fixed permanent Google Meet class link
   GOOGLE_MEET_LINK: "https://meet.google.com/wwu-zohu-yij",
   // Academy Metadata
@@ -74,7 +74,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get supportPhone() {
-    const raw = process.env.WHATSAPP_SUPPORT_PHONE || "918791287575";
+    const raw = process.env.WHATSAPP_SUPPORT_PHONE || "919027729917";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   /**
@@ -173,6 +173,52 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       return challenge;
     }
     return null;
+  }
+  /**
+   * Query Meta Graph API for the verified details of the configured Phone Number ID
+   */
+  async getMetaPhoneNumberDetails(phoneNumberIdOverride) {
+    const id = phoneNumberIdOverride || this.phoneNumberId;
+    if (!id || !this.accessToken) {
+      return {
+        success: false,
+        phoneNumberId: id || void 0,
+        error: "Phone Number ID or Access Token not configured in environment"
+      };
+    }
+    try {
+      const url = `https://graph.facebook.com/${this.graphApiVersion}/${id}?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return {
+          success: false,
+          phoneNumberId: id,
+          error: data?.error?.message ? sanitizeMetaError(data.error.message) : `Meta HTTP ${res.status}`
+        };
+      }
+      const cleanMetaPhone = this.normalizePhone(data.display_phone_number || "");
+      const expectedPhone = "919027729917";
+      return {
+        success: true,
+        phoneNumberId: data.id,
+        displayPhoneNumber: data.display_phone_number,
+        verifiedName: data.verified_name,
+        qualityRating: data.quality_rating,
+        codeVerificationStatus: data.code_verification_status,
+        isCorrectNumber: cleanMetaPhone === expectedPhone
+      };
+    } catch (err) {
+      return {
+        success: false,
+        phoneNumberId: id,
+        error: sanitizeMetaError(err?.message || "Network error querying Meta Graph API")
+      };
+    }
   }
   /**
    * Validate Meta webhook HMAC SHA-256 signature using WHATSAPP_APP_SECRET
@@ -1217,7 +1263,7 @@ var WhatsAppNotificationService = class _WhatsAppNotificationService {
     const startDate = payload.startDate || WITS_LINGO_CONFIG.FALLBACK_START_DATE;
     const scheduleTime = payload.scheduleTime || WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME;
     const meetLink = payload.meetLink || WITS_LINGO_CONFIG.GOOGLE_MEET_LINK;
-    const supportPhone = WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN || "918791287575";
+    const supportPhone = WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN || "919027729917";
     const fullMessageText = `Hi ${studentName},
 
 Congratulations! Your payment for Wits Lingo has been confirmed successfully.
@@ -3230,7 +3276,7 @@ var cmsContent = {
   settings: {
     youtubeUrl: "https://www.youtube.com/@witslingoeng"
   },
-  phoneNumbers: ["7310952271", "8791287575"],
+  phoneNumbers: ["7310952271", "9027729917"],
   email: "Witslingo@gmail.com",
   location: "Wits Lingo Academy, Dhakka, Amroha, Uttar Pradesh, India",
   whatsappChannel: "https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k",
@@ -4174,7 +4220,7 @@ app.get("/api/whatsapp/diagnostic", (_req, res) => {
 });
 app.post("/api/whatsapp/test-message", async (req, res) => {
   try {
-    const phone = req.body?.phone?.trim() || process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "918791287575";
+    const phone = req.body?.phone?.trim() || process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "919027729917";
     const message = req.body?.message?.trim() || "This is a test message from Wits Lingo official WhatsApp Cloud API.";
     if (!phone) {
       return res.status(400).json({
@@ -4213,6 +4259,21 @@ app.get("/api/whatsapp/test-persistence", async (_req, res) => {
       success: allPassed,
       diagnostics: durableStorageService.getDiagnostics(),
       collections: results
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+app.get("/api/whatsapp/verify-phone", async (req, res) => {
+  try {
+    const phoneOverride = req.query.phone_number_id;
+    const details = await whatsappCloudApiService.getMetaPhoneNumberDetails(phoneOverride);
+    res.status(details.success ? 200 : 500).json({
+      success: details.success,
+      configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+      metaDetails: details,
+      expectedNumber: "+91 9027729917",
+      matchesTargetNumber: details.isCorrectNumber || false
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err?.message });
@@ -5388,7 +5449,7 @@ app.post("/api/support/chat", async (req, res) => {
       return res.status(400).json({ success: false, error: "Message is required." });
     }
     const result = await handleInboundStudentMessage(
-      phone || "918791287575",
+      phone || "919027729917",
       message.trim(),
       "chat_ui"
     );

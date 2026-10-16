@@ -5236,7 +5236,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       type="text"
                       value={localSettings.upiId || ''}
                       onChange={(e) => setLocalSettings({ ...localSettings, upiId: e.target.value })}
-                      placeholder="e.g. 8791287575@ybl"
+                      placeholder="e.g. 9027729917@ybl"
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white font-mono"
                     />
                   </div>
@@ -5247,7 +5247,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       type="text"
                       value={localSettings.upiNumber || ''}
                       onChange={(e) => setLocalSettings({ ...localSettings, upiNumber: e.target.value })}
-                      placeholder="e.g. +91 8791287575"
+                      placeholder="e.g. +91 9027729917"
                       className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white"
                     />
                   </div>

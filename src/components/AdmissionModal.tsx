@@ -197,8 +197,8 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
   const bankBranch = siteSettings?.bankBranch || 'Amroha Main Branch, Uttar Pradesh, India';
   const bankType = siteSettings?.bankAccountType || 'Current Account';
   const bankSwift = siteSettings?.bankSwiftBic || 'SBININBB123';
-  const upiId = siteSettings?.upiId || '8791287575@ybl';
-  const upiNumber = siteSettings?.upiNumber || '+91 8791287575';
+  const upiId = siteSettings?.upiId || '9027729917@ybl';
+  const upiNumber = siteSettings?.upiNumber || '+91 9027729917';
   const razorpayLink = siteSettings?.razorpayPaymentLink || 'https://rzp.io/l/witslingo';
   const paypalLink = siteSettings?.paypalEmailOrLink || 'https://paypal.me/witslingo';
 

@@ -188,7 +188,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
               <p className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
                 <span>
-                  {siteSettings?.phone1 || '+91 7310952271'} {siteSettings?.phone2 ? `/ ${siteSettings.phone2}` : '/ 8791287575'}
+                  {siteSettings?.phone1 || '+91 7310952271'} {siteSettings?.phone2 ? `/ ${siteSettings.phone2}` : '/ 9027729917'}
                 </span>
               </p>
             </div>

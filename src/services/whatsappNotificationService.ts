@@ -157,7 +157,7 @@ export class WhatsAppNotificationService {
     const startDate = payload.startDate || WITS_LINGO_CONFIG.FALLBACK_START_DATE;
     const scheduleTime = payload.scheduleTime || WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME;
     const meetLink = payload.meetLink || WITS_LINGO_CONFIG.GOOGLE_MEET_LINK;
-    const supportPhone = WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN || '918791287575';
+    const supportPhone = WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN || '919027729917';
 
     // Comprehensive receipt text
     const fullMessageText = 

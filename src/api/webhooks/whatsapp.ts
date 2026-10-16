@@ -130,6 +130,29 @@ export default async function handler(req: any, res: any) {
         return res.end(JSON.stringify(report));
       }
 
+      // Authorized Phone Verification Probe
+      if (action === 'verify_phone') {
+        if (typeof res.setHeader === 'function') {
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        }
+        const phoneOverride = queryParams['phone_number_id'] || undefined;
+        const phoneDetails = await whatsappCloudApiService.getMetaPhoneNumberDetails(phoneOverride);
+        const report = {
+          success: phoneDetails.success,
+          timestamp: new Date().toISOString(),
+          configuredPhoneNumberId: whatsappCloudApiService.phoneNumberId,
+          metaDetails: phoneDetails,
+          expectedNumber: '+91 9027729917',
+          matchesTargetNumber: phoneDetails.isCorrectNumber || false
+        };
+
+        if (typeof res.status === 'function') {
+          return res.status(phoneDetails.success ? 200 : 500).json(report);
+        }
+        res.statusCode = phoneDetails.success ? 200 : 500;
+        return res.end(JSON.stringify(report));
+      }
+
       // Meta Handshake: Validate mode === 'subscribe'
       if (mode !== 'subscribe') {
         console.warn(`[Meta Webhook GET] Handshake rejected: invalid hub.mode "${mode}". Expected "subscribe".`);
