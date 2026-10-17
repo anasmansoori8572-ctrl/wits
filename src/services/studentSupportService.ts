@@ -79,9 +79,8 @@ export class StudentSupportService {
    * Save conversations and messages using Durable Storage (B2 / Firestore / Local FS when writable).
    * NEVER throws EROFS on Vercel.
    */
-  private saveData(): void {
-    durableStorageService.saveCollectionBackground('conversations', this.conversations);
-    durableStorageService.saveCollectionBackground('messages', this.messages);
+  private async saveData(): Promise<void> {
+    await this.saveDataDurable();
   }
 
   /**
@@ -251,7 +250,7 @@ export class StudentSupportService {
       status: 'delivered'
     };
     this.messages.unshift(incomingMsgRecord);
-    this.saveData();
+    await this.saveData();
 
     // 5. Check if Human Agent has active ownership of this ticket / conversation
     const activeTicket = supportTicketService.getActiveTicketForStudent(cleanSender);
@@ -324,7 +323,7 @@ export class StudentSupportService {
       errorDetails: sendRes.sanitizedError || sendRes.error
     };
     this.messages.unshift(outboundMsgRecord);
-    this.saveData();
+    await this.saveData();
 
     console.log(
       `[StudentSupportService] Outbound dispatch to ${cleanSender}: ${sendRes.success ? 'Accepted by Meta' : 'Failed: ' + (sendRes.sanitizedError || sendRes.error)}`

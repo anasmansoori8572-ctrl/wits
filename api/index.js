@@ -2216,9 +2216,8 @@ var StudentSupportService = class _StudentSupportService {
    * Save conversations and messages using Durable Storage (B2 / Firestore / Local FS when writable).
    * NEVER throws EROFS on Vercel.
    */
-  saveData() {
-    durableStorageService.saveCollectionBackground("conversations", this.conversations);
-    durableStorageService.saveCollectionBackground("messages", this.messages);
+  async saveData() {
+    await this.saveDataDurable();
   }
   /**
    * Explicit awaitable save that reports true persistence status
@@ -2353,7 +2352,7 @@ var StudentSupportService = class _StudentSupportService {
       status: "delivered"
     };
     this.messages.unshift(incomingMsgRecord);
-    this.saveData();
+    await this.saveData();
     const activeTicket = supportTicketService.getActiveTicketForStudent(cleanSender);
     if (activeTicket && activeTicket.status === "in_progress" && activeTicket.assignedTo) {
       console.log(`[StudentSupportService] Student ${cleanSender} has active assigned ticket (${activeTicket.id}). Silencing AI auto-reply to prevent agent conflict.`);
@@ -2413,7 +2412,7 @@ var StudentSupportService = class _StudentSupportService {
       errorDetails: sendRes.sanitizedError || sendRes.error
     };
     this.messages.unshift(outboundMsgRecord);
-    this.saveData();
+    await this.saveData();
     console.log(
       `[StudentSupportService] Outbound dispatch to ${cleanSender}: ${sendRes.success ? "Accepted by Meta" : "Failed: " + (sendRes.sanitizedError || sendRes.error)}`
     );
