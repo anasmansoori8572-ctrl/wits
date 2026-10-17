@@ -127,7 +127,7 @@ export class WhatsAppCloudApiService {
   }
 
   public get templateLanguage(): string {
-    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US';
+    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en';
     return raw.trim().replace(/^["']|["']$/g, '');
   }
 

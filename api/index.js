@@ -70,7 +70,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get templateLanguage() {
-    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en_US";
+    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get supportPhone() {
@@ -1571,37 +1571,53 @@ Team Wits Lingo`;
           { type: "text", text: meetLink }
         ];
         const initialParams = templateName === "witslingo_course_payment_confirmed" ? params5 : params6;
-        let lang = whatsappCloudApiService.templateLanguage || "en_US";
+        let lang = whatsappCloudApiService.templateLanguage || "en";
+        const headerImageLink = "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80";
+        const componentsWithHeader = [
+          {
+            type: "header",
+            parameters: [{ type: "image", image: { link: headerImageLink } }]
+          },
+          {
+            type: "body",
+            parameters: initialParams
+          }
+        ];
+        const componentsBodyOnly = [
+          {
+            type: "body",
+            parameters: initialParams
+          }
+        ];
         sendResult = await whatsappCloudApiService.sendTemplateMessage(
           cleanRecipient,
           templateName,
           lang,
-          [{ type: "body", parameters: initialParams }]
+          componentsWithHeader
         );
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes("language"))) {
-          const altLang = lang === "en_US" ? "en" : "en_US";
+          const altLang = lang === "en" ? "en_US" : "en";
           console.log(`[WhatsAppNotificationService] Template rejected with lang '${lang}'. Retrying with alternate '${altLang}'...`);
           const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
             cleanRecipient,
             templateName,
             altLang,
-            [{ type: "body", parameters: initialParams }]
+            componentsWithHeader
           );
           if (altLangRes.success) {
             sendResult = altLangRes;
           }
         }
         if (!sendResult.success && (sendResult.errorCode === 100 || sendResult.error?.includes("parameter") || sendResult.error?.includes("number of parameters"))) {
-          const altParams = initialParams === params5 ? params6 : params5;
-          console.log(`[WhatsAppNotificationService] Retrying template '${templateName}' with alternate parameter count (${altParams.length})...`);
-          const altParamRes = await whatsappCloudApiService.sendTemplateMessage(
+          console.log(`[WhatsAppNotificationService] Retrying template '${templateName}' with body-only...`);
+          const bodyOnlyRes = await whatsappCloudApiService.sendTemplateMessage(
             cleanRecipient,
             templateName,
             lang,
-            [{ type: "body", parameters: altParams }]
+            componentsBodyOnly
           );
-          if (altParamRes.success) {
-            sendResult = altParamRes;
+          if (bodyOnlyRes.success) {
+            sendResult = bodyOnlyRes;
           }
         }
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.errorCode === 100 || sendResult.error?.includes("template"))) {
@@ -4330,20 +4346,31 @@ async function sendWhatsAppEnrollmentMessage(data) {
     { type: "text", text: meetLink },
     { type: "text", text: data.admissionId }
   ];
+  const headerImageLink = "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80";
+  const componentsWithHeader = [
+    {
+      type: "header",
+      parameters: [{ type: "image", image: { link: headerImageLink } }]
+    },
+    {
+      type: "body",
+      parameters: templateParams
+    }
+  ];
   let sendRes = await whatsappCloudApiService.sendTemplateMessage(
     cleanRecipient,
     templateName,
     templateLang,
-    [{ type: "body", parameters: templateParams }]
+    componentsWithHeader
   );
   if (!sendRes.success && (sendRes.errorCode === 132001 || sendRes.error?.includes("language"))) {
-    const altLang = templateLang === "en_US" ? "en" : "en_US";
+    const altLang = templateLang === "en" ? "en_US" : "en";
     console.log(`[WhatsApp] Template rejected with lang '${templateLang}'. Retrying with alternate '${altLang}'...`);
     const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
       cleanRecipient,
       templateName,
       altLang,
-      [{ type: "body", parameters: templateParams }]
+      componentsWithHeader
     );
     if (altLangRes.success) {
       sendRes = altLangRes;
@@ -4673,20 +4700,52 @@ app.all("/api/whatsapp/send-test-template", async (req, res) => {
   try {
     const phone = req.query.phone || req.body?.phone || "919027729917";
     const templateName = req.query.template || req.body?.template || whatsappCloudApiService.confirmationTemplateName;
-    const lang = req.query.lang || req.body?.lang || whatsappCloudApiService.templateLanguage;
+    const lang = req.query.lang || req.body?.lang || whatsappCloudApiService.templateLanguage || "en";
+    const imageUrl = req.query.image || "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80";
     const params5 = [
-      { type: "text", text: "Test Student" },
+      { type: "text", text: "Anas Mansoori" },
       { type: "text", text: "English Foundation" },
       { type: "text", text: "\u20B91,499" },
       { type: "text", text: `pay_test_${Date.now()}` },
       { type: "text", text: "Nov 1, 2026 | https://meet.google.com/wwu-zohu-yij" }
     ];
-    const sendResult = await whatsappCloudApiService.sendTemplateMessage(
+    const componentsWithHeader = [
+      {
+        type: "header",
+        parameters: [{ type: "image", image: { link: imageUrl } }]
+      },
+      {
+        type: "body",
+        parameters: params5
+      }
+    ];
+    let sendResult = await whatsappCloudApiService.sendTemplateMessage(
       phone,
       templateName,
       lang,
-      [{ type: "body", parameters: params5 }]
+      componentsWithHeader
     );
+    if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes("language"))) {
+      const altLang = lang === "en" ? "en_US" : "en";
+      console.log(`[send-test-template] Retrying with alternate language '${altLang}'...`);
+      const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
+        phone,
+        templateName,
+        altLang,
+        componentsWithHeader
+      );
+      if (altLangRes.success) sendResult = altLangRes;
+    }
+    if (!sendResult.success && (sendResult.errorCode === 100 || sendResult.error?.includes("parameter"))) {
+      console.log(`[send-test-template] Retrying with body only...`);
+      const bodyOnlyRes = await whatsappCloudApiService.sendTemplateMessage(
+        phone,
+        templateName,
+        lang,
+        [{ type: "body", parameters: params5 }]
+      );
+      if (bodyOnlyRes.success) sendResult = bodyOnlyRes;
+    }
     res.json(sendResult);
   } catch (err) {
     res.status(500).json({ success: false, error: err?.message });

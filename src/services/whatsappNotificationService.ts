@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { whatsappCloudApiService, MetaSendResult } from './whatsappCloudApiService';
+import { whatsappCloudApiService, MetaSendResult, MetaTemplateComponent } from './whatsappCloudApiService';
 import { durableStorageService } from './durableStorageService';
 import { WITS_LINGO_CONFIG } from '../config/witsLingoConfig';
 
@@ -223,42 +223,60 @@ Team Wits Lingo`;
         ];
 
         const initialParams = (templateName === 'witslingo_course_payment_confirmed') ? params5 : params6;
-        let lang = whatsappCloudApiService.templateLanguage || 'en_US';
+        let lang = whatsappCloudApiService.templateLanguage || 'en';
 
+        const headerImageLink = 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80';
+        const componentsWithHeader: MetaTemplateComponent[] = [
+          {
+            type: 'header',
+            parameters: [{ type: 'image', image: { link: headerImageLink } }]
+          },
+          {
+            type: 'body',
+            parameters: initialParams
+          }
+        ];
+        const componentsBodyOnly: MetaTemplateComponent[] = [
+          {
+            type: 'body',
+            parameters: initialParams
+          }
+        ];
+
+        // 1. Try with Header image first (required by approved template witslingo_course_payment_confirmed)
         sendResult = await whatsappCloudApiService.sendTemplateMessage(
           cleanRecipient,
           templateName,
           lang,
-          [{ type: 'body', parameters: initialParams }]
+          componentsWithHeader
         );
 
-        // If failed due to language mismatch (e.g. en_US vs en), try alternate language code
+        // 2. If failed due to language mismatch (e.g. en vs en_US), retry with alternate language code
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes('language'))) {
-          const altLang = lang === 'en_US' ? 'en' : 'en_US';
+          const altLang = lang === 'en' ? 'en_US' : 'en';
           console.log(`[WhatsAppNotificationService] Template rejected with lang '${lang}'. Retrying with alternate '${altLang}'...`);
           const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
             cleanRecipient,
             templateName,
             altLang,
-            [{ type: 'body', parameters: initialParams }]
+            componentsWithHeader
           );
           if (altLangRes.success) {
             sendResult = altLangRes;
           }
         }
 
-        // If failed due to param count mismatch (100), try alternate 5/6 param count
+        // 3. If failed with parameter mismatch (#100), try body-only
         if (!sendResult.success && (sendResult.errorCode === 100 || sendResult.error?.includes('parameter') || sendResult.error?.includes('number of parameters'))) {
-          const altParams = initialParams === params5 ? params6 : params5;
-          console.log(`[WhatsAppNotificationService] Retrying template '${templateName}' with alternate parameter count (${altParams.length})...`);
-          const altParamRes = await whatsappCloudApiService.sendTemplateMessage(
+          console.log(`[WhatsAppNotificationService] Retrying template '${templateName}' with body-only...`);
+          const bodyOnlyRes = await whatsappCloudApiService.sendTemplateMessage(
             cleanRecipient,
             templateName,
             lang,
-            [{ type: 'body', parameters: altParams }]
+            componentsBodyOnly
           );
-          if (altParamRes.success) {
-            sendResult = altParamRes;
+          if (bodyOnlyRes.success) {
+            sendResult = bodyOnlyRes;
           }
         }
 

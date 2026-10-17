@@ -2351,22 +2351,34 @@ async function sendWhatsAppEnrollmentMessage(data: {
         { type: "text" as const, text: data.admissionId }
       ];
 
+  const headerImageLink = "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80";
+  const componentsWithHeader = [
+    {
+      type: "header" as const,
+      parameters: [{ type: "image" as const, image: { link: headerImageLink } }]
+    },
+    {
+      type: "body" as const,
+      parameters: templateParams
+    }
+  ];
+
   let sendRes = await whatsappCloudApiService.sendTemplateMessage(
     cleanRecipient,
     templateName,
     templateLang,
-    [{ type: "body", parameters: templateParams }]
+    componentsWithHeader
   );
 
-  // If failed due to language mismatch (e.g. en_US vs en), retry with alternate language
+  // If failed due to language mismatch (e.g. en vs en_US), retry with alternate language
   if (!sendRes.success && (sendRes.errorCode === 132001 || sendRes.error?.includes("language"))) {
-    const altLang = templateLang === "en_US" ? "en" : "en_US";
+    const altLang = templateLang === "en" ? "en_US" : "en";
     console.log(`[WhatsApp] Template rejected with lang '${templateLang}'. Retrying with alternate '${altLang}'...`);
     const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
       cleanRecipient,
       templateName,
       altLang,
-      [{ type: "body", parameters: templateParams }]
+      componentsWithHeader
     );
     if (altLangRes.success) {
       sendRes = altLangRes;
@@ -2777,22 +2789,60 @@ try {
     try {
       const phone = (req.query.phone as string) || req.body?.phone || "919027729917";
       const templateName = (req.query.template as string) || req.body?.template || whatsappCloudApiService.confirmationTemplateName;
-      const lang = (req.query.lang as string) || req.body?.lang || whatsappCloudApiService.templateLanguage;
+      const lang = (req.query.lang as string) || req.body?.lang || whatsappCloudApiService.templateLanguage || "en";
+      const imageUrl = (req.query.image as string) || "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80";
       
       const params5 = [
-        { type: "text" as const, text: "Test Student" },
+        { type: "text" as const, text: "Anas Mansoori" },
         { type: "text" as const, text: "English Foundation" },
         { type: "text" as const, text: "₹1,499" },
         { type: "text" as const, text: `pay_test_${Date.now()}` },
         { type: "text" as const, text: "Nov 1, 2026 | https://meet.google.com/wwu-zohu-yij" }
       ];
 
-      const sendResult = await whatsappCloudApiService.sendTemplateMessage(
+      const componentsWithHeader = [
+        {
+          type: "header" as const,
+          parameters: [{ type: "image" as const, image: { link: imageUrl } }]
+        },
+        {
+          type: "body" as const,
+          parameters: params5
+        }
+      ];
+
+      let sendResult = await whatsappCloudApiService.sendTemplateMessage(
         phone,
         templateName,
         lang,
-        [{ type: "body", parameters: params5 }]
+        componentsWithHeader
       );
+
+      // If rejected due to language code, retry with alternate language
+      if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes("language"))) {
+        const altLang = lang === "en" ? "en_US" : "en";
+        console.log(`[send-test-template] Retrying with alternate language '${altLang}'...`);
+        const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
+          phone,
+          templateName,
+          altLang,
+          componentsWithHeader
+        );
+        if (altLangRes.success) sendResult = altLangRes;
+      }
+
+      // If rejected with #100, try body-only
+      if (!sendResult.success && (sendResult.errorCode === 100 || sendResult.error?.includes("parameter"))) {
+        console.log(`[send-test-template] Retrying with body only...`);
+        const bodyOnlyRes = await whatsappCloudApiService.sendTemplateMessage(
+          phone,
+          templateName,
+          lang,
+          [{ type: "body", parameters: params5 }]
+        );
+        if (bodyOnlyRes.success) sendResult = bodyOnlyRes;
+      }
+
       res.json(sendResult);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message });
