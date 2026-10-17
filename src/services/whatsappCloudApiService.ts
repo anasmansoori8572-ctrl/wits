@@ -452,6 +452,8 @@ export class WhatsAppCloudApiService {
     phoneNumberId?: string;
     displayPhoneNumber?: string;
     wabaId?: string;
+    targetId?: string;
+    targetType?: string;
     isAppSubscribed?: boolean;
     subscribedApps?: Array<{ id?: string; name?: string; link?: string }>;
     subscribedFields?: string[];
@@ -475,19 +477,12 @@ export class WhatsAppCloudApiService {
       discoverySteps = discovery.steps;
     }
 
-    if (!wabaId) {
-      return {
-        success: false,
-        phoneNumberId: phoneDetails.phoneNumberId,
-        displayPhoneNumber: phoneDetails.displayPhoneNumber,
-        error: 'WABA ID could not be automatically discovered from access token. Set WHATSAPP_BUSINESS_ACCOUNT_ID.',
-        discoverySteps
-      };
-    }
+    const targetId = wabaId || phoneDetails.phoneNumberId;
+    const targetType = wabaId ? 'waba' : 'phone_number';
 
     try {
-      // 1. Check existing subscribed apps on WABA
-      const subUrl = `https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/subscribed_apps`;
+      // 1. Check existing subscribed apps on target (WABA or Phone Number ID)
+      const subUrl = `https://graph.facebook.com/${this.graphApiVersion}/${targetId}/subscribed_apps`;
       const subRes = await fetch(subUrl, {
         headers: { Authorization: `Bearer ${this.accessToken}` }
       });
@@ -534,6 +529,8 @@ export class WhatsAppCloudApiService {
         phoneNumberId: phoneDetails.phoneNumberId,
         displayPhoneNumber: phoneDetails.displayPhoneNumber,
         wabaId,
+        targetId,
+        targetType,
         isAppSubscribed: isSubscribed,
         subscribedApps: apps.map(a => ({
           id: a.whatsapp_business_api_data?.id || a.id,
@@ -541,7 +538,8 @@ export class WhatsAppCloudApiService {
           link: a.whatsapp_business_api_data?.link
         })),
         subscribedFields: fields.length > 0 ? fields : ['messages'],
-        autoSubscribed
+        autoSubscribed,
+        discoverySteps
       };
     } catch (err: any) {
       return {
@@ -549,7 +547,9 @@ export class WhatsAppCloudApiService {
         phoneNumberId: phoneDetails.phoneNumberId,
         displayPhoneNumber: phoneDetails.displayPhoneNumber,
         wabaId,
-        error: sanitizeMetaError(err?.message || 'Error querying WABA subscribed_apps')
+        targetId,
+        targetType,
+        error: sanitizeMetaError(err?.message || 'Error querying subscribed_apps')
       };
     }
   }

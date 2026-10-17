@@ -363,17 +363,10 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
       wabaId = discovery.wabaId || "";
       discoverySteps = discovery.steps;
     }
-    if (!wabaId) {
-      return {
-        success: false,
-        phoneNumberId: phoneDetails.phoneNumberId,
-        displayPhoneNumber: phoneDetails.displayPhoneNumber,
-        error: "WABA ID could not be automatically discovered from access token. Set WHATSAPP_BUSINESS_ACCOUNT_ID.",
-        discoverySteps
-      };
-    }
+    const targetId = wabaId || phoneDetails.phoneNumberId;
+    const targetType = wabaId ? "waba" : "phone_number";
     try {
-      const subUrl = `https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/subscribed_apps`;
+      const subUrl = `https://graph.facebook.com/${this.graphApiVersion}/${targetId}/subscribed_apps`;
       const subRes = await fetch(subUrl, {
         headers: { Authorization: `Bearer ${this.accessToken}` }
       });
@@ -415,6 +408,8 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
         phoneNumberId: phoneDetails.phoneNumberId,
         displayPhoneNumber: phoneDetails.displayPhoneNumber,
         wabaId,
+        targetId,
+        targetType,
         isAppSubscribed: isSubscribed,
         subscribedApps: apps.map((a) => ({
           id: a.whatsapp_business_api_data?.id || a.id,
@@ -422,7 +417,8 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
           link: a.whatsapp_business_api_data?.link
         })),
         subscribedFields: fields.length > 0 ? fields : ["messages"],
-        autoSubscribed
+        autoSubscribed,
+        discoverySteps
       };
     } catch (err) {
       return {
@@ -430,7 +426,9 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
         phoneNumberId: phoneDetails.phoneNumberId,
         displayPhoneNumber: phoneDetails.displayPhoneNumber,
         wabaId,
-        error: sanitizeMetaError(err?.message || "Error querying WABA subscribed_apps")
+        targetId,
+        targetType,
+        error: sanitizeMetaError(err?.message || "Error querying subscribed_apps")
       };
     }
   }
