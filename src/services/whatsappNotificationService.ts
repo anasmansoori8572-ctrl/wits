@@ -134,7 +134,7 @@ export class WhatsAppNotificationService {
   ): Promise<{ success: boolean; messageId?: string; error?: string; skipped?: boolean }> {
     this.loadNotifications();
 
-    // 1. Strict Idempotency Check
+    // 1. Strict Idempotency Check (Dual-layer: In-memory notifications + Durable Storage dedup)
     const existing = this.notifications.find(
       n => n.orderId === payload.orderId && 
       (n.messageStatus === 'accepted' || n.messageStatus === 'sent' || n.messageStatus === 'delivered' || n.messageStatus === 'read') &&
@@ -146,12 +146,19 @@ export class WhatsAppNotificationService {
       return { success: true, skipped: true, messageId: existing.providerMessageId };
     }
 
+    const isDedup = await durableStorageService.isDeduplicated('payment_confirmation', payload.orderId);
+    if (isDedup && !forceResend) {
+      console.log(`[WhatsAppNotificationService] Durable dedup: Order ${payload.orderId} confirmation already dispatched. Skipping.`);
+      return { success: true, skipped: true };
+    }
+
     const cleanRecipient = whatsappCloudApiService.normalizePhone(payload.studentPhone);
     const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
 
     const studentName = payload.studentName || 'Student';
     const courseName = payload.courseName || 'Wits Lingo Course';
+    const batchName = payload.batchName || 'Active Speaking Batch';
     const amountStr = `₹${payload.amount.toLocaleString('en-IN')}`;
     const txnId = payload.razorpayPaymentId || 'Verified';
     const startDate = payload.startDate || WITS_LINGO_CONFIG.FALLBACK_START_DATE;
@@ -159,7 +166,7 @@ export class WhatsAppNotificationService {
     const meetLink = payload.meetLink || WITS_LINGO_CONFIG.GOOGLE_MEET_LINK;
     const supportPhone = WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN || '919027729917';
 
-    // Comprehensive receipt text
+    // Comprehensive receipt text with student name, course, batch, amount, and Google Meet link
     const fullMessageText = 
 `Hi ${studentName},
 
@@ -167,6 +174,7 @@ Congratulations! Your payment for Wits Lingo has been confirmed successfully.
 
 Here are your verified enrollment details:
 • Course: ${courseName}
+• Batch: ${batchName}
 • Amount Paid: ${amountStr}
 • Transaction ID: ${txnId}
 • Batch Starts: ${startDate}
@@ -259,6 +267,12 @@ Team Wits Lingo`;
 
     this.notifications.unshift(notifRecord);
     this.saveNotifications();
+
+    if (sendResult.success) {
+      durableStorageService.recordDedup('payment_confirmation', payload.orderId).catch(err => {
+        console.warn('[WhatsAppNotificationService] Could not record dedup key:', err);
+      });
+    }
 
     return {
       success: sendResult.success,

@@ -412,6 +412,49 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     }
   }
   /**
+   * Query Meta Graph API for registered message templates under WABA
+   */
+  async getMetaTemplates(wabaIdOverride) {
+    const waba = wabaIdOverride || this.businessAccountId;
+    if (!waba || !this.accessToken) {
+      return {
+        success: false,
+        templates: [],
+        error: "WABA ID or Access Token not configured"
+      };
+    }
+    try {
+      const url = `https://graph.facebook.com/${this.graphApiVersion}/${waba}/message_templates?fields=id,name,status,category,language,components&limit=100`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return {
+          success: false,
+          wabaId: waba,
+          templates: [],
+          error: data?.error?.message ? sanitizeMetaError(data.error.message) : `Meta HTTP ${res.status}`
+        };
+      }
+      const templates = Array.isArray(data?.data) ? data.data : [];
+      const configured = templates.find((t) => t.name === this.confirmationTemplateName);
+      return {
+        success: true,
+        wabaId: waba,
+        templates,
+        configuredTemplate: configured || null
+      };
+    } catch (err) {
+      return {
+        success: false,
+        wabaId: waba,
+        templates: [],
+        error: sanitizeMetaError(err?.message || "Network exception querying Meta templates")
+      };
+    }
+  }
+  /**
    * Validate Meta webhook HMAC SHA-256 signature using WHATSAPP_APP_SECRET
    */
   validateWebhookSignature(rawBody, signatureHeader) {
@@ -1461,11 +1504,17 @@ var WhatsAppNotificationService = class _WhatsAppNotificationService {
       console.log(`[WhatsAppNotificationService] Idempotency: Order ${payload.orderId} confirmation already sent (${existing.providerMessageId}). Skipping.`);
       return { success: true, skipped: true, messageId: existing.providerMessageId };
     }
+    const isDedup = await durableStorageService.isDeduplicated("payment_confirmation", payload.orderId);
+    if (isDedup && !forceResend) {
+      console.log(`[WhatsAppNotificationService] Durable dedup: Order ${payload.orderId} confirmation already dispatched. Skipping.`);
+      return { success: true, skipped: true };
+    }
     const cleanRecipient = whatsappCloudApiService.normalizePhone(payload.studentPhone);
     const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const studentName = payload.studentName || "Student";
     const courseName = payload.courseName || "Wits Lingo Course";
+    const batchName = payload.batchName || "Active Speaking Batch";
     const amountStr = `\u20B9${payload.amount.toLocaleString("en-IN")}`;
     const txnId = payload.razorpayPaymentId || "Verified";
     const startDate = payload.startDate || WITS_LINGO_CONFIG.FALLBACK_START_DATE;
@@ -1478,6 +1527,7 @@ Congratulations! Your payment for Wits Lingo has been confirmed successfully.
 
 Here are your verified enrollment details:
 \u2022 Course: ${courseName}
+\u2022 Batch: ${batchName}
 \u2022 Amount Paid: ${amountStr}
 \u2022 Transaction ID: ${txnId}
 \u2022 Batch Starts: ${startDate}
@@ -1558,6 +1608,11 @@ Team Wits Lingo`;
     };
     this.notifications.unshift(notifRecord);
     this.saveNotifications();
+    if (sendResult.success) {
+      durableStorageService.recordDedup("payment_confirmation", payload.orderId).catch((err) => {
+        console.warn("[WhatsAppNotificationService] Could not record dedup key:", err);
+      });
+    }
     return {
       success: sendResult.success,
       messageId: sendResult.messageId,

@@ -433,6 +433,49 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     }
   }
   /**
+   * Query Meta Graph API for registered message templates under WABA
+   */
+  async getMetaTemplates(wabaIdOverride) {
+    const waba = wabaIdOverride || this.businessAccountId;
+    if (!waba || !this.accessToken) {
+      return {
+        success: false,
+        templates: [],
+        error: "WABA ID or Access Token not configured"
+      };
+    }
+    try {
+      const url = `https://graph.facebook.com/${this.graphApiVersion}/${waba}/message_templates?fields=id,name,status,category,language,components&limit=100`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return {
+          success: false,
+          wabaId: waba,
+          templates: [],
+          error: data?.error?.message ? sanitizeMetaError(data.error.message) : `Meta HTTP ${res.status}`
+        };
+      }
+      const templates = Array.isArray(data?.data) ? data.data : [];
+      const configured = templates.find((t) => t.name === this.confirmationTemplateName);
+      return {
+        success: true,
+        wabaId: waba,
+        templates,
+        configuredTemplate: configured || null
+      };
+    } catch (err) {
+      return {
+        success: false,
+        wabaId: waba,
+        templates: [],
+        error: sanitizeMetaError(err?.message || "Network exception querying Meta templates")
+      };
+    }
+  }
+  /**
    * Validate Meta webhook HMAC SHA-256 signature using WHATSAPP_APP_SECRET
    */
   validateWebhookSignature(rawBody, signatureHeader) {
@@ -1466,11 +1509,17 @@ var WhatsAppNotificationService = class _WhatsAppNotificationService {
       console.log(`[WhatsAppNotificationService] Idempotency: Order ${payload.orderId} confirmation already sent (${existing.providerMessageId}). Skipping.`);
       return { success: true, skipped: true, messageId: existing.providerMessageId };
     }
+    const isDedup = await durableStorageService.isDeduplicated("payment_confirmation", payload.orderId);
+    if (isDedup && !forceResend) {
+      console.log(`[WhatsAppNotificationService] Durable dedup: Order ${payload.orderId} confirmation already dispatched. Skipping.`);
+      return { success: true, skipped: true };
+    }
     const cleanRecipient = whatsappCloudApiService.normalizePhone(payload.studentPhone);
     const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const studentName = payload.studentName || "Student";
     const courseName = payload.courseName || "Wits Lingo Course";
+    const batchName = payload.batchName || "Active Speaking Batch";
     const amountStr = `\u20B9${payload.amount.toLocaleString("en-IN")}`;
     const txnId = payload.razorpayPaymentId || "Verified";
     const startDate = payload.startDate || WITS_LINGO_CONFIG.FALLBACK_START_DATE;
@@ -1483,6 +1532,7 @@ Congratulations! Your payment for Wits Lingo has been confirmed successfully.
 
 Here are your verified enrollment details:
 \u2022 Course: ${courseName}
+\u2022 Batch: ${batchName}
 \u2022 Amount Paid: ${amountStr}
 \u2022 Transaction ID: ${txnId}
 \u2022 Batch Starts: ${startDate}
@@ -1563,6 +1613,11 @@ Team Wits Lingo`;
     };
     this.notifications.unshift(notifRecord);
     this.saveNotifications();
+    if (sendResult.success) {
+      durableStorageService.recordDedup("payment_confirmation", payload.orderId).catch((err) => {
+        console.warn("[WhatsAppNotificationService] Could not record dedup key:", err);
+      });
+    }
     return {
       success: sendResult.success,
       messageId: sendResult.messageId,
@@ -4152,6 +4207,16 @@ function saveOrders() {
     }
   }
 }
+function saveNotifications() {
+  durableStorageService.saveCollectionBackground("notifications", notifications);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs6.writeFileSync(NOTIFICATIONS_STORAGE_FILE, JSON.stringify(notifications, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save notifications:", e);
+    }
+  }
+}
 function saveConversations() {
   durableStorageService.saveCollectionBackground("conversations", conversations);
   if (process.env.VERCEL !== "1") {
@@ -4261,18 +4326,36 @@ async function sendWhatsAppEnrollmentMessage(data) {
   return { success: true, messageId: msgId };
 }
 async function sendPaymentConfirmationWhatsApp(order, payment, forceResend = false) {
-  return whatsappNotificationService.sendPaymentConfirmation({
+  const targetBatchId = payment.batchId || order.batchId || "batch-spoken-oct-2026";
+  const foundBatch = batches.find((b) => b.id === targetBatchId || b.name === (order.batchName || payment.batchName)) || batches[0];
+  const batchName = foundBatch?.name || payment.batchName || order.batchName || "Active Speaking Batch";
+  const startDate = foundBatch?.startDate || WITS_LINGO_CONFIG.FALLBACK_START_DATE || "Upcoming Batch";
+  const scheduleTime = foundBatch?.scheduleTime || foundBatch?.classTime || WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME || "Daily Live Session";
+  const meetLink = foundBatch?.googleMeetLink || foundBatch?.meetLink || WITS_LINGO_CONFIG.GOOGLE_MEET_LINK;
+  const res = await whatsappNotificationService.sendPaymentConfirmation({
     orderId: order.id,
     studentId: order.studentId,
     studentName: order.studentName || "Student",
     studentPhone: order.studentPhone,
     courseName: order.courseName || "Wits Lingo Course",
+    batchName,
     amount: payment.amount || order.expectedAmount,
     razorpayPaymentId: payment.razorpayPaymentId || payment.paymentId || "Verified",
-    startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
-    scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME,
-    meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK
+    startDate,
+    scheduleTime,
+    meetLink
   }, forceResend);
+  if (res.messageId) {
+    const notif = whatsappNotificationService.getNotificationByMessageId(res.messageId);
+    if (notif && !notifications.some((n) => n.id === notif.id)) {
+      notifications.unshift({
+        ...notif,
+        createdAt: notif.sentAt || notif.lastAttemptAt || (/* @__PURE__ */ new Date()).toISOString()
+      });
+      saveNotifications();
+    }
+  }
+  return res;
 }
 async function handleInboundStudentMessage(recipientPhone, messageText, provider, providerMsgId) {
   let cleanPhone = whatsappCloudApiService.normalizePhone(recipientPhone || "");
@@ -4487,6 +4570,15 @@ app.get("/api/whatsapp/verify-phone", async (req, res) => {
       expectedNumber: "+91 9027729917",
       matchesTargetNumber: details.isCorrectNumber || false
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+app.get("/api/whatsapp/templates", async (req, res) => {
+  try {
+    const wabaOverride = req.query.waba_id || void 0;
+    const result = await whatsappCloudApiService.getMetaTemplates(wabaOverride);
+    res.status(result.success ? 200 : 500).json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err?.message });
   }
@@ -5297,11 +5389,33 @@ app.post("/api/webhooks/razorpay", (req, res) => {
           }
         }
         saveUsers();
-        if (matchedOrder) {
-          sendPaymentConfirmationWhatsApp(matchedOrder, newPaymentRecord).catch((err) => {
-            console.warn("[Razorpay Webhook] Async WhatsApp dispatch error:", err);
-          });
+        const effectiveOrder = matchedOrder || {
+          id: `ord_${orderId || paymentId}`,
+          studentId: `std_${(studentPhone || "").replace(/\D/g, "")}`,
+          studentName,
+          studentPhone,
+          studentEmail,
+          courseId,
+          courseName,
+          coursePrice: amount,
+          discountAmount: 0,
+          expectedAmount: amount,
+          currency: paymentEntity.currency || "INR",
+          orderStatus: "paid",
+          razorpayOrderId: orderId,
+          razorpayPaymentId: paymentId,
+          batchId,
+          batchName,
+          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        if (!matchedOrder) {
+          orders.unshift(effectiveOrder);
+          saveOrders();
         }
+        sendPaymentConfirmationWhatsApp(effectiveOrder, newPaymentRecord).catch((err) => {
+          console.warn("[Razorpay Webhook] Async WhatsApp dispatch error:", err);
+        });
       }
     } else if (event === "payment.failed") {
       const paymentEntity = payload?.payload?.payment?.entity;
@@ -5443,7 +5557,8 @@ app.get("/api/orders/:orderId/status", (req, res) => {
     return res.status(404).json({ success: false, error: "Order not found." });
   }
   const payment = payments.find((p) => p.orderId === order.id || order.razorpayOrderId && p.orderId === order.razorpayOrderId || order.razorpayPaymentId && p.paymentId === order.razorpayPaymentId);
-  const notification = notifications.find((n) => n.orderId === order.id);
+  const allNotifs = whatsappNotificationService.getAllNotifications();
+  const notification = allNotifs.find((n) => n.orderId === order.id) || notifications.find((n) => n.orderId === order.id);
   res.json({
     success: true,
     order,
@@ -5829,14 +5944,15 @@ app.get("/api/admin/payments", (_req, res) => {
   });
 });
 app.get("/api/admin/notifications", (_req, res) => {
-  const total = notifications.length;
-  const sent = notifications.filter((n) => n.messageStatus === "sent").length;
-  const failed = notifications.filter((n) => n.messageStatus === "failed").length;
-  const pending = notifications.filter((n) => n.messageStatus === "pending").length;
+  const allNotifs = whatsappNotificationService.getAllNotifications();
+  const total = allNotifs.length;
+  const sent = allNotifs.filter((n) => n.messageStatus === "sent" || n.messageStatus === "accepted" || n.messageStatus === "delivered" || n.messageStatus === "read").length;
+  const failed = allNotifs.filter((n) => n.messageStatus === "failed").length;
+  const pending = allNotifs.filter((n) => n.messageStatus === "pending").length;
   res.json({
     success: true,
     stats: { total, sent, failed, pending },
-    notifications
+    notifications: allNotifs
   });
 });
 app.post("/api/admin/notifications/:id/retry", async (req, res) => {

@@ -2387,18 +2387,40 @@ async function sendPaymentConfirmationWhatsApp(
   payment: DBPayment,
   forceResend: boolean = false
 ): Promise<{ success: boolean; messageId?: string; error?: string; skipped?: boolean }> {
-  return whatsappNotificationService.sendPaymentConfirmation({
+  const targetBatchId = payment.batchId || order.batchId || "batch-spoken-oct-2026";
+  const foundBatch = batches.find(b => b.id === targetBatchId || b.name === (order.batchName || payment.batchName)) || batches[0];
+  const batchName = foundBatch?.name || payment.batchName || order.batchName || "Active Speaking Batch";
+  const startDate = foundBatch?.startDate || WITS_LINGO_CONFIG.FALLBACK_START_DATE || "Upcoming Batch";
+  const scheduleTime = foundBatch?.scheduleTime || foundBatch?.classTime || WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME || "Daily Live Session";
+  const meetLink = foundBatch?.googleMeetLink || foundBatch?.meetLink || WITS_LINGO_CONFIG.GOOGLE_MEET_LINK;
+
+  const res = await whatsappNotificationService.sendPaymentConfirmation({
     orderId: order.id,
     studentId: order.studentId,
     studentName: order.studentName || "Student",
     studentPhone: order.studentPhone,
     courseName: order.courseName || "Wits Lingo Course",
+    batchName,
     amount: payment.amount || order.expectedAmount,
     razorpayPaymentId: payment.razorpayPaymentId || payment.paymentId || "Verified",
-    startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
-    scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME,
-    meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK
+    startDate,
+    scheduleTime,
+    meetLink
   }, forceResend);
+
+  // Sync to server.ts memory array for immediate local consistency
+  if (res.messageId) {
+    const notif = whatsappNotificationService.getNotificationByMessageId(res.messageId);
+    if (notif && !notifications.some(n => n.id === notif.id)) {
+      notifications.unshift({
+        ...notif,
+        createdAt: notif.sentAt || notif.lastAttemptAt || new Date().toISOString()
+      });
+      saveNotifications();
+    }
+  }
+
+  return res;
 }
 
 // =========================================================================
@@ -2681,6 +2703,17 @@ try {
         expectedNumber: "+91 9027729917",
         matchesTargetNumber: details.isCorrectNumber || false
       });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // 6. Get Registered Meta WhatsApp Message Templates
+  app.get("/api/whatsapp/templates", async (req, res) => {
+    try {
+      const wabaOverride = (req.query.waba_id as string) || undefined;
+      const result = await whatsappCloudApiService.getMetaTemplates(wabaOverride);
+      res.status(result.success ? 200 : 500).json(result);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message });
     }
@@ -3684,11 +3717,34 @@ www.witslingo.com`;
           saveUsers();
 
           // 5. Send Automated WhatsApp Payment Confirmation
-          if (matchedOrder) {
-            sendPaymentConfirmationWhatsApp(matchedOrder, newPaymentRecord).catch(err => {
-              console.warn("[Razorpay Webhook] Async WhatsApp dispatch error:", err);
-            });
+          const effectiveOrder: DBOrder = matchedOrder || {
+            id: `ord_${orderId || paymentId}`,
+            studentId: `std_${(studentPhone || "").replace(/\D/g, "")}`,
+            studentName,
+            studentPhone,
+            studentEmail,
+            courseId,
+            courseName,
+            coursePrice: amount,
+            discountAmount: 0,
+            expectedAmount: amount,
+            currency: paymentEntity.currency || "INR",
+            orderStatus: "paid",
+            razorpayOrderId: orderId,
+            razorpayPaymentId: paymentId,
+            batchId,
+            batchName,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          if (!matchedOrder) {
+            orders.unshift(effectiveOrder);
+            saveOrders();
           }
+
+          sendPaymentConfirmationWhatsApp(effectiveOrder, newPaymentRecord).catch(err => {
+            console.warn("[Razorpay Webhook] Async WhatsApp dispatch error:", err);
+          });
         }
       } else if (event === "payment.failed") {
         const paymentEntity = payload?.payload?.payment?.entity;
@@ -3857,7 +3913,8 @@ www.witslingo.com`;
     }
 
     const payment = payments.find(p => p.orderId === order.id || (order.razorpayOrderId && p.orderId === order.razorpayOrderId) || (order.razorpayPaymentId && p.paymentId === order.razorpayPaymentId));
-    const notification = notifications.find(n => n.orderId === order.id);
+    const allNotifs = whatsappNotificationService.getAllNotifications();
+    const notification = allNotifs.find(n => n.orderId === order.id) || notifications.find(n => n.orderId === order.id);
 
     res.json({
       success: true,
@@ -4342,15 +4399,16 @@ www.witslingo.com`;
 
   // 3. Admin WhatsApp Notifications List & Stats
   app.get("/api/admin/notifications", (_req, res) => {
-    const total = notifications.length;
-    const sent = notifications.filter(n => n.messageStatus === "sent").length;
-    const failed = notifications.filter(n => n.messageStatus === "failed").length;
-    const pending = notifications.filter(n => n.messageStatus === "pending").length;
+    const allNotifs = whatsappNotificationService.getAllNotifications();
+    const total = allNotifs.length;
+    const sent = allNotifs.filter(n => n.messageStatus === "sent" || n.messageStatus === "accepted" || n.messageStatus === "delivered" || n.messageStatus === "read").length;
+    const failed = allNotifs.filter(n => n.messageStatus === "failed").length;
+    const pending = allNotifs.filter(n => (n.messageStatus as string) === "pending").length;
 
     res.json({
       success: true,
       stats: { total, sent, failed, pending },
-      notifications
+      notifications: allNotifs
     });
   });
 

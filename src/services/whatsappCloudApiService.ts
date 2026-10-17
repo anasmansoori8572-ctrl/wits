@@ -555,6 +555,66 @@ export class WhatsAppCloudApiService {
   }
 
   /**
+   * Query Meta Graph API for registered message templates under WABA
+   */
+  public async getMetaTemplates(wabaIdOverride?: string): Promise<{
+    success: boolean;
+    wabaId?: string;
+    templates: Array<{
+      id?: string;
+      name: string;
+      status: string;
+      category?: string;
+      language: string;
+      components?: any[];
+    }>;
+    configuredTemplate?: any;
+    error?: string;
+  }> {
+    const waba = wabaIdOverride || this.businessAccountId;
+    if (!waba || !this.accessToken) {
+      return {
+        success: false,
+        templates: [],
+        error: 'WABA ID or Access Token not configured'
+      };
+    }
+
+    try {
+      const url = `https://graph.facebook.com/${this.graphApiVersion}/${waba}/message_templates?fields=id,name,status,category,language,components&limit=100`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      const data = (await res.json()) as any;
+      if (!res.ok) {
+        return {
+          success: false,
+          wabaId: waba,
+          templates: [],
+          error: data?.error?.message ? sanitizeMetaError(data.error.message) : `Meta HTTP ${res.status}`
+        };
+      }
+
+      const templates = Array.isArray(data?.data) ? data.data : [];
+      const configured = templates.find((t: any) => t.name === this.confirmationTemplateName);
+
+      return {
+        success: true,
+        wabaId: waba,
+        templates,
+        configuredTemplate: configured || null
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        wabaId: waba,
+        templates: [],
+        error: sanitizeMetaError(err?.message || 'Network exception querying Meta templates')
+      };
+    }
+  }
+
+  /**
    * Validate Meta webhook HMAC SHA-256 signature using WHATSAPP_APP_SECRET
    */
   public validateWebhookSignature(rawBody: Buffer | string, signatureHeader?: string): boolean {
