@@ -561,7 +561,8 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
         const fbtraceId = errorObj?.fbtrace_id;
         const errorUserTitle = errorObj?.error_user_title;
         const errorUserMsg = errorObj?.error_user_msg;
-        const rawErrorMessage = errorObj?.message || `Meta Graph API HTTP ${res.status}`;
+        const detailsStr = errorObj?.error_data?.details || "";
+        const rawErrorMessage = (errorObj?.message || `Meta Graph API HTTP ${res.status}`) + (detailsStr ? ` - Details: ${detailsStr}` : "") + (errorSubcode ? ` [Subcode: ${errorSubcode}]` : "");
         const sanitizedMsg = sanitizeMetaError(rawErrorMessage);
         const isCustomerServiceWindowExpired = errorCode === 131047 || errorSubcode === 2494010 || rawErrorMessage.toLowerCase().includes("24 hours") || rawErrorMessage.toLowerCase().includes("re-engagement");
         const isAuthError = errorCode === 190 || errorType === "OAuthException" && (errorCode === 102 || errorCode === 190);
@@ -4701,7 +4702,9 @@ app.all("/api/whatsapp/send-test-template", async (req, res) => {
     const phone = req.query.phone || req.body?.phone || "919027729917";
     const templateName = req.query.template || req.body?.template || whatsappCloudApiService.confirmationTemplateName;
     const lang = req.query.lang || req.body?.lang || whatsappCloudApiService.templateLanguage || "en";
-    const imageUrl = req.query.image || "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80";
+    const metaDefaultImage = "https://scontent.whatsapp.net/v/t61.29466-34/676896949_1151535227533293_6841412804080480409_n.jpg?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=euVBINoMjCUQ7kNvwFV_HKj&_nc_oc=AdoeixeVZiRlHgPtO3EXopDwP68LVYlXLcHcRmKpnLjxP2sxBgsolLOMcyv44zGaagI&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AIJs65cEAAAA&_nc_gid=r0GF7bGsO6bxCkSXvSjl3A&_nc_tpa=Q5bMBQJ4b-jZoldnntZ2GbiSdNttW-uibo9RE3EiwHoq3cOyKzQHUauycuc49fPA__HHzzQo0FOw43TDLA&oh=01_Q5Aa5wFA_5HpyMYrGK_TZr0U_lqCH-CQ-Qy9H7qg9ORrL34zpw&oe=6AFB3651";
+    const imageUrl = req.query.image || metaDefaultImage;
+    const mode = req.query.mode || "with_header";
     const params5 = [
       { type: "text", text: "Anas Mansoori" },
       { type: "text", text: "English Foundation" },
@@ -4719,34 +4722,27 @@ app.all("/api/whatsapp/send-test-template", async (req, res) => {
         parameters: params5
       }
     ];
-    let sendResult = await whatsappCloudApiService.sendTemplateMessage(
+    const componentsBodyOnly = [
+      {
+        type: "body",
+        parameters: params5
+      }
+    ];
+    const activeComponents = mode === "body_only" ? componentsBodyOnly : componentsWithHeader;
+    const sendResult = await whatsappCloudApiService.sendTemplateMessage(
       phone,
       templateName,
       lang,
-      componentsWithHeader
+      activeComponents
     );
-    if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes("language"))) {
-      const altLang = lang === "en" ? "en_US" : "en";
-      console.log(`[send-test-template] Retrying with alternate language '${altLang}'...`);
-      const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
-        phone,
-        templateName,
-        altLang,
-        componentsWithHeader
-      );
-      if (altLangRes.success) sendResult = altLangRes;
-    }
-    if (!sendResult.success && (sendResult.errorCode === 100 || sendResult.error?.includes("parameter"))) {
-      console.log(`[send-test-template] Retrying with body only...`);
-      const bodyOnlyRes = await whatsappCloudApiService.sendTemplateMessage(
-        phone,
-        templateName,
-        lang,
-        [{ type: "body", parameters: params5 }]
-      );
-      if (bodyOnlyRes.success) sendResult = bodyOnlyRes;
-    }
-    res.json(sendResult);
+    res.json({
+      sendResult,
+      testedMode: mode,
+      templateName,
+      lang,
+      phone,
+      components: activeComponents
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err?.message });
   }

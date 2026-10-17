@@ -719,7 +719,10 @@ export class WhatsAppCloudApiService {
         const fbtraceId = errorObj?.fbtrace_id;
         const errorUserTitle = errorObj?.error_user_title;
         const errorUserMsg = errorObj?.error_user_msg;
-        const rawErrorMessage = errorObj?.message || `Meta Graph API HTTP ${res.status}`;
+        const detailsStr = errorObj?.error_data?.details || '';
+        const rawErrorMessage = (errorObj?.message || `Meta Graph API HTTP ${res.status}`) + 
+          (detailsStr ? ` - Details: ${detailsStr}` : '') +
+          (errorSubcode ? ` [Subcode: ${errorSubcode}]` : '');
         const sanitizedMsg = sanitizeMetaError(rawErrorMessage);
 
         // Classify error conditions
