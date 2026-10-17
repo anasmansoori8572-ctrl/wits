@@ -45,11 +45,11 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get confirmationTemplateName() {
-    const raw = process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME || "wits_lingo_enrollment_confirmation";
+    const raw = process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME || "witslingo_course_payment_confirmed";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get templateLanguage() {
-    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en";
+    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en_US";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get supportPhone() {
@@ -1550,24 +1550,55 @@ Team Wits Lingo`;
     if (whatsappCloudApiService.phoneNumberId && whatsappCloudApiService.accessToken) {
       try {
         console.log(`[WhatsAppNotificationService] Attempting official template '${templateName}' to ${cleanRecipient}...`);
+        const params5 = [
+          { type: "text", text: studentName },
+          { type: "text", text: courseName },
+          { type: "text", text: amountStr },
+          { type: "text", text: txnId },
+          { type: "text", text: `${startDate} | Class Link: ${meetLink}` }
+        ];
+        const params6 = [
+          { type: "text", text: studentName },
+          { type: "text", text: courseName },
+          { type: "text", text: amountStr },
+          { type: "text", text: txnId },
+          { type: "text", text: startDate },
+          { type: "text", text: meetLink }
+        ];
+        const initialParams = templateName === "witslingo_course_payment_confirmed" ? params5 : params6;
+        let lang = whatsappCloudApiService.templateLanguage || "en_US";
         sendResult = await whatsappCloudApiService.sendTemplateMessage(
           cleanRecipient,
           templateName,
-          whatsappCloudApiService.templateLanguage,
-          [
-            {
-              type: "body",
-              parameters: [
-                { type: "text", text: studentName },
-                { type: "text", text: courseName },
-                { type: "text", text: amountStr },
-                { type: "text", text: txnId },
-                { type: "text", text: startDate },
-                { type: "text", text: meetLink }
-              ]
-            }
-          ]
+          lang,
+          [{ type: "body", parameters: initialParams }]
         );
+        if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes("language"))) {
+          const altLang = lang === "en_US" ? "en" : "en_US";
+          console.log(`[WhatsAppNotificationService] Template rejected with lang '${lang}'. Retrying with alternate '${altLang}'...`);
+          const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
+            cleanRecipient,
+            templateName,
+            altLang,
+            [{ type: "body", parameters: initialParams }]
+          );
+          if (altLangRes.success) {
+            sendResult = altLangRes;
+          }
+        }
+        if (!sendResult.success && (sendResult.errorCode === 100 || sendResult.error?.includes("parameter") || sendResult.error?.includes("number of parameters"))) {
+          const altParams = initialParams === params5 ? params6 : params5;
+          console.log(`[WhatsAppNotificationService] Retrying template '${templateName}' with alternate parameter count (${altParams.length})...`);
+          const altParamRes = await whatsappCloudApiService.sendTemplateMessage(
+            cleanRecipient,
+            templateName,
+            lang,
+            [{ type: "body", parameters: altParams }]
+          );
+          if (altParamRes.success) {
+            sendResult = altParamRes;
+          }
+        }
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.errorCode === 100 || sendResult.error?.includes("template"))) {
           console.warn(`[WhatsAppNotificationService] Meta template '${templateName}' not found or unapproved (Code ${sendResult.errorCode}). Attempting transactional text fallback.`);
           const textResult = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullMessageText);

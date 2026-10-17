@@ -122,12 +122,12 @@ export class WhatsAppCloudApiService {
   }
 
   public get confirmationTemplateName(): string {
-    const raw = process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME || 'wits_lingo_enrollment_confirmation';
+    const raw = process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME || 'witslingo_course_payment_confirmed';
     return raw.trim().replace(/^["']|["']$/g, '');
   }
 
   public get templateLanguage(): string {
-    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en';
+    const raw = process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US';
     return raw.trim().replace(/^["']|["']$/g, '');
   }
 

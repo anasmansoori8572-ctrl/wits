@@ -201,24 +201,66 @@ Team Wits Lingo`;
       // Outbound business messages MUST use an approved Meta template unless customer messaged within 24h
       try {
         console.log(`[WhatsAppNotificationService] Attempting official template '${templateName}' to ${cleanRecipient}...`);
+
+        // Build 5-parameter payload matching the approved witslingo_course_payment_confirmed template:
+        // {{name_1}}, {{course_name}}, {{paid_amount}}, {{transction_id}}, {{batch_start_date}}
+        const params5 = [
+          { type: 'text' as const, text: studentName },
+          { type: 'text' as const, text: courseName },
+          { type: 'text' as const, text: amountStr },
+          { type: 'text' as const, text: txnId },
+          { type: 'text' as const, text: `${startDate} | Class Link: ${meetLink}` }
+        ];
+
+        // 6-parameter alternative in case 6 variables are configured
+        const params6 = [
+          { type: 'text' as const, text: studentName },
+          { type: 'text' as const, text: courseName },
+          { type: 'text' as const, text: amountStr },
+          { type: 'text' as const, text: txnId },
+          { type: 'text' as const, text: startDate },
+          { type: 'text' as const, text: meetLink }
+        ];
+
+        const initialParams = (templateName === 'witslingo_course_payment_confirmed') ? params5 : params6;
+        let lang = whatsappCloudApiService.templateLanguage || 'en_US';
+
         sendResult = await whatsappCloudApiService.sendTemplateMessage(
           cleanRecipient,
           templateName,
-          whatsappCloudApiService.templateLanguage,
-          [
-            {
-              type: 'body',
-              parameters: [
-                { type: 'text', text: studentName },
-                { type: 'text', text: courseName },
-                { type: 'text', text: amountStr },
-                { type: 'text', text: txnId },
-                { type: 'text', text: startDate },
-                { type: 'text', text: meetLink }
-              ]
-            }
-          ]
+          lang,
+          [{ type: 'body', parameters: initialParams }]
         );
+
+        // If failed due to language mismatch (e.g. en_US vs en), try alternate language code
+        if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes('language'))) {
+          const altLang = lang === 'en_US' ? 'en' : 'en_US';
+          console.log(`[WhatsAppNotificationService] Template rejected with lang '${lang}'. Retrying with alternate '${altLang}'...`);
+          const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
+            cleanRecipient,
+            templateName,
+            altLang,
+            [{ type: 'body', parameters: initialParams }]
+          );
+          if (altLangRes.success) {
+            sendResult = altLangRes;
+          }
+        }
+
+        // If failed due to param count mismatch (100), try alternate 5/6 param count
+        if (!sendResult.success && (sendResult.errorCode === 100 || sendResult.error?.includes('parameter') || sendResult.error?.includes('number of parameters'))) {
+          const altParams = initialParams === params5 ? params6 : params5;
+          console.log(`[WhatsAppNotificationService] Retrying template '${templateName}' with alternate parameter count (${altParams.length})...`);
+          const altParamRes = await whatsappCloudApiService.sendTemplateMessage(
+            cleanRecipient,
+            templateName,
+            lang,
+            [{ type: 'body', parameters: altParams }]
+          );
+          if (altParamRes.success) {
+            sendResult = altParamRes;
+          }
+        }
 
         // If template doesn't exist on Meta yet (132001) or is pending approval, attempt text message fallback
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.errorCode === 100 || sendResult.error?.includes('template'))) {
