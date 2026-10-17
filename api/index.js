@@ -46,7 +46,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get businessAccountId() {
-    const raw = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
+    const raw = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "2292090624977946";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get accessToken() {
