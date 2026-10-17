@@ -4313,26 +4313,63 @@ async function sendWhatsAppEnrollmentMessage(data) {
   }
   const templateName = whatsappCloudApiService.confirmationTemplateName;
   const templateLang = whatsappCloudApiService.templateLanguage;
-  const sendRes = await whatsappCloudApiService.sendTemplateMessage(
+  const formattedAmount = typeof data.amount === "number" ? `\u20B9${data.amount.toLocaleString("en-IN")}` : String(data.amount || "\u20B91,499");
+  const templateParams = templateName === "witslingo_course_payment_confirmed" ? [
+    { type: "text", text: data.studentName || "Student" },
+    { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
+    { type: "text", text: formattedAmount },
+    { type: "text", text: data.admissionId || "Verified" },
+    { type: "text", text: `${startDate} | Class: ${meetLink}` }
+  ] : [
+    { type: "text", text: data.studentName || "Student" },
+    { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
+    { type: "text", text: data.batchName || foundBatch?.name || "Active Batch" },
+    { type: "text", text: startDate },
+    { type: "text", text: classTime },
+    { type: "text", text: facilitiesText },
+    { type: "text", text: meetLink },
+    { type: "text", text: data.admissionId }
+  ];
+  let sendRes = await whatsappCloudApiService.sendTemplateMessage(
     cleanRecipient,
     templateName,
     templateLang,
-    [
-      {
-        type: "body",
-        parameters: [
-          { type: "text", text: data.studentName || "Student" },
-          { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
-          { type: "text", text: data.batchName || foundBatch?.name || "Active Batch" },
-          { type: "text", text: startDate },
-          { type: "text", text: classTime },
-          { type: "text", text: facilitiesText },
-          { type: "text", text: meetLink },
-          { type: "text", text: data.admissionId }
-        ]
-      }
-    ]
+    [{ type: "body", parameters: templateParams }]
   );
+  if (!sendRes.success && (sendRes.errorCode === 132001 || sendRes.error?.includes("language"))) {
+    const altLang = templateLang === "en_US" ? "en" : "en_US";
+    console.log(`[WhatsApp] Template rejected with lang '${templateLang}'. Retrying with alternate '${altLang}'...`);
+    const altLangRes = await whatsappCloudApiService.sendTemplateMessage(
+      cleanRecipient,
+      templateName,
+      altLang,
+      [{ type: "body", parameters: templateParams }]
+    );
+    if (altLangRes.success) {
+      sendRes = altLangRes;
+    }
+  }
+  if (!sendRes.success) {
+    console.warn(`[WhatsApp] Template attempt failed (${sendRes.error}), attempting direct text fallback to ${cleanRecipient}`);
+    const textRes = await whatsappCloudApiService.sendTextMessage(
+      cleanRecipient,
+      `Hi ${data.studentName || "Student"},
+
+Congratulations! Your payment for ${data.courseName || "Wits Lingo Course"} has been confirmed.
+
+\u2022 Amount: ${formattedAmount}
+\u2022 Batch: ${data.batchName || "Active Batch"}
+\u2022 Start Date: ${startDate}
+\u2022 Class Link: ${meetLink}
+\u2022 Admission ID: ${data.admissionId}
+
+Welcome to Wits Lingo!
+https://witslingo.com`
+    );
+    if (textRes.success) {
+      sendRes = textRes;
+    }
+  }
   if (!sendRes.success) {
     const errDetail = sendRes.sanitizedError || sendRes.error || "WhatsApp dispatch rejected by Meta Cloud API";
     console.warn(`[WhatsApp] Delivery failure to ${cleanRecipient}: ${errDetail}`);
@@ -4610,6 +4647,47 @@ app.get("/api/whatsapp/templates", async (req, res) => {
     const wabaOverride = req.query.waba_id || void 0;
     const result = await whatsappCloudApiService.getMetaTemplates(wabaOverride);
     res.status(result.success ? 200 : 500).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+app.get("/api/whatsapp/inspect-template", async (req, res) => {
+  try {
+    const templateId = req.query.id || "1151471644206318";
+    const token = whatsappCloudApiService.accessToken;
+    const graphVersion = whatsappCloudApiService.graphApiVersion;
+    const metaRes = await fetch(`https://graph.facebook.com/${graphVersion}/${templateId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const metaData = await metaRes.json();
+    res.status(metaRes.ok ? 200 : 400).json({
+      templateId,
+      httpStatus: metaRes.status,
+      data: metaData
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+app.all("/api/whatsapp/send-test-template", async (req, res) => {
+  try {
+    const phone = req.query.phone || req.body?.phone || "919027729917";
+    const templateName = req.query.template || req.body?.template || whatsappCloudApiService.confirmationTemplateName;
+    const lang = req.query.lang || req.body?.lang || whatsappCloudApiService.templateLanguage;
+    const params5 = [
+      { type: "text", text: "Test Student" },
+      { type: "text", text: "English Foundation" },
+      { type: "text", text: "\u20B91,499" },
+      { type: "text", text: `pay_test_${Date.now()}` },
+      { type: "text", text: "Nov 1, 2026 | https://meet.google.com/wwu-zohu-yij" }
+    ];
+    const sendResult = await whatsappCloudApiService.sendTemplateMessage(
+      phone,
+      templateName,
+      lang,
+      [{ type: "body", parameters: params5 }]
+    );
+    res.json(sendResult);
   } catch (err) {
     res.status(500).json({ success: false, error: err?.message });
   }
@@ -5237,20 +5315,21 @@ app.post("/api/payments/razorpay/verify", async (req, res) => {
     saveUsers();
     saveBatches();
     savePayments();
-    sendWhatsAppEnrollmentMessage({
-      studentName: studentReg.name,
-      courseName: studentReg.courseName,
-      batchName: studentReg.batchName,
-      courseId: studentReg.courseId,
-      batchId: studentReg.batchId,
-      startDate: batch.startDate || "Upcoming",
-      classTiming: batch.classTime || batch.scheduleTime || "Daily Live Class",
-      googleMeetLink: batch.googleMeetLink || batch.meetLink,
-      amount: studentReg.feeAmount,
-      admissionId: studentReg.admissionId,
-      recipientPhone: studentReg.whatsapp || studentReg.phone,
-      facilities: course.facilities
-    }).then((waRes) => {
+    try {
+      const waRes = await sendWhatsAppEnrollmentMessage({
+        studentName: studentReg.name,
+        courseName: studentReg.courseName,
+        batchName: studentReg.batchName,
+        courseId: studentReg.courseId,
+        batchId: studentReg.batchId,
+        startDate: batch.startDate || "Upcoming",
+        classTiming: batch.classTime || batch.scheduleTime || "Daily Live Class",
+        googleMeetLink: batch.googleMeetLink || batch.meetLink,
+        amount: studentReg.feeAmount,
+        admissionId: studentReg.admissionId,
+        recipientPhone: studentReg.whatsapp || studentReg.phone,
+        facilities: course.facilities
+      });
       if (waRes.success) {
         studentReg.whatsappDeliveryStatus = "sent";
         if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
@@ -5259,12 +5338,12 @@ app.post("/api/payments/razorpay/verify", async (req, res) => {
         if (waRes.error) studentReg.whatsappError = waRes.error;
       }
       saveRegistrations();
-    }).catch((err) => {
+    } catch (err) {
       console.warn("[WhatsApp] Async dispatch error:", err);
       studentReg.whatsappDeliveryStatus = "failed";
       studentReg.whatsappError = err?.message || "Dispatch error";
       saveRegistrations();
-    });
+    }
     const confirmationText = `\u{1F393} *WITS LINGO \u2014 OFFICIAL ADMISSION CONFIRMATION*
 \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
 Dear *${name.trim()}*,
@@ -5330,7 +5409,7 @@ www.witslingo.com`;
     res.status(500).json({ success: false, error: "Internal server error verifying payment." });
   }
 });
-app.post("/api/webhooks/razorpay", (req, res) => {
+app.post("/api/webhooks/razorpay", async (req, res) => {
   try {
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
     const signature = req.headers["x-razorpay-signature"];
@@ -5444,9 +5523,12 @@ app.post("/api/webhooks/razorpay", (req, res) => {
           orders.unshift(effectiveOrder);
           saveOrders();
         }
-        sendPaymentConfirmationWhatsApp(effectiveOrder, newPaymentRecord).catch((err) => {
+        try {
+          const waWebhookRes = await sendPaymentConfirmationWhatsApp(effectiveOrder, newPaymentRecord);
+          console.log(`[Razorpay Webhook] WhatsApp dispatch result:`, waWebhookRes);
+        } catch (err) {
           console.warn("[Razorpay Webhook] Async WhatsApp dispatch error:", err);
-        });
+        }
       }
     } else if (event === "payment.failed") {
       const paymentEntity = payload?.payload?.payment?.entity;
@@ -5723,15 +5805,20 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
       }
     }
     saveUsers();
-    sendPaymentConfirmationWhatsApp(order, newPayment).catch((waErr) => {
+    let waConfirmationResult = null;
+    try {
+      waConfirmationResult = await sendPaymentConfirmationWhatsApp(order, newPayment);
+      console.log(`[WhatsApp] Payment confirmation dispatch to ${order.studentPhone}:`, waConfirmationResult);
+    } catch (waErr) {
       console.warn("[WhatsApp] Async confirmation error:", waErr);
-    });
+    }
     res.json({
       success: true,
       message: "Payment successfully verified! Your course access is activated.",
       order,
       payment: newPayment,
       admissionId,
+      whatsappConfirmation: waConfirmationResult,
       meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,
       startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
       scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME
