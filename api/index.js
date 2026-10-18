@@ -1632,12 +1632,25 @@ Team Wits Lingo`;
             parameters: initialParams
           }
         ];
-        sendResult = await whatsappCloudApiService.sendTemplateMessage(
+        try {
+          const directRes = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullMessageText);
+          if (directRes.success) {
+            console.log(`[WhatsAppNotificationService] Instant session receipt delivered to ${cleanRecipient} (${directRes.messageId})`);
+            sendResult = directRes;
+          }
+        } catch (directErr) {
+        }
+        const templateSendRes = await whatsappCloudApiService.sendTemplateMessage(
           cleanRecipient,
           templateName,
           lang,
           componentsWithHeader
         );
+        if (templateSendRes.success) {
+          sendResult = templateSendRes;
+        } else if (!sendResult) {
+          sendResult = templateSendRes;
+        }
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes("language"))) {
           const altLang = lang === "en" ? "en_US" : "en";
           console.log(`[WhatsAppNotificationService] Template rejected with lang '${lang}'. Retrying with alternate '${altLang}'...`);
@@ -4400,6 +4413,35 @@ async function sendWhatsAppEnrollmentMessage(data) {
       parameters: templateParams
     }
   ];
+  const fullReceiptText = `Congratulations ${data.studentName || "Student"}! Your payment for ${data.courseName || foundCourse?.name || "Wits Lingo Course"} has been confirmed successfully.
+
+Verified Enrollment Details:
+\u2022 Course: ${data.courseName || foundCourse?.name || "English Course"}
+\u2022 Batch: ${data.batchName || foundBatch?.name || "Active Batch"}
+\u2022 Amount Paid: ${formattedAmount}
+\u2022 Transaction ID: ${data.admissionId || "Verified"}
+\u2022 Batch Starts: ${startDate}
+\u2022 Schedule: ${classTime}
+
+Live Classroom Joining Details:
+\u2022 Platform: Google Meet
+\u2022 Link: ${meetLink}
+
+Student Portal & Study Materials:
+\u2022 Dashboard: https://witslingo.com/login
+(Sign in with your email or phone to view live schedule & recordings)
+
+Need any help? Reply directly to this WhatsApp message or call our support desk at +919027729917.
+
+Welcome aboard!
+Team Wits Lingo`;
+  try {
+    const textRes = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullReceiptText);
+    if (textRes.success) {
+      console.log(`[WhatsApp] Instant session receipt delivered to ${cleanRecipient} (${textRes.messageId})`);
+    }
+  } catch (textErr) {
+  }
   let sendRes = await whatsappCloudApiService.sendTemplateMessage(
     cleanRecipient,
     templateName,

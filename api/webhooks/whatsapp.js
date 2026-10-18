@@ -1627,12 +1627,25 @@ Team Wits Lingo`;
             parameters: initialParams
           }
         ];
-        sendResult = await whatsappCloudApiService.sendTemplateMessage(
+        try {
+          const directRes = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullMessageText);
+          if (directRes.success) {
+            console.log(`[WhatsAppNotificationService] Instant session receipt delivered to ${cleanRecipient} (${directRes.messageId})`);
+            sendResult = directRes;
+          }
+        } catch (directErr) {
+        }
+        const templateSendRes = await whatsappCloudApiService.sendTemplateMessage(
           cleanRecipient,
           templateName,
           lang,
           componentsWithHeader
         );
+        if (templateSendRes.success) {
+          sendResult = templateSendRes;
+        } else if (!sendResult) {
+          sendResult = templateSendRes;
+        }
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes("language"))) {
           const altLang = lang === "en" ? "en_US" : "en";
           console.log(`[WhatsAppNotificationService] Template rejected with lang '${lang}'. Retrying with alternate '${altLang}'...`);

@@ -281,13 +281,30 @@ Team Wits Lingo`;
           }
         ];
 
-        // 1. Try with Header image first (required by approved template witslingo_course_payment_confirmed)
-        sendResult = await whatsappCloudApiService.sendTemplateMessage(
+        // 1. Dual-Delivery Pipeline: Immediately attempt direct transactional text message.
+        // If student has an active 24-hour service window, this delivers INSTANTLY (< 1s) with no queueing.
+        try {
+          const directRes = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullMessageText);
+          if (directRes.success) {
+            console.log(`[WhatsAppNotificationService] Instant session receipt delivered to ${cleanRecipient} (${directRes.messageId})`);
+            sendResult = directRes;
+          }
+        } catch (directErr) {
+          // If customer window is closed (#131047), template handles delivery
+        }
+
+        // 2. Dispatch official approved Meta Template (with header graphic banner and action buttons)
+        const templateSendRes = await whatsappCloudApiService.sendTemplateMessage(
           cleanRecipient,
           templateName,
           lang,
           componentsWithHeader
         );
+        if (templateSendRes.success) {
+          sendResult = templateSendRes;
+        } else if (!sendResult) {
+          sendResult = templateSendRes;
+        }
 
         // 2. If failed due to language mismatch (e.g. en vs en_US), retry with alternate language code
         if (!sendResult.success && (sendResult.errorCode === 132001 || sendResult.error?.includes('language'))) {

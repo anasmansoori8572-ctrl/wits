@@ -2363,6 +2363,19 @@ async function sendWhatsAppEnrollmentMessage(data: {
     }
   ];
 
+  // 1. Dual-Delivery: Immediately dispatch instant transactional receipt if customer window is active
+  const fullReceiptText = `Congratulations ${data.studentName || "Student"}! Your payment for ${data.courseName || foundCourse?.name || "Wits Lingo Course"} has been confirmed successfully.\n\nVerified Enrollment Details:\n• Course: ${data.courseName || foundCourse?.name || "English Course"}\n• Batch: ${data.batchName || foundBatch?.name || "Active Batch"}\n• Amount Paid: ${formattedAmount}\n• Transaction ID: ${data.admissionId || "Verified"}\n• Batch Starts: ${startDate}\n• Schedule: ${classTime}\n\nLive Classroom Joining Details:\n• Platform: Google Meet\n• Link: ${meetLink}\n\nStudent Portal & Study Materials:\n• Dashboard: https://witslingo.com/login\n(Sign in with your email or phone to view live schedule & recordings)\n\nNeed any help? Reply directly to this WhatsApp message or call our support desk at +919027729917.\n\nWelcome aboard!\nTeam Wits Lingo`;
+
+  try {
+    const textRes = await whatsappCloudApiService.sendTextMessage(cleanRecipient, fullReceiptText);
+    if (textRes.success) {
+      console.log(`[WhatsApp] Instant session receipt delivered to ${cleanRecipient} (${textRes.messageId})`);
+    }
+  } catch (textErr) {
+    // Window may be closed for new customer; template handles delivery
+  }
+
+  // 2. Dispatch official approved template message
   let sendRes = await whatsappCloudApiService.sendTemplateMessage(
     cleanRecipient,
     templateName,
