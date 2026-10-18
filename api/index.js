@@ -4613,10 +4613,10 @@ app.get("/api/whatsapp/status", (_req, res) => {
 app.get("/api/whatsapp/diagnostic", (_req, res) => {
   res.json(whatsappCloudApiService.getDiagnostics());
 });
-app.post("/api/whatsapp/test-message", async (req, res) => {
+app.all("/api/whatsapp/test-message", async (req, res) => {
   try {
-    const phone = req.body?.phone?.trim() || process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "919027729917";
-    const message = req.body?.message?.trim() || "This is a test message from Wits Lingo official WhatsApp Cloud API.";
+    const phone = req.query.phone || req.body?.phone?.trim() || process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "919027729917";
+    const message = req.query.message || req.body?.message?.trim() || "This is a test message from Wits Lingo official WhatsApp Cloud API.";
     if (!phone) {
       return res.status(400).json({
         success: false,
@@ -4731,11 +4731,14 @@ app.all("/api/whatsapp/send-test-template", async (req, res) => {
         parameters: params5
       }
     ];
-    const activeComponents = mode === "body_only" ? componentsBodyOnly : componentsWithHeader;
+    let activeComponents = mode === "body_only" ? componentsBodyOnly : componentsWithHeader;
+    if (templateName === "hello_world") {
+      activeComponents = [];
+    }
     const sendResult = await whatsappCloudApiService.sendTemplateMessage(
       phone,
       templateName,
-      lang,
+      templateName === "hello_world" ? "en_US" : lang,
       activeComponents
     );
     res.json({
@@ -4748,6 +4751,17 @@ app.all("/api/whatsapp/send-test-template", async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err?.message });
+  }
+});
+app.get("/api/whatsapp/recent-deliveries", (_req, res) => {
+  try {
+    const allNotifs = whatsappNotificationService.getAllNotifications();
+    res.json({
+      total: allNotifs.length,
+      notifications: allNotifs.slice(0, 20)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err?.message });
   }
 });
 app.post(["/api/auth/login", "/api/admin/auth/login", "/api/admin/login"], (req, res) => {

@@ -2683,10 +2683,10 @@ try {
   });
 
   // 3. Send Official WhatsApp Test Message
-  app.post("/api/whatsapp/test-message", async (req, res) => {
+  app.all("/api/whatsapp/test-message", async (req, res) => {
     try {
-      const phone = req.body?.phone?.trim() || process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "919027729917";
-      const message = req.body?.message?.trim() || "This is a test message from Wits Lingo official WhatsApp Cloud API.";
+      const phone = (req.query.phone as string) || req.body?.phone?.trim() || process.env.WHATSAPP_SUPPORT_PHONE?.trim() || "919027729917";
+      const message = (req.query.message as string) || req.body?.message?.trim() || "This is a test message from Wits Lingo official WhatsApp Cloud API.";
 
       if (!phone) {
         return res.status(400).json({
@@ -2819,12 +2819,15 @@ try {
         }
       ];
 
-      const activeComponents = mode === "body_only" ? componentsBodyOnly : componentsWithHeader;
+      let activeComponents: any[] = mode === "body_only" ? componentsBodyOnly : componentsWithHeader;
+      if (templateName === "hello_world") {
+        activeComponents = [];
+      }
 
       const sendResult = await whatsappCloudApiService.sendTemplateMessage(
         phone,
         templateName,
-        lang,
+        templateName === "hello_world" ? "en_US" : lang,
         activeComponents
       );
 
@@ -2838,6 +2841,19 @@ try {
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // 9. Inspect Webhook Delivery Status Logs
+  app.get("/api/whatsapp/recent-deliveries", (_req, res) => {
+    try {
+      const allNotifs = whatsappNotificationService.getAllNotifications();
+      res.json({
+        total: allNotifs.length,
+        notifications: allNotifs.slice(0, 20)
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
     }
   });
 
