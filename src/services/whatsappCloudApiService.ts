@@ -127,7 +127,7 @@ export class WhatsAppCloudApiService {
   }
 
   public get confirmationTemplateHeaderImage(): string {
-    const raw = process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE || 'https://scontent.whatsapp.net/v/t61.29466-34/613433116_28693094990351546_4790593421551681826_n.jpg?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=I4fhUXI-K4kQ7kNvwGFyxPo&_nc_oc=AdpNazH7nmSFB4WlQxH8dTnfv0HdJ10x9pBJmAN3rJP4DdS-F393Dz-Um8a_IEnOKG0&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=uI10QXAZICHysN4TVideag&_nc_tpa=Q5bMBQKEbbZNDabIgqEye1dyICgTboz3DQyg5jS_K-tdO-3osSJsaZ_o51csL7S8Zbm3mzC61hRutBLIMQ&oh=01_Q5Aa5wFrsWd2wRx8mPIcoiRoGNkc3mdDs6slOdhoqa0CZGxIYw&oe=6AFC273F';
+    const raw = process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE || 'https://www.witslingo.com/payment-confirmed.jpg';
     return raw.trim().replace(/^["']|["']$/g, '');
   }
 

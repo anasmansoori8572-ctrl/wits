@@ -408,6 +408,24 @@ export default async function handler(req: any, res: any) {
       // 4. Process events within a safe execution deadline before responding to prevent serverless freeze
       const processEventsPromise = async () => {
         // Handle delivery status updates (sent -> delivered -> read -> failed)
+        if (statuses.length > 0) {
+          try {
+            const currentLogs = await durableStorageService.getCollection<any>('delivery-logs', []);
+            const newLogs = statuses.map(st => ({
+              messageId: st.messageId,
+              recipientPhone: st.recipientPhone,
+              status: st.status,
+              timestamp: st.timestamp,
+              errors: st.errors || null,
+              receivedAt: new Date().toISOString()
+            }));
+            const combinedLogs = [...newLogs, ...currentLogs].slice(0, 50);
+            await durableStorageService.saveCollection('delivery-logs', combinedLogs);
+          } catch (logErr) {
+            console.warn('[Meta Webhook Delivery] Error persisting delivery-logs:', logErr);
+          }
+        }
+
         for (const st of statuses) {
           const isDup = await durableStorageService.isDeduplicated('delivery_status', `${st.messageId}_${st.status}`);
           if (isDup) continue;

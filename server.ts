@@ -2338,7 +2338,7 @@ async function sendWhatsAppEnrollmentMessage(data: {
         { type: "text" as const, text: data.courseName || foundCourse?.name || "English Course" },
         { type: "text" as const, text: formattedAmount },
         { type: "text" as const, text: data.admissionId || "Verified" },
-        { type: "text" as const, text: `${startDate} | Class: ${meetLink}` }
+        { type: "text" as const, text: startDate }
       ]
     : [
         { type: "text" as const, text: data.studentName || "Student" },
@@ -2798,7 +2798,7 @@ try {
         { type: "text" as const, text: "English Foundation" },
         { type: "text" as const, text: "₹1,499" },
         { type: "text" as const, text: `pay_test_${Date.now()}` },
-        { type: "text" as const, text: "Nov 1, 2026 | https://meet.google.com/wwu-zohu-yij" }
+        { type: "text" as const, text: "Nov 1, 2026" }
       ];
 
       const componentsWithHeader = [
@@ -2831,6 +2831,17 @@ try {
         activeComponents
       );
 
+      // Record test notification for webhook tracking
+      if (sendResult.messageId) {
+        whatsappNotificationService.recordManualNotification({
+          recipientPhone: phone,
+          templateName,
+          messageStatus: sendResult.success ? "accepted" : "failed",
+          providerMessageId: sendResult.messageId,
+          errorDetails: sendResult.sanitizedError || sendResult.error
+        });
+      }
+
       res.json({
         sendResult,
         testedMode: mode,
@@ -2845,12 +2856,17 @@ try {
   });
 
   // 9. Inspect Webhook Delivery Status Logs
-  app.get("/api/whatsapp/recent-deliveries", (_req, res) => {
+  app.get("/api/whatsapp/recent-deliveries", async (_req, res) => {
     try {
-      const allNotifs = whatsappNotificationService.getAllNotifications();
+      const logs = await durableStorageService.getCollection<any>("delivery-logs", []);
+      const notifs = await durableStorageService.getCollection<any>("notifications", []);
+      const dedup = await durableStorageService.getCollection<any>("webhook-dedup", []);
       res.json({
-        total: allNotifs.length,
-        notifications: allNotifs.slice(0, 20)
+        totalLogs: logs.length,
+        deliveryLogs: logs.slice(0, 30),
+        totalNotifications: notifs.length,
+        notifications: notifs.slice(0, 30),
+        recentDedup: dedup.slice(0, 20)
       });
     } catch (err: any) {
       res.status(500).json({ error: err?.message });

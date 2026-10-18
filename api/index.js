@@ -70,7 +70,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get confirmationTemplateHeaderImage() {
-    const raw = process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE || "https://scontent.whatsapp.net/v/t61.29466-34/613433116_28693094990351546_4790593421551681826_n.jpg?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=I4fhUXI-K4kQ7kNvwGFyxPo&_nc_oc=AdpNazH7nmSFB4WlQxH8dTnfv0HdJ10x9pBJmAN3rJP4DdS-F393Dz-Um8a_IEnOKG0&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=uI10QXAZICHysN4TVideag&_nc_tpa=Q5bMBQKEbbZNDabIgqEye1dyICgTboz3DQyg5jS_K-tdO-3osSJsaZ_o51csL7S8Zbm3mzC61hRutBLIMQ&oh=01_Q5Aa5wFrsWd2wRx8mPIcoiRoGNkc3mdDs6slOdhoqa0CZGxIYw&oe=6AFC273F";
+    const raw = process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE || "https://www.witslingo.com/payment-confirmed.jpg";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get templateLanguage() {
@@ -1489,18 +1489,56 @@ var WhatsAppNotificationService = class _WhatsAppNotificationService {
    */
   updateDeliveryStatus(messageId, status, timestamp, errorDetails) {
     this.loadNotifications();
-    const notif = this.notifications.find((n) => n.providerMessageId === messageId);
-    if (!notif) return false;
-    notif.messageStatus = status;
+    let notif = this.notifications.find((n) => n.providerMessageId === messageId);
     const timeIso = timestamp || (/* @__PURE__ */ new Date()).toISOString();
-    if (status === "delivered") notif.deliveredAt = timeIso;
-    if (status === "read") notif.readAt = timeIso;
-    if (status === "failed" && errorDetails) {
-      notif.errorDetails = errorDetails;
+    if (!notif) {
+      notif = {
+        id: `notif_auto_${Date.now()}`,
+        recipientPhone: "",
+        channel: "whatsapp",
+        templateName: "payment_confirmation",
+        messageStatus: status,
+        provider: "meta_cloud_api",
+        providerMessageId: messageId,
+        sentAt: timeIso,
+        lastAttemptAt: timeIso,
+        retryCount: 1,
+        errorDetails
+      };
+      this.notifications.unshift(notif);
+    } else {
+      notif.messageStatus = status;
+      if (status === "delivered") notif.deliveredAt = timeIso;
+      if (status === "read") notif.readAt = timeIso;
+      if (status === "failed" && errorDetails) {
+        notif.errorDetails = errorDetails;
+      }
     }
     this.saveNotifications();
     console.log(`[WhatsAppNotificationService] Updated message ${messageId} status to '${status}'`);
     return true;
+  }
+  /**
+   * Record a manual or test notification directly into durable store
+   */
+  recordManualNotification(notif) {
+    this.loadNotifications();
+    const newRecord = {
+      id: notif.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      recipientPhone: notif.recipientPhone || "",
+      channel: "whatsapp",
+      templateName: notif.templateName || "payment_confirmation",
+      messageStatus: notif.messageStatus || "accepted",
+      provider: "meta_cloud_api",
+      providerMessageId: notif.providerMessageId,
+      sentAt: notif.sentAt || (/* @__PURE__ */ new Date()).toISOString(),
+      lastAttemptAt: (/* @__PURE__ */ new Date()).toISOString(),
+      retryCount: 1,
+      errorDetails: notif.errorDetails,
+      messageBody: notif.messageBody
+    };
+    this.notifications.unshift(newRecord);
+    this.saveNotifications();
   }
   /**
    * Send the official Payment & Enrollment Confirmation WhatsApp message
@@ -1565,7 +1603,7 @@ Team Wits Lingo`;
           { type: "text", text: courseName },
           { type: "text", text: amountStr },
           { type: "text", text: txnId },
-          { type: "text", text: `${startDate} | Class Link: ${meetLink}` }
+          { type: "text", text: startDate }
         ];
         const params6 = [
           { type: "text", text: studentName },
@@ -4340,7 +4378,7 @@ async function sendWhatsAppEnrollmentMessage(data) {
     { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
     { type: "text", text: formattedAmount },
     { type: "text", text: data.admissionId || "Verified" },
-    { type: "text", text: `${startDate} | Class: ${meetLink}` }
+    { type: "text", text: startDate }
   ] : [
     { type: "text", text: data.studentName || "Student" },
     { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
@@ -4713,7 +4751,7 @@ app.all("/api/whatsapp/send-test-template", async (req, res) => {
       { type: "text", text: "English Foundation" },
       { type: "text", text: "\u20B91,499" },
       { type: "text", text: `pay_test_${Date.now()}` },
-      { type: "text", text: "Nov 1, 2026 | https://meet.google.com/wwu-zohu-yij" }
+      { type: "text", text: "Nov 1, 2026" }
     ];
     const componentsWithHeader = [
       {
@@ -4741,6 +4779,15 @@ app.all("/api/whatsapp/send-test-template", async (req, res) => {
       templateName === "hello_world" ? "en_US" : lang,
       activeComponents
     );
+    if (sendResult.messageId) {
+      whatsappNotificationService.recordManualNotification({
+        recipientPhone: phone,
+        templateName,
+        messageStatus: sendResult.success ? "accepted" : "failed",
+        providerMessageId: sendResult.messageId,
+        errorDetails: sendResult.sanitizedError || sendResult.error
+      });
+    }
     res.json({
       sendResult,
       testedMode: mode,
@@ -4753,12 +4800,17 @@ app.all("/api/whatsapp/send-test-template", async (req, res) => {
     res.status(500).json({ success: false, error: err?.message });
   }
 });
-app.get("/api/whatsapp/recent-deliveries", (_req, res) => {
+app.get("/api/whatsapp/recent-deliveries", async (_req, res) => {
   try {
-    const allNotifs = whatsappNotificationService.getAllNotifications();
+    const logs = await durableStorageService.getCollection("delivery-logs", []);
+    const notifs = await durableStorageService.getCollection("notifications", []);
+    const dedup = await durableStorageService.getCollection("webhook-dedup", []);
     res.json({
-      total: allNotifs.length,
-      notifications: allNotifs.slice(0, 20)
+      totalLogs: logs.length,
+      deliveryLogs: logs.slice(0, 30),
+      totalNotifications: notifs.length,
+      notifications: notifs.slice(0, 30),
+      recentDedup: dedup.slice(0, 20)
     });
   } catch (err) {
     res.status(500).json({ error: err?.message });

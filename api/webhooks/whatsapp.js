@@ -49,7 +49,7 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get confirmationTemplateHeaderImage() {
-    const raw = process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE || "https://scontent.whatsapp.net/v/t61.29466-34/613433116_28693094990351546_4790593421551681826_n.jpg?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=I4fhUXI-K4kQ7kNvwGFyxPo&_nc_oc=AdpNazH7nmSFB4WlQxH8dTnfv0HdJ10x9pBJmAN3rJP4DdS-F393Dz-Um8a_IEnOKG0&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=uI10QXAZICHysN4TVideag&_nc_tpa=Q5bMBQKEbbZNDabIgqEye1dyICgTboz3DQyg5jS_K-tdO-3osSJsaZ_o51csL7S8Zbm3mzC61hRutBLIMQ&oh=01_Q5Aa5wFrsWd2wRx8mPIcoiRoGNkc3mdDs6slOdhoqa0CZGxIYw&oe=6AFC273F";
+    const raw = process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE || "https://www.witslingo.com/payment-confirmed.jpg";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get templateLanguage() {
@@ -1484,18 +1484,56 @@ var WhatsAppNotificationService = class _WhatsAppNotificationService {
    */
   updateDeliveryStatus(messageId, status, timestamp, errorDetails) {
     this.loadNotifications();
-    const notif = this.notifications.find((n) => n.providerMessageId === messageId);
-    if (!notif) return false;
-    notif.messageStatus = status;
+    let notif = this.notifications.find((n) => n.providerMessageId === messageId);
     const timeIso = timestamp || (/* @__PURE__ */ new Date()).toISOString();
-    if (status === "delivered") notif.deliveredAt = timeIso;
-    if (status === "read") notif.readAt = timeIso;
-    if (status === "failed" && errorDetails) {
-      notif.errorDetails = errorDetails;
+    if (!notif) {
+      notif = {
+        id: `notif_auto_${Date.now()}`,
+        recipientPhone: "",
+        channel: "whatsapp",
+        templateName: "payment_confirmation",
+        messageStatus: status,
+        provider: "meta_cloud_api",
+        providerMessageId: messageId,
+        sentAt: timeIso,
+        lastAttemptAt: timeIso,
+        retryCount: 1,
+        errorDetails
+      };
+      this.notifications.unshift(notif);
+    } else {
+      notif.messageStatus = status;
+      if (status === "delivered") notif.deliveredAt = timeIso;
+      if (status === "read") notif.readAt = timeIso;
+      if (status === "failed" && errorDetails) {
+        notif.errorDetails = errorDetails;
+      }
     }
     this.saveNotifications();
     console.log(`[WhatsAppNotificationService] Updated message ${messageId} status to '${status}'`);
     return true;
+  }
+  /**
+   * Record a manual or test notification directly into durable store
+   */
+  recordManualNotification(notif) {
+    this.loadNotifications();
+    const newRecord = {
+      id: notif.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      recipientPhone: notif.recipientPhone || "",
+      channel: "whatsapp",
+      templateName: notif.templateName || "payment_confirmation",
+      messageStatus: notif.messageStatus || "accepted",
+      provider: "meta_cloud_api",
+      providerMessageId: notif.providerMessageId,
+      sentAt: notif.sentAt || (/* @__PURE__ */ new Date()).toISOString(),
+      lastAttemptAt: (/* @__PURE__ */ new Date()).toISOString(),
+      retryCount: 1,
+      errorDetails: notif.errorDetails,
+      messageBody: notif.messageBody
+    };
+    this.notifications.unshift(newRecord);
+    this.saveNotifications();
   }
   /**
    * Send the official Payment & Enrollment Confirmation WhatsApp message
@@ -1560,7 +1598,7 @@ Team Wits Lingo`;
           { type: "text", text: courseName },
           { type: "text", text: amountStr },
           { type: "text", text: txnId },
-          { type: "text", text: `${startDate} | Class Link: ${meetLink}` }
+          { type: "text", text: startDate }
         ];
         const params6 = [
           { type: "text", text: studentName },
@@ -2814,6 +2852,23 @@ async function handler(req, res) {
       const { messages: inboundMessages, statuses } = whatsappCloudApiService.parseWebhookPayload(payload);
       console.log(`[Meta Webhook POST] Parsed: inboundMessages=${inboundMessages.length}, deliveryStatuses=${statuses.length}`);
       const processEventsPromise = async () => {
+        if (statuses.length > 0) {
+          try {
+            const currentLogs = await durableStorageService.getCollection("delivery-logs", []);
+            const newLogs = statuses.map((st) => ({
+              messageId: st.messageId,
+              recipientPhone: st.recipientPhone,
+              status: st.status,
+              timestamp: st.timestamp,
+              errors: st.errors || null,
+              receivedAt: (/* @__PURE__ */ new Date()).toISOString()
+            }));
+            const combinedLogs = [...newLogs, ...currentLogs].slice(0, 50);
+            await durableStorageService.saveCollection("delivery-logs", combinedLogs);
+          } catch (logErr) {
+            console.warn("[Meta Webhook Delivery] Error persisting delivery-logs:", logErr);
+          }
+        }
         for (const st of statuses) {
           const isDup = await durableStorageService.isDeduplicated("delivery_status", `${st.messageId}_${st.status}`);
           if (isDup) continue;

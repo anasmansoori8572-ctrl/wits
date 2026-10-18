@@ -110,19 +110,57 @@ export class WhatsAppNotificationService {
     errorDetails?: string
   ): boolean {
     this.loadNotifications();
-    const notif = this.notifications.find(n => n.providerMessageId === messageId);
-    if (!notif) return false;
-
-    notif.messageStatus = status;
+    let notif = this.notifications.find(n => n.providerMessageId === messageId);
     const timeIso = timestamp || new Date().toISOString();
-    if (status === 'delivered') notif.deliveredAt = timeIso;
-    if (status === 'read') notif.readAt = timeIso;
-    if (status === 'failed' && errorDetails) {
-      notif.errorDetails = errorDetails;
+    if (!notif) {
+      notif = {
+        id: `notif_auto_${Date.now()}`,
+        recipientPhone: '',
+        channel: 'whatsapp',
+        templateName: 'payment_confirmation',
+        messageStatus: status,
+        provider: 'meta_cloud_api',
+        providerMessageId: messageId,
+        sentAt: timeIso,
+        lastAttemptAt: timeIso,
+        retryCount: 1,
+        errorDetails
+      };
+      this.notifications.unshift(notif);
+    } else {
+      notif.messageStatus = status;
+      if (status === 'delivered') notif.deliveredAt = timeIso;
+      if (status === 'read') notif.readAt = timeIso;
+      if (status === 'failed' && errorDetails) {
+        notif.errorDetails = errorDetails;
+      }
     }
     this.saveNotifications();
     console.log(`[WhatsAppNotificationService] Updated message ${messageId} status to '${status}'`);
     return true;
+  }
+
+  /**
+   * Record a manual or test notification directly into durable store
+   */
+  public recordManualNotification(notif: Partial<DBNotification>): void {
+    this.loadNotifications();
+    const newRecord: DBNotification = {
+      id: notif.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      recipientPhone: notif.recipientPhone || '',
+      channel: 'whatsapp',
+      templateName: notif.templateName || 'payment_confirmation',
+      messageStatus: notif.messageStatus || 'accepted',
+      provider: 'meta_cloud_api',
+      providerMessageId: notif.providerMessageId,
+      sentAt: notif.sentAt || new Date().toISOString(),
+      lastAttemptAt: new Date().toISOString(),
+      retryCount: 1,
+      errorDetails: notif.errorDetails,
+      messageBody: notif.messageBody
+    };
+    this.notifications.unshift(newRecord);
+    this.saveNotifications();
   }
 
   /**
@@ -202,14 +240,14 @@ Team Wits Lingo`;
       try {
         console.log(`[WhatsAppNotificationService] Attempting official template '${templateName}' to ${cleanRecipient}...`);
 
-        // Build 5-parameter payload matching the approved witslingo_course_payment_confirmed template:
-        // {{name_1}}, {{course_name}}, {{paid_amount}}, {{transction_id}}, {{batch_start_date}}
+        // Build 5-parameter payload matching the approved witslingo_course_fee_confirmed template:
+        // {{name_1}}, {{course_name}}, {{amount_paid}}, {{transaction_id}}, {{batch_start_date}}
         const params5 = [
           { type: 'text' as const, text: studentName },
           { type: 'text' as const, text: courseName },
           { type: 'text' as const, text: amountStr },
           { type: 'text' as const, text: txnId },
-          { type: 'text' as const, text: `${startDate} | Class Link: ${meetLink}` }
+          { type: 'text' as const, text: startDate }
         ];
 
         // 6-parameter alternative in case 6 variables are configured
