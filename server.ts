@@ -2332,7 +2332,7 @@ async function sendWhatsAppEnrollmentMessage(data: {
   const templateLang = whatsappCloudApiService.templateLanguage;
 
   const formattedAmount = typeof data.amount === "number" ? `₹${data.amount.toLocaleString("en-IN")}` : String(data.amount || "₹1,499");
-  const templateParams = (templateName === "witslingo_course_payment_confirmed")
+  const templateParams = (templateName === "witslingo_course_fee_confirmed" || templateName === "witslingo_course_payment_confirmed")
     ? [
         { type: "text" as const, text: data.studentName || "Student" },
         { type: "text" as const, text: data.courseName || foundCourse?.name || "English Course" },
@@ -2351,7 +2351,7 @@ async function sendWhatsAppEnrollmentMessage(data: {
         { type: "text" as const, text: data.admissionId }
       ];
 
-  const headerImageLink = "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80";
+  const headerImageLink = whatsappCloudApiService.confirmationTemplateHeaderImage;
   const componentsWithHeader = [
     {
       type: "header" as const,
@@ -2790,8 +2790,7 @@ try {
       const phone = (req.query.phone as string) || req.body?.phone || "919027729917";
       const templateName = (req.query.template as string) || req.body?.template || whatsappCloudApiService.confirmationTemplateName;
       const lang = (req.query.lang as string) || req.body?.lang || whatsappCloudApiService.templateLanguage || "en";
-      const metaDefaultImage = "https://scontent.whatsapp.net/v/t61.29466-34/676896949_1151535227533293_6841412804080480409_n.jpg?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=euVBINoMjCUQ7kNvwFV_HKj&_nc_oc=AdoeixeVZiRlHgPtO3EXopDwP68LVYlXLcHcRmKpnLjxP2sxBgsolLOMcyv44zGaagI&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AIJs65cEAAAA&_nc_gid=r0GF7bGsO6bxCkSXvSjl3A&_nc_tpa=Q5bMBQJ4b-jZoldnntZ2GbiSdNttW-uibo9RE3EiwHoq3cOyKzQHUauycuc49fPA__HHzzQo0FOw43TDLA&oh=01_Q5Aa5wFA_5HpyMYrGK_TZr0U_lqCH-CQ-Qy9H7qg9ORrL34zpw&oe=6AFB3651";
-      const imageUrl = (req.query.image as string) || metaDefaultImage;
+      const imageUrl = (req.query.image as string) || whatsappCloudApiService.confirmationTemplateHeaderImage;
       const mode = (req.query.mode as string) || "with_header";
       
       const params5 = [

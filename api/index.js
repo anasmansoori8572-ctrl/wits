@@ -66,7 +66,11 @@ var WhatsAppCloudApiService = class _WhatsAppCloudApiService {
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get confirmationTemplateName() {
-    const raw = process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME || "witslingo_course_payment_confirmed";
+    const raw = process.env.WHATSAPP_CONFIRMATION_TEMPLATE_NAME || "witslingo_course_fee_confirmed";
+    return raw.trim().replace(/^["']|["']$/g, "");
+  }
+  get confirmationTemplateHeaderImage() {
+    const raw = process.env.WHATSAPP_TEMPLATE_HEADER_IMAGE || "https://scontent.whatsapp.net/v/t61.29466-34/613433116_28693094990351546_4790593421551681826_n.jpg?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=I4fhUXI-K4kQ7kNvwGFyxPo&_nc_oc=AdpNazH7nmSFB4WlQxH8dTnfv0HdJ10x9pBJmAN3rJP4DdS-F393Dz-Um8a_IEnOKG0&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=uI10QXAZICHysN4TVideag&_nc_tpa=Q5bMBQKEbbZNDabIgqEye1dyICgTboz3DQyg5jS_K-tdO-3osSJsaZ_o51csL7S8Zbm3mzC61hRutBLIMQ&oh=01_Q5Aa5wFrsWd2wRx8mPIcoiRoGNkc3mdDs6slOdhoqa0CZGxIYw&oe=6AFC273F";
     return raw.trim().replace(/^["']|["']$/g, "");
   }
   get templateLanguage() {
@@ -1571,9 +1575,9 @@ Team Wits Lingo`;
           { type: "text", text: startDate },
           { type: "text", text: meetLink }
         ];
-        const initialParams = templateName === "witslingo_course_payment_confirmed" ? params5 : params6;
+        const initialParams = templateName === "witslingo_course_fee_confirmed" || templateName === "witslingo_course_payment_confirmed" ? params5 : params6;
         let lang = whatsappCloudApiService.templateLanguage || "en";
-        const headerImageLink = "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80";
+        const headerImageLink = whatsappCloudApiService.confirmationTemplateHeaderImage;
         const componentsWithHeader = [
           {
             type: "header",
@@ -4331,7 +4335,7 @@ async function sendWhatsAppEnrollmentMessage(data) {
   const templateName = whatsappCloudApiService.confirmationTemplateName;
   const templateLang = whatsappCloudApiService.templateLanguage;
   const formattedAmount = typeof data.amount === "number" ? `\u20B9${data.amount.toLocaleString("en-IN")}` : String(data.amount || "\u20B91,499");
-  const templateParams = templateName === "witslingo_course_payment_confirmed" ? [
+  const templateParams = templateName === "witslingo_course_fee_confirmed" || templateName === "witslingo_course_payment_confirmed" ? [
     { type: "text", text: data.studentName || "Student" },
     { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
     { type: "text", text: formattedAmount },
@@ -4347,7 +4351,7 @@ async function sendWhatsAppEnrollmentMessage(data) {
     { type: "text", text: meetLink },
     { type: "text", text: data.admissionId }
   ];
-  const headerImageLink = "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80";
+  const headerImageLink = whatsappCloudApiService.confirmationTemplateHeaderImage;
   const componentsWithHeader = [
     {
       type: "header",
@@ -4702,8 +4706,7 @@ app.all("/api/whatsapp/send-test-template", async (req, res) => {
     const phone = req.query.phone || req.body?.phone || "919027729917";
     const templateName = req.query.template || req.body?.template || whatsappCloudApiService.confirmationTemplateName;
     const lang = req.query.lang || req.body?.lang || whatsappCloudApiService.templateLanguage || "en";
-    const metaDefaultImage = "https://scontent.whatsapp.net/v/t61.29466-34/676896949_1151535227533293_6841412804080480409_n.jpg?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=euVBINoMjCUQ7kNvwFV_HKj&_nc_oc=AdoeixeVZiRlHgPtO3EXopDwP68LVYlXLcHcRmKpnLjxP2sxBgsolLOMcyv44zGaagI&_nc_zt=3&_nc_ht=scontent.whatsapp.net&edm=AIJs65cEAAAA&_nc_gid=r0GF7bGsO6bxCkSXvSjl3A&_nc_tpa=Q5bMBQJ4b-jZoldnntZ2GbiSdNttW-uibo9RE3EiwHoq3cOyKzQHUauycuc49fPA__HHzzQo0FOw43TDLA&oh=01_Q5Aa5wFA_5HpyMYrGK_TZr0U_lqCH-CQ-Qy9H7qg9ORrL34zpw&oe=6AFB3651";
-    const imageUrl = req.query.image || metaDefaultImage;
+    const imageUrl = req.query.image || whatsappCloudApiService.confirmationTemplateHeaderImage;
     const mode = req.query.mode || "with_header";
     const params5 = [
       { type: "text", text: "Anas Mansoori" },

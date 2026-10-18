@@ -222,10 +222,10 @@ Team Wits Lingo`;
           { type: 'text' as const, text: meetLink }
         ];
 
-        const initialParams = (templateName === 'witslingo_course_payment_confirmed') ? params5 : params6;
+        const initialParams = (templateName === 'witslingo_course_fee_confirmed' || templateName === 'witslingo_course_payment_confirmed') ? params5 : params6;
         let lang = whatsappCloudApiService.templateLanguage || 'en';
 
-        const headerImageLink = 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80';
+        const headerImageLink = whatsappCloudApiService.confirmationTemplateHeaderImage;
         const componentsWithHeader: MetaTemplateComponent[] = [
           {
             type: 'header',
