@@ -27,6 +27,7 @@ import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { SystemReportModal } from './components/SystemReportModal';
 import { CheckoutModal } from './components/CheckoutModal';
 import { PaymentStatusModal } from './components/PaymentStatusModal';
+import { PolicyPages, PolicyTab } from './components/PolicyPages';
 import { WITS_LINGO_CONFIG } from './config/witsLingoConfig';
 
 type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings' | 'orders-payments' | 'whatsapp-notifications' | 'support-tickets' | 'knowledge-base';
@@ -56,9 +57,27 @@ function parseAdminSubroute(path: string, hash: string): AdminTabType | undefine
   return undefined;
 }
 
+function parsePolicySubroute(path: string, hash: string): PolicyTab | undefined {
+  const p = path.toLowerCase().replace(/^\/+/, '').split('/')[0]?.split('?')[0] || '';
+  const h = hash.toLowerCase().replace(/^#+/, '').split('/')[0]?.split('?')[0] || '';
+
+  const check = (str: string): PolicyTab | undefined => {
+    if (!str) return undefined;
+    if (str === 'terms' || str === 'terms-and-conditions' || str === 'terms-of-service' || str === 'tos') return 'terms';
+    if (str === 'privacy' || str === 'privacy-policy') return 'privacy';
+    if (str === 'refund-policy' || str === 'refund' || str === 'refunds' || str === 'cancellation-refund' || str === 'cancellation') return 'refund-policy';
+    if (str === 'shipping-policy' || str === 'shipping' || str === 'shipping-and-delivery' || str === 'delivery') return 'shipping-policy';
+    if (str === 'contact-us' || str === 'contact' || str === 'support' || str === 'grievance') return 'contact';
+    if (str === 'about-us' || str === 'about') return 'about';
+    return undefined;
+  };
+
+  return check(p) || check(h);
+}
+
 export default function App() {
-  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'admin-login'
-  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'admin-login'>(() => {
+  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'admin-login' | 'policy'
+  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'admin-login' | 'policy'>(() => {
     if (typeof window !== 'undefined') {
       const path = (window.location.pathname || '').toLowerCase();
       const hash = (window.location.hash || '').toLowerCase();
@@ -76,8 +95,21 @@ export default function App() {
       if (path === '/gallery' || path.startsWith('/gallery') || hash === '#gallery') {
         return 'gallery';
       }
+      if (parsePolicySubroute(path, hash)) {
+        return 'policy';
+      }
     }
     return 'home';
+  });
+
+  const [policyTab, setPolicyTab] = useState<PolicyTab>(() => {
+    if (typeof window !== 'undefined') {
+      const path = (window.location.pathname || '').toLowerCase();
+      const hash = (window.location.hash || '').toLowerCase();
+      const matched = parsePolicySubroute(path, hash);
+      if (matched) return matched;
+    }
+    return 'terms';
   });
 
   const [adminTab, setAdminTab] = useState<AdminTabType | undefined>(() => {
@@ -387,7 +419,11 @@ export default function App() {
         } catch (e) {}
       }
 
-      if (path === '/admin' || path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#admin')) {
+      const policyMatch = parsePolicySubroute(path, hash);
+      if (policyMatch) {
+        setPolicyTab(policyMatch);
+        setCurrentView('policy');
+      } else if (path === '/admin' || path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#admin')) {
         const sub = parseAdminSubroute(path, hash);
         if (sub) setAdminTab(sub);
         if (isAdminLoggedIn) {
@@ -398,7 +434,7 @@ export default function App() {
       } else if (hash === '#gallery' || path === '/gallery' || path.startsWith('/gallery')) {
         setCurrentView('gallery');
       } else if (hash === '#home' || path === '/') {
-        setCurrentView(prev => (prev === 'gallery' || prev === 'admin-login' ? 'home' : prev));
+        setCurrentView(prev => (prev === 'gallery' || prev === 'admin-login' || prev === 'policy' ? 'home' : prev));
       }
 
       // Check URL query parameters for instant checkout and payment confirmation
@@ -468,6 +504,16 @@ export default function App() {
       } catch (e) {}
       setCurrentView('home');
     }
+  };
+
+  // Handle Policy Navigation
+  const handleNavigatePolicy = (tab: PolicyTab = 'terms') => {
+    setPolicyTab(tab);
+    setCurrentView('policy');
+    try {
+      window.history.pushState(null, '', `/${tab}`);
+    } catch (e) {}
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Open Admission Modal
@@ -599,6 +645,16 @@ export default function App() {
           onOpenAdmission={(cId, bId) => handleOpenAdmission(cId, bId)}
           siteSettings={siteSettings}
         />
+      ) : currentView === 'policy' ? (
+        <PolicyPages
+          initialTab={policyTab}
+          onNavigateHome={() => {
+            try { window.history.pushState(null, '', '/'); } catch (e) {}
+            setCurrentView('home');
+          }}
+          onOpenAdmission={(cId) => handleOpenAdmission(cId)}
+          siteSettings={siteSettings}
+        />
       ) : (
         /* MAIN HOMEPAGE */
         <main>
@@ -668,6 +724,7 @@ export default function App() {
           try { window.history.pushState(null, '', '/gallery'); } catch (e) {}
           setCurrentView('gallery');
         }}
+        onNavigatePolicy={handleNavigatePolicy}
         siteSettings={siteSettings}
       />
 

@@ -478,6 +478,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             )}
           </button>
 
+          {/* Explicit Policy Agreement */}
+          <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+            By proceeding, you agree to Wits Lingo's{' '}
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-[#4A1D96] font-semibold underline">
+              Terms & Conditions
+            </a>
+            ,{' '}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-[#4A1D96] font-semibold underline">
+              Privacy Policy
+            </a>
+            , and{' '}
+            <a href="/refund-policy" target="_blank" rel="noopener noreferrer" className="text-[#4A1D96] font-semibold underline">
+              7-Day Refund Policy
+            </a>
+            .
+          </p>
+
           {/* Security footnote */}
           <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 text-center">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />

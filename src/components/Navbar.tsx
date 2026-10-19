@@ -116,8 +116,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                     e.preventDefault();
                     if (onNavigateGallery) onNavigateGallery();
                     else window.location.hash = '#gallery';
-                  } else if (activeSection === 'gallery' && onNavigateHome) {
+                  } else if ((activeSection === 'gallery' || activeSection === 'policy') && onNavigateHome) {
                     onNavigateHome();
+                    if (link.href.startsWith('#')) {
+                      setTimeout(() => {
+                        const targetId = link.href.substring(1);
+                        const el = document.getElementById(targetId);
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }, 100);
+                    }
                   }
                 }}
                 className={`text-[13px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
@@ -189,8 +196,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                     e.preventDefault();
                     if (onNavigateGallery) onNavigateGallery();
                     else window.location.hash = '#gallery';
-                  } else if (activeSection === 'gallery' && onNavigateHome) {
+                  } else if ((activeSection === 'gallery' || activeSection === 'policy') && onNavigateHome) {
                     onNavigateHome();
+                    if (link.href.startsWith('#')) {
+                      setTimeout(() => {
+                        const targetId = link.href.substring(1);
+                        const el = document.getElementById(targetId);
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }, 100);
+                    }
                   }
                 }}
                 className={`block px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${

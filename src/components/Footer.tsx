@@ -1,17 +1,26 @@
 import React from 'react';
 import { Logo } from './Logo';
-import { MessageCircle, Instagram, Facebook, Youtube, Mail, Phone, MapPin, ArrowUp, FileText } from 'lucide-react';
+import { MessageCircle, Instagram, Facebook, Youtube, Mail, Phone, MapPin, ArrowUp, FileText, ShieldCheck, Lock, RotateCcw, Truck } from 'lucide-react';
 import { SiteSettings } from '../types';
+import { PolicyTab } from './PolicyPages';
 
 interface FooterProps {
   onOpenSystemReport?: () => void;
   onNavigateGallery?: () => void;
+  onNavigatePolicy?: (tab: PolicyTab) => void;
   siteSettings?: SiteSettings;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGallery, siteSettings }) => {
+export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGallery, onNavigatePolicy, siteSettings }) => {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handlePolicyClick = (e: React.MouseEvent, tab: PolicyTab) => {
+    if (onNavigatePolicy) {
+      e.preventDefault();
+      onNavigatePolicy(tab);
+    }
   };
 
   return (
@@ -78,16 +87,22 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
             </h4>
             <ul className="space-y-2.5 text-xs text-slate-400">
               <li>
-                <a href="#courses" className="hover:text-white transition-colors">Courses</a>
+                <a href="#courses" className="hover:text-white transition-colors">Courses & Batches</a>
               </li>
               <li>
-                <a href="#about" className="hover:text-white transition-colors">About</a>
+                <a 
+                  href="/about" 
+                  onClick={(e) => handlePolicyClick(e, 'about')}
+                  className="hover:text-white transition-colors"
+                >
+                  About Us
+                </a>
               </li>
               <li>
                 <a href="#philosophy" className="hover:text-white transition-colors">Learning Philosophy</a>
               </li>
               <li>
-                <a href="#learning-resources" className="hover:text-white transition-colors">Learning Resources</a>
+                <a href="#learning-resources" className="hover:text-white transition-colors">Study Resources</a>
               </li>
               <li>
                 <a 
@@ -104,7 +119,72 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
                 </a>
               </li>
               <li>
-                <a href="#contact" className="hover:text-white transition-colors">Contact</a>
+                <a 
+                  href="/contact" 
+                  onClick={(e) => handlePolicyClick(e, 'contact')}
+                  className="hover:text-white transition-colors"
+                >
+                  Contact & Support
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Legal & Compliance (Mandatory for Razorpay Approval) */}
+          <div className="space-y-3.5">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-purple-300 font-['Outfit']">
+              Legal & Policy
+            </h4>
+            <ul className="space-y-2.5 text-xs text-slate-400">
+              <li>
+                <a 
+                  href="/terms" 
+                  onClick={(e) => handlePolicyClick(e, 'terms')}
+                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5 text-purple-400/80" />
+                  <span>Terms & Conditions</span>
+                </a>
+              </li>
+              <li>
+                <a 
+                  href="/privacy" 
+                  onClick={(e) => handlePolicyClick(e, 'privacy')}
+                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                >
+                  <Lock className="w-3.5 h-3.5 text-purple-400/80" />
+                  <span>Privacy Policy</span>
+                </a>
+              </li>
+              <li>
+                <a 
+                  href="/refund-policy" 
+                  onClick={(e) => handlePolicyClick(e, 'refund-policy')}
+                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-purple-400/80" />
+                  <span>Refund & Cancellation</span>
+                </a>
+              </li>
+              <li>
+                <a 
+                  href="/shipping-policy" 
+                  onClick={(e) => handlePolicyClick(e, 'shipping-policy')}
+                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                >
+                  <Truck className="w-3.5 h-3.5 text-purple-400/80" />
+                  <span>Shipping & Delivery</span>
+                </a>
+              </li>
+              <li>
+                <a 
+                  href="/contact" 
+                  onClick={(e) => handlePolicyClick(e, 'contact')}
+                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                >
+                  <Phone className="w-3.5 h-3.5 text-purple-400/80" />
+                  <span>Grievance Redressal</span>
+                </a>
               </li>
               {onOpenSystemReport && (
                 <li className="pt-1">
@@ -120,55 +200,6 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
             </ul>
           </div>
 
-          {/* Community & Social */}
-          <div className="space-y-3.5">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-purple-300 font-['Outfit']">
-              Community
-            </h4>
-            <ul className="space-y-2.5 text-xs text-slate-400">
-              <li>
-                <a
-                  href="https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-white transition-colors"
-                >
-                  WhatsApp Channel
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA=="
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-white transition-colors"
-                >
-                  Instagram
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://www.facebook.com/share/1BP5jTfk9B/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-white transition-colors"
-                >
-                  Facebook
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://youtube.com/@witslingoeng"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-white transition-colors"
-                >
-                  YouTube
-                </a>
-              </li>
-            </ul>
-          </div>
-
           {/* Institutional Contact */}
           <div className="space-y-3.5">
             <h4 className="text-xs font-bold uppercase tracking-widest text-purple-300 font-['Outfit']">
@@ -177,7 +208,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
             <div className="space-y-2.5 text-xs text-slate-400">
               <p className="flex items-start gap-2">
                 <MapPin className="w-3.5 h-3.5 text-purple-400 flex-shrink-0 mt-0.5" />
-                <span>{siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh, India'}</span>
+                <span>{siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh - 244222, India'}</span>
               </p>
               <p className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
@@ -191,18 +222,71 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
                   {siteSettings?.phone1 || '+91 7310952271'} {siteSettings?.phone2 ? `/ ${siteSettings.phone2}` : '/ 9027729917'}
                 </span>
               </p>
+              <p className="text-[11px] text-slate-500 pt-1">
+                Mon – Sat: 9:00 AM – 8:00 PM IST
+              </p>
             </div>
           </div>
 
         </div>
 
+        {/* Razorpay Trust & Payment Badges Banner */}
+        <div className="py-6 border-b border-white/10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-white font-semibold text-xs font-['Outfit']">
+                100% Secure Payments Powered by Razorpay
+              </p>
+              <p className="text-[11px] text-slate-400">
+                RBI Authorized Payment Aggregator • 256-Bit SSL Encrypted • PCI-DSS Level 1 Certified
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center flex-wrap gap-2 text-[11px]">
+            <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-slate-300">UPI (GPay / PhonePe / Paytm)</span>
+            <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-slate-300">RuPay</span>
+            <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-slate-300">Visa / MasterCard</span>
+            <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-slate-300">Net Banking (50+ Banks)</span>
+          </div>
+        </div>
+
         {/* Bottom Bar with Copyright & Back to Top */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>© {siteSettings?.academyName || 'WITS LINGO'}. All Rights Reserved.</p>
+          <p>© {siteSettings?.academyName || 'WITS LINGO'}. All Rights Reserved. Operating in Amroha, Uttar Pradesh, India.</p>
           
           <div className="flex items-center flex-wrap gap-4 sm:gap-6">
-            <a href="#privacy" className="hover:text-slate-300 transition-colors">Privacy Policy</a>
-            <a href="#terms" className="hover:text-slate-300 transition-colors">Terms & Conditions</a>
+            <a 
+              href="/privacy" 
+              onClick={(e) => handlePolicyClick(e, 'privacy')}
+              className="hover:text-slate-300 transition-colors"
+            >
+              Privacy Policy
+            </a>
+            <a 
+              href="/terms" 
+              onClick={(e) => handlePolicyClick(e, 'terms')}
+              className="hover:text-slate-300 transition-colors"
+            >
+              Terms & Conditions
+            </a>
+            <a 
+              href="/refund-policy" 
+              onClick={(e) => handlePolicyClick(e, 'refund-policy')}
+              className="hover:text-slate-300 transition-colors"
+            >
+              Refund Policy
+            </a>
+            <a 
+              href="/shipping-policy" 
+              onClick={(e) => handlePolicyClick(e, 'shipping-policy')}
+              className="hover:text-slate-300 transition-colors"
+            >
+              Shipping Policy
+            </a>
             
             {onOpenSystemReport && (
               <button
