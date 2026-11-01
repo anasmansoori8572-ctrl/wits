@@ -381,12 +381,14 @@ Team Wits Lingo`;
     };
 
     this.notifications.unshift(notifRecord);
-    this.saveNotifications();
+    await this.saveNotificationsDurable();
 
     if (sendResult.success) {
-      durableStorageService.recordDedup('payment_confirmation', payload.orderId).catch(err => {
+      try {
+        await durableStorageService.recordDedup('payment_confirmation', payload.orderId);
+      } catch (err) {
         console.warn('[WhatsAppNotificationService] Could not record dedup key:', err);
-      });
+      }
     }
 
     return {
