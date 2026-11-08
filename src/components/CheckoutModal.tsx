@@ -50,6 +50,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [gatewayConfig, setGatewayConfig] = useState<{ configured: boolean; keyId: string | null; isTestMode: boolean } | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/payments/razorpay/config')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.keyId) {
+            setGatewayConfig(data);
+          }
+        })
+        .catch(err => console.warn('[Checkout] Failed to fetch gateway config:', err));
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (initialCourseId) {
@@ -149,9 +163,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       // 2. Load Razorpay Checkout Script
       const scriptLoaded = await loadRazorpayScript();
 
-      // If Razorpay keys are not yet configured or in test simulation without live Razorpay SDK
-      if (!scriptLoaded || isTestMode || !(window as any).Razorpay) {
-        console.log('[Checkout] Running test checkout simulation verification...');
+      // Only bypass Razorpay modal if script failed to load, window.Razorpay is missing, or key is an unconfigured placeholder
+      const isPlaceholder = !keyId || keyId === 'rzp_test_witslingo_placeholder' || keyId.includes('placeholder');
+      if (!scriptLoaded || !(window as any).Razorpay || isPlaceholder) {
+        console.log('[Checkout] Razorpay SDK unavailable or placeholder key used. Running fallback verification...');
         // Simulate immediate verified order completion
         const verifyRes = await fetch('/api/payments/razorpay/verify-order', {
           method: 'POST',
@@ -264,7 +279,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-purple-100 text-[11px] font-bold uppercase tracking-wider">
               Express Enrolment
             </span>
@@ -272,6 +287,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <Lock className="w-3 h-3" />
               Secure Checkout
             </span>
+            {(gatewayConfig?.isTestMode || gatewayConfig?.keyId?.startsWith('rzp_test_')) && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-400 text-purple-950 text-[10px] font-extrabold uppercase tracking-wide flex items-center gap-1 shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-950 animate-pulse" />
+                Razorpay Test Mode
+              </span>
+            )}
           </div>
 
           <h2 className="font-['Outfit'] text-2xl sm:text-3xl font-extrabold tracking-tight">
