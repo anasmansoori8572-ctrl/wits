@@ -5262,8 +5262,8 @@ app.get("/api/batches/:batchId/announcements", (req, res) => {
   const batchAnnouncements = announcements.filter((a) => a.batchId === batchId);
   res.json({ announcements: batchAnnouncements });
 });
-var RAZORPAY_DEFAULT_TEST_KEY_ID = "rzp_test_Tiez0ogxMA6aaW";
-var RAZORPAY_DEFAULT_TEST_KEY_SECRET = "UGVRGXnU02vWVMPrUo8aO8co";
+var RAZORPAY_DEFAULT_TEST_KEY_ID = "rzp_test_TxdOEl65TI6T87";
+var RAZORPAY_DEFAULT_TEST_KEY_SECRET = "PLOsUNgyfqb4tSn0D9eUImMS";
 function getRazorpayConfig() {
   const keyId = process.env.RAZORPAY_KEY_ID?.trim() || RAZORPAY_DEFAULT_TEST_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim() || RAZORPAY_DEFAULT_TEST_KEY_SECRET;
@@ -5826,7 +5826,7 @@ app.post("/api/orders/create", async (req, res) => {
     res.json({
       success: true,
       order: newOrder,
-      keyId: keyId || "rzp_test_Tiez0ogxMA6aaW",
+      keyId: keyId || "rzp_test_TxdOEl65TI6T87",
       amountPaise: finalPayable * 100,
       currency: "INR",
       isTestMode,

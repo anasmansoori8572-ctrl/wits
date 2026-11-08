@@ -3414,8 +3414,8 @@ try {
   // =========================================================================
 
   // Razorpay Gateway Config (Falls back to verified test keys when running in test mode)
-  const RAZORPAY_DEFAULT_TEST_KEY_ID = "rzp_test_Tiez0ogxMA6aaW";
-  const RAZORPAY_DEFAULT_TEST_KEY_SECRET = "UGVRGXnU02vWVMPrUo8aO8co";
+  const RAZORPAY_DEFAULT_TEST_KEY_ID = "rzp_test_TxdOEl65TI6T87";
+  const RAZORPAY_DEFAULT_TEST_KEY_SECRET = "PLOsUNgyfqb4tSn0D9eUImMS";
 
   function getRazorpayConfig() {
     const keyId = (process.env.RAZORPAY_KEY_ID?.trim() || RAZORPAY_DEFAULT_TEST_KEY_ID);
@@ -4072,7 +4072,7 @@ www.witslingo.com`;
       res.json({
         success: true,
         order: newOrder,
-        keyId: keyId || "rzp_test_Tiez0ogxMA6aaW",
+        keyId: keyId || "rzp_test_TxdOEl65TI6T87",
         amountPaise: finalPayable * 100,
         currency: "INR",
         isTestMode,
