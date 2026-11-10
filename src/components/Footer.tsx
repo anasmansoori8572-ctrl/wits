@@ -7,7 +7,6 @@ import { SiteSettings } from '../types';
 import { PolicyTab } from './PolicyPages';
 
 interface FooterProps {
-  onOpenSystemReport?: () => void;
   onNavigateGallery?: () => void;
   onNavigatePolicy?: (tab: PolicyTab) => void;
   onNavigateSection?: (sectionId: string) => void;
@@ -16,7 +15,6 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ 
-  onOpenSystemReport, 
   onNavigateGallery, 
   onNavigatePolicy, 
   onNavigateSection,
@@ -268,18 +266,6 @@ export const Footer: React.FC<FooterProps> = ({
                   <span>Grievance Redressal</span>
                 </a>
               </li>
-              {onOpenSystemReport && (
-                <li className="pt-0.5">
-                  <button
-                    type="button"
-                    onClick={onOpenSystemReport}
-                    className="text-purple-300 hover:text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer py-1"
-                  >
-                    <FileText className="w-3.5 h-3.5 shrink-0" />
-                    <span>Website Report (PDF)</span>
-                  </button>
-                </li>
-              )}
             </ul>
           </div>
 

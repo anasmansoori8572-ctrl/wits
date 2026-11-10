@@ -6926,30 +6926,6 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     });
   });
 
-  // 24A. FULL WEBSITE REPORT & ARCHITECTURE DOCUMENTATION ENDPOINT
-  app.get("/api/documentation", (req, res) => {
-    res.json({
-      status: "success",
-      academy: "WITS LINGO — A Global Language Platform",
-      reportTitle: "WITS LINGO Full Architecture & System Documentation (A to Z)",
-      generatedDate: new Date().toISOString(),
-      metadata: {
-        server: "Node.js Express 4.x",
-        client: "React 18 + Vite + Tailwind CSS",
-        storage: "Backblaze B2 & Disk Proxy",
-        auth: "HMAC-SHA256 Token Engine",
-        port: 3000
-      },
-      sections: {
-        executiveSummary: "WITS LINGO is a global English language training and digital classroom ecosystem founded by Ziyaur Rehman Zia.",
-        admissionEngine: "100% web-based registration without WhatsApp dependency, multi-currency fee submission, and instant downloadable PDF admission slip.",
-        studentPortal: "Batch-isolated dashboard, live attendance logging, expiring signed playback tickets, anti-piracy video watermarking, and protected PDF reader.",
-        adminPanel: "Full CRUD control over students, courses, batches, classes, Backblaze B2 study materials, and announcements.",
-        apiDirectoryCount: 25
-      }
-    });
-  });
-
   // 24B. COURSES MANAGEMENT & PUBLICATION CMS (Edit anytime, past or post publication)
   app.get("/api/courses", (req, res) => {
     const auth = verifyAuthToken(req.headers.authorization);

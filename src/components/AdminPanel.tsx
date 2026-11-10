@@ -33,7 +33,6 @@ interface AdminPanelProps {
   token: string;
   onLogout: () => void;
   onBackToHome?: () => void;
-  onOpenSystemReport?: () => void;
   courses: CourseData[];
   onUpdateCourses: (courses: CourseData[]) => void;
   batches: Batch[];
@@ -55,7 +54,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   token,
   onLogout,
   onBackToHome,
-  onOpenSystemReport,
   courses,
   onUpdateCourses,
   batches,

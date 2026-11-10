@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Logo } from './Logo';
 import { User, SiteSettings } from '../types';
 import { useScrollLock } from '../hooks/useScrollLock';
-import { Menu, X, Search, ChevronRight, FileText, Download, BookOpen, LogOut } from 'lucide-react';
+import { Menu, X, Search, ChevronRight, BookOpen, LogOut } from 'lucide-react';
 
 interface NavbarProps {
   currentUser: User | null;
@@ -12,7 +12,6 @@ interface NavbarProps {
   onOpenDashboard: () => void;
   onOpenAdmin: () => void;
   onLogout: () => void;
-  onOpenSystemReport?: () => void;
   onNavigateGallery?: () => void;
   onNavigateHome?: () => void;
   activeSection: string;
@@ -26,7 +25,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenDashboard,
   onOpenAdmin,
   onLogout,
-  onOpenSystemReport,
   onNavigateGallery,
   onNavigateHome,
   activeSection,
@@ -366,22 +364,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Contact
             </a>
-            {onOpenSystemReport && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenSystemReport();
-                }}
-                className="w-full text-left px-3 py-2.5 rounded-xl text-[#6D28D9] bg-purple-50/70 hover:bg-purple-100 flex items-center justify-between"
-              >
-                <span className="flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Website Report & Architecture
-                </span>
-                <Download className="w-4 h-4" />
-              </button>
-            )}
           </div>
 
           <div className="pt-4 space-y-3">

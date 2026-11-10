@@ -25,7 +25,6 @@ import { AdminPanel } from './components/AdminPanel';
 import { AdminLoginPage } from './components/AdminLoginPage';
 import { GalleryPage } from './components/GalleryPage';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
-import { SystemReportModal } from './components/SystemReportModal';
 import { CheckoutModal } from './components/CheckoutModal';
 import { PaymentStatusModal } from './components/PaymentStatusModal';
 import { PolicyPages, PolicyTab } from './components/PolicyPages';
@@ -147,7 +146,6 @@ export default function App() {
   // Modals
   const [isAdmissionOpen, setIsAdmissionOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isSystemReportOpen, setIsSystemReportOpen] = useState(false);
   const [authRole, setAuthRole] = useState<'student' | 'admin'>('student');
   const [selectedCourseForAdmission, setSelectedCourseForAdmission] = useState<string | undefined>();
   const [selectedBatchForAdmission, setSelectedBatchForAdmission] = useState<string | undefined>();
@@ -623,7 +621,6 @@ export default function App() {
           }
         }}
         onLogout={handleLogout}
-        onOpenSystemReport={() => setIsSystemReportOpen(true)}
         onNavigateGallery={() => {
           try { window.history.pushState(null, '', '/gallery'); } catch (e) {}
           setCurrentView('gallery');
@@ -657,7 +654,6 @@ export default function App() {
             try { window.history.pushState(null, '', '/'); } catch (e) {}
             setCurrentView('home');
           }}
-          onOpenSystemReport={() => setIsSystemReportOpen(true)}
           courses={courses}
           onUpdateCourses={handleUpdateCourses}
           batches={batches}
@@ -757,7 +753,6 @@ export default function App() {
 
       {/* Universal Institutional Footer */}
       <Footer
-        onOpenSystemReport={() => setIsSystemReportOpen(true)}
         onNavigateGallery={() => {
           try { window.history.pushState(null, '', '/gallery'); } catch (e) {}
           setCurrentView('gallery');
@@ -769,12 +764,6 @@ export default function App() {
           setCurrentView('home');
         }}
         siteSettings={siteSettings}
-      />
-
-      {/* Website Architecture & Full Report Modal */}
-      <SystemReportModal
-        isOpen={isSystemReportOpen}
-        onClose={() => setIsSystemReportOpen(false)}
       />
 
       {/* Admission Modal */}
