@@ -2019,40 +2019,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* Top Navigation & Brand Header */}
         <div className="bg-white rounded-3xl p-6 sm:p-7 border border-purple-100 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-[#3B0764] to-[#4A1D96] text-white flex items-center justify-center font-extrabold text-lg shadow-md tracking-wider">
-              ZRZ
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-[#4A1D96]">
+                Wits Lingo Academy Master Admin
+              </span>
+              <span className="text-xs text-slate-400">
+                Logged in as: <strong className="text-slate-700">{currentUser.name}</strong> ({currentUser.email})
+              </span>
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-[#4A1D96]">
-                  Wits Lingo Academy Master Admin
-                </span>
-                <span className="text-xs text-slate-400">
-                  Logged in as: <strong className="text-slate-700">{currentUser.name}</strong> ({currentUser.email})
-                </span>
-              </div>
-              <h1 className="font-['Outfit'] text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-                Website & Academy Control Dashboard
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Add, edit, change, or delete any function, course, batch, admission, class, recording, or setting.
-              </p>
-            </div>
+            <h1 className="font-['Outfit'] text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
+              Website & Academy Control Dashboard
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Add, edit, change, or delete any function, course, batch, admission, class, recording, or setting.
+            </p>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto justify-end">
-            {onOpenSystemReport && (
-              <button
-                onClick={onOpenSystemReport}
-                className="px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#4A1D96] text-xs font-bold transition-colors flex items-center gap-1.5 border border-purple-200 cursor-pointer"
-                title="Download full report of the website as PDF"
-              >
-                <FileText className="w-3.5 h-3.5 text-purple-700" />
-                <span>Website Report (PDF)</span>
-              </button>
-            )}
-
             {onBackToHome && (
               <button
                 onClick={onBackToHome}
