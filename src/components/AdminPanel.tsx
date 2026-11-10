@@ -2521,19 +2521,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </p>
 
                             {/* Metadata Pills: Duration & Format */}
-                            <div className="grid grid-cols-2 gap-2 py-2.5 border-y border-slate-100 text-xs text-slate-600">
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                                <div className="truncate">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 py-2.5 border-y border-slate-100 text-xs text-slate-600">
+                              <div className="flex items-start gap-1.5 min-w-0">
+                                <Clock className="w-3.5 h-3.5 text-purple-600 shrink-0 mt-0.5" />
+                                <div className="min-w-0 flex-1">
                                   <span className="text-[9px] text-slate-400 block uppercase font-semibold">Duration</span>
-                                  <span className="font-bold text-slate-800 truncate block text-[11px]">{course.duration}</span>
+                                  <span className="font-bold text-slate-800 block text-[11px] break-words whitespace-normal leading-snug">{course.duration}</span>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                <BookOpen className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                                <div className="truncate">
+                              <div className="flex items-start gap-1.5 min-w-0">
+                                <BookOpen className="w-3.5 h-3.5 text-purple-600 shrink-0 mt-0.5" />
+                                <div className="min-w-0 flex-1">
                                   <span className="text-[9px] text-slate-400 block uppercase font-semibold">Format</span>
-                                  <span className="font-bold text-slate-800 truncate block text-[11px]">{course.learningFormat}</span>
+                                  <span className="font-bold text-slate-800 block text-[11px] break-words whitespace-normal leading-snug">{course.learningFormat}</span>
                                 </div>
                               </div>
                             </div>

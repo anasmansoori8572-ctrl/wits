@@ -635,9 +635,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     key={mat.id}
                     className="p-3 rounded-xl bg-[#FAF9FC] border border-slate-100 flex items-center justify-between gap-3 text-xs"
                   >
-                    <div className="overflow-hidden">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <h5 className="font-bold text-slate-800 truncate">{mat.title}</h5>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                        <h5 className="font-bold text-slate-800 break-words">{mat.title}</h5>
                         {mat.allowDownload ? (
                           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 flex items-center gap-0.5 flex-shrink-0">
                             <Download className="w-2 h-2" />

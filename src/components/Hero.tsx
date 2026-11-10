@@ -360,10 +360,10 @@ export const Hero: React.FC<HeroProps> = ({
         </div>
 
         {/* Mascot Artwork with Floating Badges & Slogan (BELOW the buttons) */}
-        <div className="mt-8 sm:mt-11 relative w-full max-w-[300px] min-[375px]:max-w-[320px] sm:max-w-[400px] mx-auto flex items-center justify-center pb-12 select-none overflow-visible">
+        <div className="mt-8 sm:mt-11 relative w-full max-w-[280px] min-[375px]:max-w-[320px] sm:max-w-[400px] mx-auto flex items-center justify-center pb-12 select-none overflow-visible">
           
           {/* Circular Mascot Emblem */}
-          <div className="w-[200px] h-[200px] min-[375px]:w-[220px] min-[375px]:h-[220px] sm:w-[280px] sm:h-[280px] rounded-full overflow-hidden flex items-center justify-center shadow-xl shadow-purple-950/20 shrink-0">
+          <div className="w-[185px] h-[185px] min-[375px]:w-[220px] min-[375px]:h-[220px] sm:w-[280px] sm:h-[280px] rounded-full overflow-hidden flex items-center justify-center shadow-xl shadow-purple-950/20 shrink-0">
             <img
               src="/logo.svg"
               alt="Wits Mascot Emblem"

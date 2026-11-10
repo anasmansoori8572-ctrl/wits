@@ -54,11 +54,11 @@ export const TestimonialsSection: React.FC<TestimonialsSectionProps> = ({ testim
                   <div className="w-10 h-10 rounded-full bg-[#4A1D96] text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-2xs">
                     {item.studentName.split(' ').map(n => n[0]).join('')}
                   </div>
-                  <div className="overflow-hidden">
-                    <h4 className="font-bold text-sm text-[#1E1B26] truncate">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-sm text-[#1E1B26] break-words leading-snug">
                       {item.studentName}
                     </h4>
-                    <p className="text-[11px] text-purple-800 font-semibold truncate">
+                    <p className="text-[11px] text-purple-800 font-semibold break-words leading-snug">
                       {item.courseBatch}
                     </p>
                     {item.city && (

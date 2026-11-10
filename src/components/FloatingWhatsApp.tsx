@@ -191,7 +191,7 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({
           <div className="p-3.5 bg-[#EFEAE2] bg-opacity-75 space-y-3 overflow-y-auto max-h-[48vh]">
             {/* Business Verification Badge Pill */}
             <div className="text-center">
-              <span className="inline-block px-2.5 py-0.5 rounded-full bg-white/95 backdrop-blur-xs text-[10px] font-bold text-slate-500 shadow-2xs border border-slate-200/60 truncate max-w-full">
+              <span className="inline-block px-2.5 py-0.5 rounded-full bg-white/95 backdrop-blur-xs text-[10px] font-bold text-slate-500 shadow-2xs border border-slate-200/60 break-words whitespace-normal max-w-full">
                 Official WhatsApp Business • {WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}
               </span>
             </div>

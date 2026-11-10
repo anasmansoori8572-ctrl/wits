@@ -105,7 +105,7 @@ export const PhilosophySection: React.FC<{ onOpenAdmission: () => void }> = ({ o
                   </span>
                   {activeStep === idx && <Sparkles className="w-3 h-3 text-purple-200" />}
                 </div>
-                <p className="text-xs font-bold truncate">{step.title}</p>
+                <p className="text-xs font-bold leading-snug break-words">{step.title}</p>
               </button>
             ))}
           </div>

@@ -133,31 +133,31 @@ export const BatchesSection: React.FC<BatchesSectionProps> = ({
 
                     {/* Schedule & Timing Details */}
                     <div className="space-y-2.5 pt-2 text-xs text-slate-600 border-t border-slate-100">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-6 h-6 rounded-md bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="w-6 h-6 rounded-md bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
                           <Clock className="w-3.5 h-3.5" />
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1 break-words leading-relaxed">
                           <strong className="text-slate-800 font-semibold">Timing:</strong>{' '}
                           <span>{batch.scheduleTime || '07:30 PM - 08:30 PM IST (Mon-Fri)'}</span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-6 h-6 rounded-md bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="w-6 h-6 rounded-md bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
                           <Calendar className="w-3.5 h-3.5" />
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1 break-words leading-relaxed">
                           <strong className="text-slate-800 font-semibold">Start Date:</strong>{' '}
                           <span>{batch.startDate}</span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-6 h-6 rounded-md bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="w-6 h-6 rounded-md bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
                           <Users className="w-3.5 h-3.5" />
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1 break-words leading-relaxed">
                           <strong className="text-slate-800 font-semibold">Mentor:</strong>{' '}
                           <span>{batch.teacherName || siteSettings?.founderName || 'Ziyaur Rehman Zia'}</span>
                         </div>
@@ -166,7 +166,7 @@ export const BatchesSection: React.FC<BatchesSectionProps> = ({
 
                     {/* Capacity Progress & Enrollment Meter */}
                     <div className="pt-3 border-t border-slate-100 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
                         <span className="font-bold text-slate-700 flex items-center gap-1.5">
                           <span>Capacity Enrollment</span>
                         </span>

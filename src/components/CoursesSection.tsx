@@ -71,7 +71,7 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
             >
               {/* Card Header with Level & Badge */}
               <div className="p-5 sm:p-7 pb-4 space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-purple-50 text-[#4A1D96] border border-purple-100">
                     {course.level}
                   </span>
@@ -84,32 +84,32 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
                 </div>
 
                 <div>
-                  <h3 className="font-['Outfit'] text-xl font-bold text-[#1E1B26] group-hover:text-[#4A1D96] transition-colors leading-snug">
+                  <h3 className="font-['Outfit'] text-xl font-bold text-[#1E1B26] group-hover:text-[#4A1D96] transition-colors leading-snug break-words">
                     {course.name}
                   </h3>
-                  <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed break-words">
                     {course.shortDescription}
                   </p>
                 </div>
 
                 {/* Course Metadata (Duration & Learning Format) */}
-                <div className="grid grid-cols-2 gap-3 py-3.5 border-y border-slate-100 text-xs text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-3.5 border-y border-slate-100 text-xs text-slate-600">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
                       <Clock className="w-3.5 h-3.5" />
                     </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Duration</span>
-                      <span className="font-bold text-slate-800">{course.duration}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Duration</span>
+                      <span className="font-bold text-slate-800 text-xs leading-snug block break-words whitespace-normal">{course.duration}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
                       <BookOpen className="w-3.5 h-3.5" />
                     </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Format</span>
-                      <span className="font-bold text-slate-800 truncate block">{course.learningFormat.split('(')[0]}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Format</span>
+                      <span className="font-bold text-slate-800 text-xs leading-snug block break-words whitespace-normal">{course.learningFormat}</span>
                     </div>
                   </div>
                 </div>
@@ -123,7 +123,7 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
                     {course.whatYouWillLearn.map((item, i) => (
                       <li key={i} className="flex items-start text-xs text-slate-600 leading-relaxed">
                         <CheckCircle className="w-3.5 h-3.5 text-emerald-500 mr-2 flex-shrink-0 mt-0.5" />
-                        <span>{item}</span>
+                        <span className="break-words">{item}</span>
                       </li>
                     ))}
                   </ul>
@@ -131,7 +131,7 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
               </div>
 
               {/* Card Footer: Fee & Action */}
-              <div className="p-5 sm:p-7 pt-4 bg-slate-50/70 border-t border-slate-100 mt-auto flex items-center justify-between">
+              <div className="p-5 sm:p-7 pt-4 bg-slate-50/70 border-t border-slate-100 mt-auto flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">
                     Course Fee

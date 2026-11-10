@@ -471,22 +471,22 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
               {/* Duration & Learning Format Metadata */}
               {(currentCourse.duration || currentCourse.learningFormat) && (
-                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-purple-100 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-purple-100 text-xs">
                   {currentCourse.duration && (
-                    <div className="flex items-center gap-2 bg-white/80 p-2 rounded-xl border border-purple-100/80">
-                      <Clock className="w-3.5 h-3.5 text-[#4A1D96] shrink-0" />
-                      <div className="min-w-0">
-                        <span className="text-[10px] text-slate-400 block font-medium">Duration</span>
-                        <span className="font-bold text-slate-800 text-[11px] truncate block">{currentCourse.duration}</span>
+                    <div className="flex items-start gap-2 bg-white/80 p-2 rounded-xl border border-purple-100/80 min-w-0">
+                      <Clock className="w-3.5 h-3.5 text-[#4A1D96] shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Duration</span>
+                        <span className="font-bold text-slate-800 text-[11px] block break-words whitespace-normal leading-snug">{currentCourse.duration}</span>
                       </div>
                     </div>
                   )}
                   {currentCourse.learningFormat && (
-                    <div className="flex items-center gap-2 bg-white/80 p-2 rounded-xl border border-purple-100/80">
-                      <Video className="w-3.5 h-3.5 text-[#4A1D96] shrink-0" />
-                      <div className="min-w-0">
-                        <span className="text-[10px] text-slate-400 block font-medium">Format</span>
-                        <span className="font-bold text-slate-800 text-[11px] truncate block">{currentCourse.learningFormat}</span>
+                    <div className="flex items-start gap-2 bg-white/80 p-2 rounded-xl border border-purple-100/80 min-w-0">
+                      <Video className="w-3.5 h-3.5 text-[#4A1D96] shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] text-slate-400 block font-medium uppercase tracking-wider">Format</span>
+                        <span className="font-bold text-slate-800 text-[11px] block break-words whitespace-normal leading-snug">{currentCourse.learningFormat}</span>
                       </div>
                     </div>
                   )}

@@ -1324,17 +1324,17 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
                         </p>
 
                         {(selectedCourse.duration || selectedCourse.learningFormat) && (
-                          <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-700 pt-1 border-t border-purple-100">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-slate-700 pt-1 border-t border-purple-100">
                             {selectedCourse.duration && (
-                              <div className="bg-white/80 p-1.5 rounded-lg border border-purple-100/80">
-                                <span className="text-slate-400 block">Duration:</span>
-                                <span className="font-bold text-slate-800 text-[11px] truncate block">{selectedCourse.duration}</span>
+                              <div className="bg-white/80 p-1.5 rounded-lg border border-purple-100/80 min-w-0">
+                                <span className="text-slate-400 block uppercase font-semibold text-[9px]">Duration:</span>
+                                <span className="font-bold text-slate-800 text-[11px] block break-words whitespace-normal leading-snug">{selectedCourse.duration}</span>
                               </div>
                             )}
                             {selectedCourse.learningFormat && (
-                              <div className="bg-white/80 p-1.5 rounded-lg border border-purple-100/80">
-                                <span className="text-slate-400 block">Format:</span>
-                                <span className="font-bold text-slate-800 text-[11px] truncate block">{selectedCourse.learningFormat}</span>
+                              <div className="bg-white/80 p-1.5 rounded-lg border border-purple-100/80 min-w-0">
+                                <span className="text-slate-400 block uppercase font-semibold text-[9px]">Format:</span>
+                                <span className="font-bold text-slate-800 text-[11px] block break-words whitespace-normal leading-snug">{selectedCourse.learningFormat}</span>
                               </div>
                             )}
                           </div>
