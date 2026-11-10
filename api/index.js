@@ -3332,74 +3332,6 @@ var recordings = [
 ];
 var studyMaterials = [
   {
-    id: "mat-01",
-    batchId: "batch-spoken-oct-2026",
-    classId: "cls-se-01",
-    title: "Self-Introduction Master Guide & 10 Sample Scripts.pdf",
-    description: "Detailed breakdown of introducing yourself in interviews, meetings, and casual gatherings with audio phonetic hints.",
-    fileType: "pdf",
-    fileSize: "2.4 MB",
-    downloadUrl: "/api/files/download/mat-01",
-    pdfUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/preview",
-    isViewOnly: true,
-    allowDownload: false,
-    isVisibleOnWebsite: true,
-    category: "Guides & Scripts",
-    level: "All Levels",
-    uploadedAt: "10 Sept 2026"
-  },
-  {
-    id: "mat-02",
-    batchId: "batch-spoken-oct-2026",
-    classId: "cls-se-02",
-    title: "100 Daily Routine Sentence Cheat Sheet.pdf",
-    description: "Natural everyday expressions with Hindi translation and pronunciation guide.",
-    fileType: "pdf",
-    fileSize: "3.1 MB",
-    downloadUrl: "/api/files/download/mat-02",
-    pdfUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/preview",
-    isViewOnly: true,
-    allowDownload: false,
-    isVisibleOnWebsite: true,
-    category: "Worksheets",
-    level: "Beginner to Intermediate",
-    uploadedAt: "12 Sept 2026"
-  },
-  {
-    id: "mat-03",
-    batchId: "batch-spoken-oct-2026",
-    classId: "cls-se-04",
-    title: "Pronunciation & Tongue Position Handbook.pdf",
-    description: "Visual mouth diagrams for mastering challenging English consonant sounds.",
-    fileType: "pdf",
-    fileSize: "4.8 MB",
-    downloadUrl: "/api/files/download/mat-03",
-    pdfUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/preview",
-    isViewOnly: true,
-    allowDownload: false,
-    isVisibleOnWebsite: true,
-    category: "Pronunciation",
-    level: "All Levels",
-    uploadedAt: "16 Sept 2026"
-  },
-  {
-    id: "mat-fd-01",
-    batchId: "batch-foundation-oct-2026",
-    classId: "cls-fd-01",
-    title: "English Alphabet Phonics & Sound Chart.pdf",
-    description: "Foundational phonics workbook with practice exercises.",
-    fileType: "pdf",
-    fileSize: "1.9 MB",
-    downloadUrl: "/api/files/download/mat-fd-01",
-    pdfUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/preview",
-    isViewOnly: true,
-    allowDownload: false,
-    isVisibleOnWebsite: true,
-    category: "Foundation & Phonics",
-    level: "Beginner",
-    uploadedAt: "11 Sept 2026"
-  },
-  {
     id: "yt-01",
     resourceType: "youtube",
     batchId: "all",
@@ -4100,13 +4032,7 @@ function loadAllPersistedData() {
     if (fs6.existsSync(MATERIALS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs6.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
-          const existingIds = new Set(data.map((m) => m.id));
-          for (const m of studyMaterials) {
-            if (!existingIds.has(m.id)) {
-              data.push(m);
-            }
-          }
+        if (Array.isArray(data)) {
           for (const m of data) {
             if (m.resourceType === "youtube" || m.fileType === "youtube") {
               if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
@@ -4118,30 +4044,9 @@ function loadAllPersistedData() {
           studyMaterials.push(...data);
           materialsLoaded = true;
           console.log(`[Persistence] Loaded ${studyMaterials.length} study materials.`);
-          savePersistedMaterials();
         }
       } catch (e) {
         console.warn("[Persistence] Could not parse materials.json:", e);
-      }
-    }
-    if (!materialsLoaded) {
-      const legacyPath = path6.join(process.cwd(), "uploads", "study-materials.json");
-      if (fs6.existsSync(legacyPath)) {
-        try {
-          const data = JSON.parse(fs6.readFileSync(legacyPath, "utf-8"));
-          if (Array.isArray(data) && data.length > 0) {
-            for (const m of data) {
-              if (!m.downloadUrl || m.downloadUrl === "#") {
-                m.downloadUrl = `/api/files/download/${m.id}`;
-              }
-            }
-            studyMaterials.length = 0;
-            studyMaterials.push(...data);
-            console.log(`[Persistence] Seeded ${studyMaterials.length} study materials from legacy storage.`);
-            savePersistedMaterials();
-          }
-        } catch (e) {
-        }
       }
     }
     let galleryLoaded = false;

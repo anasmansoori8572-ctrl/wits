@@ -170,90 +170,6 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
     },
   ];
 
-  // 3. PDF Resources Data (Image 4)
-  const defaultResources: ResourceItem[] = [
-    {
-      id: 'res-1',
-      title: '500 Most Essential Spoken English Words with Real Sentences',
-      category: 'English Vocabulary',
-      description: 'High-frequency active vocabulary organized by themes with Urdu/Hindi context and natural example sentences.',
-      level: 'All Levels',
-      downloadCount: 1420,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-2',
-      title: '100 Daily Routine English Sentences for Natural Conversations',
-      category: 'Daily Sentences',
-      description: 'Morning to evening dialogue cheat sheet to eliminate hesitation when talking about your daily activities.',
-      level: 'Beginner',
-      downloadCount: 2310,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-3',
-      title: 'Tenses Made Practical: A Real-Life Usage Handbook',
-      category: 'Grammar Guides',
-      description: 'Visual flowchart of English tenses with timeline illustrations and common error corrections.',
-      level: 'Intermediate',
-      downloadCount: 980,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-4',
-      title: 'Self-Introduction & Interview Speaking Practice Dialogues',
-      category: 'Speaking Practice',
-      description: 'Sample introduction scripts for students, fresh graduates, job applicants, and professionals.',
-      level: 'Beginner to Advanced',
-      downloadCount: 1850,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-5',
-      title: 'Pronunciation & MTI Reduction Drill Worksheet #01',
-      category: 'Worksheets',
-      description: 'Practice exercises focusing on vowel length, tricky consonants (S/SH, V/W), and rhythm.',
-      level: 'All Levels',
-      downloadCount: 760,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-6',
-      title: 'Wits Lingo Spoken English Handbook (Volume 1)',
-      category: 'E-books',
-      description: 'Comprehensive 40-page guide authored by Ziyaur Rehman Zia for building speaking habit.',
-      level: 'Foundation',
-      downloadCount: 3100,
-      fileType: 'E-Book',
-      isViewOnly: true
-    },
-    {
-      id: 'res-7',
-      title: '7 Golden Habits to Think and Speak Without Translating',
-      category: 'Learning Tips',
-      description: 'Psychological and practical techniques to train your subconscious mind into English thinking mode.',
-      level: 'All Levels',
-      downloadCount: 1290,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-8',
-      title: 'Spoken English Level Diagnostic Assessment (50 Questions)',
-      category: 'Practice Tests',
-      description: 'Evaluate your current English level (Beginner, Intermediate, or Advanced) with answer key.',
-      level: 'All Levels',
-      downloadCount: 1640,
-      fileType: 'PDF',
-      isViewOnly: true
-    }
-  ];
-
   const mapStudyMaterialToResource = (m: StudyMaterial): ResourceItem => {
     let cat = m.category || 'Worksheets';
     if (!m.category) {
@@ -286,7 +202,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
   };
 
   const [backendMaterials, setBackendMaterials] = useState<StudyMaterial[]>(() => {
-    if (propMaterials && propMaterials.length > 0) return propMaterials;
+    if (propMaterials && Array.isArray(propMaterials)) return propMaterials;
     try {
       const saved = localStorage.getItem('wits_lingo_materials');
       if (saved) {
@@ -299,7 +215,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
 
   // Sync propMaterials when changed from parent
   useEffect(() => {
-    if (propMaterials && propMaterials.length > 0) {
+    if (propMaterials && Array.isArray(propMaterials)) {
       setBackendMaterials(propMaterials);
     }
   }, [propMaterials]);
@@ -344,22 +260,12 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
     };
   }, []);
 
-  // Merged PDF resources list: uploaded materials first (sorted by displayOrder), then default resources
+  // PDF resources list: single source of truth from Admin backend materials
   const resources: ResourceItem[] = React.useMemo(() => {
-    const visibleUploaded = backendMaterials
+    return backendMaterials
       .filter(m => (m.resourceType === 'pdf' || (!m.resourceType && !m.youtubeUrl)) && m.isVisibleOnWebsite !== false && m.isPublished !== false)
       .sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999))
       .map(mapStudyMaterialToResource);
-
-    const uploadedIds = new Set(visibleUploaded.map(r => r.id));
-    const uploadedTitles = new Set(visibleUploaded.map(r => r.title.toLowerCase().trim()));
-
-    // Filter defaults so we don't display duplicates if uploaded file has the same title
-    const remainingDefaults = defaultResources.filter(
-      def => !uploadedIds.has(def.id) && !uploadedTitles.has(def.title.toLowerCase().trim())
-    );
-
-    return [...visibleUploaded, ...remainingDefaults];
   }, [backendMaterials]);
 
   // Dynamic YouTube video lessons: purely generated from Admin-managed backendMaterials
@@ -785,7 +691,15 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
             </div>
 
             {/* Resources Grid */}
-            {filteredResources.length === 0 ? (
+            {resources.length === 0 ? (
+              <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-slate-200 p-8 space-y-3 shadow-xs">
+                <FileText className="w-12 h-12 text-purple-300 mx-auto" />
+                <p className="font-bold text-slate-800 text-base">No study materials available yet.</p>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Check back soon for new guides and worksheets.
+                </p>
+              </div>
+            ) : filteredResources.length === 0 ? (
               <div className="col-span-full py-12 text-center bg-white rounded-3xl border border-dashed border-slate-200 p-8 space-y-3 shadow-xs">
                 <FileText className="w-10 h-10 text-purple-300 mx-auto" />
                 <p className="font-bold text-slate-800 text-base">No study materials found</p>

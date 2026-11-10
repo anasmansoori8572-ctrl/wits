@@ -3140,9 +3140,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
                       Study Notes & PDFs Management
                     </h2>
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
-                      {pdfMaterials.length} PDF Guides
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
+                        {pdfMaterials.length} Total PDFs
+                      </span>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        {pdfMaterials.filter(m => m.isPublished !== false && m.isVisibleOnWebsite !== false).length} Published
+                      </span>
+                      {pdfMaterials.some(m => m.isPublished === false || m.isVisibleOnWebsite === false) && (
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                          {pdfMaterials.filter(m => m.isPublished === false || m.isVisibleOnWebsite === false).length} Draft / Hidden
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
                     Manage view-only PDF study guides, worksheets, and curriculum notes displayed in the Knowledge Bank.

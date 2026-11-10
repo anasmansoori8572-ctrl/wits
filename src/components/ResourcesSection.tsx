@@ -18,89 +18,6 @@ export const ResourcesSection: React.FC = () => {
     'Study Notes'
   ];
 
-  const defaultResources: ResourceItem[] = [
-    {
-      id: 'res-1',
-      title: '500 Most Essential Spoken English Words with Real Sentences',
-      category: 'English Vocabulary',
-      description: 'High-frequency active vocabulary organized by themes with Urdu/Hindi context and natural example sentences.',
-      level: 'All Levels',
-      downloadCount: 1420,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-2',
-      title: '100 Daily Routine English Sentences for Natural Conversations',
-      category: 'Daily Sentences',
-      description: 'Morning to evening dialogue cheat sheet to eliminate hesitation when talking about your daily activities.',
-      level: 'Beginner',
-      downloadCount: 2310,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-3',
-      title: 'Tenses Made Practical: A Real-Life Usage Handbook',
-      category: 'Grammar Guides',
-      description: 'Visual flowchart of English tenses with timeline illustrations and common error corrections.',
-      level: 'Intermediate',
-      downloadCount: 980,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-4',
-      title: 'Self-Introduction & Interview Speaking Practice Dialogues',
-      category: 'Speaking Practice',
-      description: 'Sample introduction scripts for students, fresh graduates, job applicants, and professionals.',
-      level: 'Beginner to Advanced',
-      downloadCount: 1850,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-5',
-      title: 'Pronunciation & MTI Reduction Drill Worksheet #01',
-      category: 'Worksheets',
-      description: 'Practice exercises focusing on vowel length, tricky consonants (S/SH, V/W), and rhythm.',
-      level: 'All Levels',
-      downloadCount: 760,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-6',
-      title: 'Wits Lingo Spoken English Handbook (Volume 1)',
-      category: 'E-books',
-      description: 'Comprehensive 40-page guide authored by Ziyaur Rehman Zia for building speaking habit.',
-      level: 'Foundation',
-      downloadCount: 3100,
-      fileType: 'E-Book',
-      isViewOnly: true
-    },
-    {
-      id: 'res-7',
-      title: '7 Golden Habits to Think and Speak Without Translating',
-      category: 'Learning Tips',
-      description: 'Psychological and practical techniques to train your subconscious mind into English thinking mode.',
-      level: 'All Levels',
-      downloadCount: 1290,
-      fileType: 'PDF',
-      isViewOnly: true
-    },
-    {
-      id: 'res-8',
-      title: 'Spoken English Level Diagnostic Assessment (50 Questions)',
-      category: 'Practice Tests',
-      description: 'Evaluate your current English level (Beginner, Intermediate, or Advanced) with answer key.',
-      level: 'All Levels',
-      downloadCount: 1640,
-      fileType: 'PDF',
-      isViewOnly: true
-    }
-  ];
-
   const [backendMaterials, setBackendMaterials] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('wits_lingo_materials');
@@ -134,8 +51,8 @@ export const ResourcesSection: React.FC = () => {
   }, []);
 
   const resources: ResourceItem[] = React.useMemo(() => {
-    const uploadedResources: ResourceItem[] = backendMaterials
-      .filter(m => m.isVisibleOnWebsite !== false)
+    return backendMaterials
+      .filter(m => (m.resourceType === 'pdf' || (!m.resourceType && !m.youtubeUrl)) && m.isVisibleOnWebsite !== false && m.isPublished !== false)
       .map(m => ({
         id: m.id,
         title: m.title,
@@ -151,10 +68,6 @@ export const ResourcesSection: React.FC = () => {
         batchId: m.batchId,
         uploadedDate: m.uploadedDate || m.uploadedAt
       }));
-
-    const uploadedIds = new Set(uploadedResources.map(r => r.id));
-    const remaining = defaultResources.filter(r => !uploadedIds.has(r.id));
-    return [...uploadedResources, ...remaining];
   }, [backendMaterials]);
 
   const filtered = resources.filter((item) => {
@@ -214,8 +127,27 @@ export const ResourcesSection: React.FC = () => {
         </div>
 
         {/* Resources Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {filtered.map((res) => (
+        {resources.length === 0 ? (
+          <div className="py-16 text-center bg-[#FAF9FC] rounded-3xl border border-dashed border-slate-200 p-8 space-y-3 shadow-xs">
+            <p className="font-bold text-slate-800 text-base">No study materials available yet.</p>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Check back soon for new guides and worksheets.
+            </p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center bg-[#FAF9FC] rounded-3xl border border-dashed border-slate-200 p-8 space-y-3 shadow-xs">
+            <p className="font-bold text-slate-800 text-base">No study materials found</p>
+            <button
+              type="button"
+              onClick={() => { setSelectedCategory('All'); setSearchQuery(''); }}
+              className="px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-[#4A1D96] font-bold text-xs transition-colors cursor-pointer"
+            >
+              Reset All Filters
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {filtered.map((res) => (
             <div
               key={res.id}
               className="bg-[#FAF9FC] hover:bg-white rounded-2xl p-5 border border-purple-100/90 hover:border-purple-300 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between group"
@@ -263,6 +195,7 @@ export const ResourcesSection: React.FC = () => {
             </div>
           ))}
         </div>
+        )}
 
         {/* Security & Copyright Notice Banner */}
         <div className="mt-12 text-center p-6 bg-purple-50/50 rounded-2xl border border-purple-100/70 max-w-2xl mx-auto space-y-1.5">
