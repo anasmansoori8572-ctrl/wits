@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CourseData, User } from '../types';
 import { WITS_LINGO_CONFIG } from '../config/witsLingoConfig';
+import { useScrollLock } from '../hooks/useScrollLock';
 import { 
   X, 
   ShieldCheck, 
@@ -51,6 +52,63 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [gatewayConfig, setGatewayConfig] = useState<{ configured: boolean; keyId: string | null; isTestMode: boolean } | null>(null);
+
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const formContainerRef = useRef<HTMLFormElement>(null);
+
+  // Lock background body scrolling completely while modal is open
+  useScrollLock(isOpen);
+
+  // Route mouse-wheel and touch gestures anywhere on the backdrop/overlay directly to the scrollable form
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const formEl = formContainerRef.current;
+      if (!formEl) return;
+
+      // If wheel occurred outside the scrollable form (e.g. over backdrop or header), scroll form
+      if (!formEl.contains(e.target as Node)) {
+        e.preventDefault();
+        formEl.scrollTop += e.deltaY;
+      }
+    };
+
+    let touchStartY = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches && e.touches[0]) {
+        touchStartY = e.touches[0].clientY;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const formEl = formContainerRef.current;
+      if (!formEl || !e.touches || !e.touches[0]) return;
+
+      if (!formEl.contains(e.target as Node)) {
+        e.preventDefault();
+        const currentTouchY = e.touches[0].clientY;
+        const deltaY = touchStartY - currentTouchY;
+        touchStartY = currentTouchY;
+        formEl.scrollTop += deltaY;
+      }
+    };
+
+    const overlayEl = overlayRef.current;
+    if (overlayEl) {
+      overlayEl.addEventListener('wheel', handleWheel, { passive: false });
+      overlayEl.addEventListener('touchstart', handleTouchStart, { passive: true });
+      overlayEl.addEventListener('touchmove', handleTouchMove, { passive: false });
+    }
+
+    return () => {
+      if (overlayEl) {
+        overlayEl.removeEventListener('wheel', handleWheel);
+        overlayEl.removeEventListener('touchstart', handleTouchStart);
+        overlayEl.removeEventListener('touchmove', handleTouchMove);
+      }
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -275,20 +333,32 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-fade-in">
-      <div className="relative bg-white rounded-3xl shadow-2xl max-w-xl w-full border border-slate-100 overflow-hidden">
+    <div 
+      ref={overlayRef}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 md:p-6 overscroll-none animate-fade-in"
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="relative bg-white rounded-3xl shadow-2xl max-w-xl w-full border border-slate-100 flex flex-col overflow-hidden max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2.5rem)] my-auto"
+      >
         
-        {/* Header */}
-        <div className="bg-gradient-to-r from-[#3B0764] via-[#4A1D96] to-[#6B21A8] text-white p-6 sm:p-7 relative">
+        {/* Header - Pinned at top, always visible and never cut off */}
+        <div className="bg-gradient-to-r from-[#3B0764] via-[#4A1D96] to-[#6B21A8] text-white p-5 sm:p-7 relative shrink-0 z-10 border-b border-purple-800/40">
           <button
+            type="button"
             onClick={onClose}
-            className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="absolute top-4 right-4 sm:top-5 sm:right-5 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <div className="flex items-center gap-2 mb-2 flex-wrap pr-10">
             <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-purple-100 text-[11px] font-bold uppercase tracking-wider">
               Express Enrolment
             </span>
@@ -323,8 +393,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </p>
         </div>
 
-        {/* Content Body */}
-        <form onSubmit={handlePayNow} className="p-6 sm:p-7 space-y-5">
+        {/* Content Body - Scrollable inside popup, never scrolling the background */}
+        <form 
+          ref={formContainerRef}
+          onSubmit={handlePayNow} 
+          className="p-5 sm:p-7 space-y-4 sm:space-y-5 flex-1 overflow-y-auto overscroll-contain touch-pan-y"
+        >
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-rose-600" />

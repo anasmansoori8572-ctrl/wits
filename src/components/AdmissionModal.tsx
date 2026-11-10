@@ -225,6 +225,58 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
     });
   }, [upiId, siteSettings?.academyName, feeAmount]);
 
+  const overlayRef = React.useRef<HTMLDivElement>(null);
+  const scrollBodyRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let touchStartY = 0;
+
+    const handleWheel = (e: WheelEvent) => {
+      const scrollEl = scrollBodyRef.current;
+      if (!scrollEl) return;
+      if (!scrollEl.contains(e.target as Node)) {
+        e.preventDefault();
+        scrollEl.scrollTop += e.deltaY;
+      }
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches && e.touches[0]) {
+        touchStartY = e.touches[0].clientY;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const scrollEl = scrollBodyRef.current;
+      if (!scrollEl || !e.touches || !e.touches[0]) return;
+
+      if (!scrollEl.contains(e.target as Node)) {
+        e.preventDefault();
+        const currentTouchY = e.touches[0].clientY;
+        const deltaY = touchStartY - currentTouchY;
+        touchStartY = currentTouchY;
+        scrollEl.scrollTop += deltaY;
+      }
+    };
+
+    const overlayEl = overlayRef.current;
+    if (overlayEl) {
+      overlayEl.addEventListener('wheel', handleWheel, { passive: false });
+      overlayEl.addEventListener('touchstart', handleTouchStart, { passive: true });
+      overlayEl.addEventListener('touchmove', handleTouchMove, { passive: false });
+    }
+
+    return () => {
+      if (overlayEl) {
+        overlayEl.removeEventListener('wheel', handleWheel);
+        overlayEl.removeEventListener('touchstart', handleTouchStart);
+        overlayEl.removeEventListener('touchmove', handleTouchMove);
+      }
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleCopy = (text: string, key: string) => {
@@ -593,12 +645,24 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain smooth-scroll-viewport">
-      <div className={`bg-white rounded-3xl ${confirmedSlip ? 'max-w-4xl' : 'max-w-2xl'} w-full shadow-2xl border border-purple-100 overflow-hidden my-auto animate-in zoom-in-95 overscroll-contain`}>
+    <div 
+      ref={overlayRef}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 overscroll-none animate-in fade-in"
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className={`bg-white rounded-3xl ${confirmedSlip ? 'max-w-4xl' : 'max-w-2xl'} w-full shadow-2xl border border-purple-100 flex flex-col overflow-hidden max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2.5rem)] my-auto animate-in zoom-in-95`}
+      >
         
-        {/* Modal Header */}
-        <div className="bg-gradient-to-r from-[#2E1065] via-[#4A1D96] to-[#3B0764] text-white p-4 sm:p-7 relative">
+        {/* Modal Header - Pinned, always visible and never clipped */}
+        <div className="bg-gradient-to-r from-[#2E1065] via-[#4A1D96] to-[#3B0764] text-white p-4 sm:p-7 relative shrink-0 z-10 border-b border-purple-800/40">
           <button
+            type="button"
             onClick={onClose}
             className="absolute top-4 right-4 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors cursor-pointer"
           >
@@ -643,8 +707,11 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
           )}
         </div>
 
-        {/* Modal Content */}
-        <div className="p-4 sm:p-7 max-h-[72vh] sm:max-h-[78vh] overflow-y-auto overscroll-contain smooth-scroll-viewport">
+        {/* Modal Content - Scrollable inside popup, never scrolling the background */}
+        <div 
+          ref={scrollBodyRef}
+          className="p-4 sm:p-7 flex-1 overflow-y-auto overscroll-contain touch-pan-y"
+        >
           
           {errorMsg && (
             <div className="p-3.5 mb-5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
