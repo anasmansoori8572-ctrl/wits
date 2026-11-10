@@ -68,12 +68,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   useEffect(() => {
     if (initialCourseId) {
       setSelectedCourseId(initialCourseId);
+    } else if (publishedCourses.length > 0 && !publishedCourses.some(c => c.id === selectedCourseId)) {
+      setSelectedCourseId(publishedCourses[0].id);
     }
-  }, [initialCourseId]);
+  }, [initialCourseId, courses]);
 
   if (!isOpen) return null;
 
-  const currentCourse = publishedCourses.find(c => c.id === selectedCourseId) || defaultCourse;
+  const currentCourse = publishedCourses.find(c => 
+    c.id === selectedCourseId || 
+    (selectedCourseId === 'course-communication' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
+    (selectedCourseId === 'course-communication-skills' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
+    (selectedCourseId === 'course-advanced' && (c.id === 'course-advanced-english' || c.id === 'course-advanced')) ||
+    (selectedCourseId === 'course-advanced-english' && (c.id === 'course-advanced-english' || c.id === 'course-advanced'))
+  ) || defaultCourse;
+
   const coursePrice = currentCourse ? Number(currentCourse.fee) : 1499;
   const discountAmount = appliedCoupon ? appliedCoupon.discount : 0;
   const finalPayable = Math.max(1, coursePrice - discountAmount);
@@ -287,6 +296,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <Lock className="w-3 h-3" />
               Secure Checkout
             </span>
+            {currentCourse?.level && (
+              <span className="px-2.5 py-0.5 rounded-full bg-purple-900/60 text-purple-200 text-[11px] font-bold border border-purple-400/30">
+                {currentCourse.level}
+              </span>
+            )}
+            {currentCourse?.badge && (
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-purple-950 text-[10px] font-extrabold uppercase tracking-wide flex items-center gap-1 shadow-sm">
+                <Sparkles className="w-3 h-3 text-amber-950" />
+                {currentCourse.badge}
+              </span>
+            )}
             {(gatewayConfig?.isTestMode || gatewayConfig?.keyId?.startsWith('rzp_test_')) && (
               <span className="px-2 py-0.5 rounded-full bg-amber-400 text-purple-950 text-[10px] font-extrabold uppercase tracking-wide flex items-center gap-1 shadow-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-purple-950 animate-pulse" />
@@ -299,7 +319,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             Enrol in {currentCourse?.name || 'Wits Lingo'}
           </h2>
           <p className="text-xs sm:text-sm text-purple-200 mt-1">
-            Instant admission, batch seat confirmation & WhatsApp joining instructions.
+            {currentCourse?.shortDescription || 'Instant admission, batch seat confirmation & WhatsApp joining instructions.'}
           </p>
         </div>
 
@@ -314,16 +334,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
           {/* Course Selection */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-              Selected Course
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Select Course <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[11px] font-bold text-[#4A1D96]">
+                ₹{coursePrice.toLocaleString()}
+              </span>
+            </div>
             <select
               value={selectedCourseId}
               onChange={(e) => {
                 setSelectedCourseId(e.target.value);
                 setAppliedCoupon(null);
               }}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4A1D96] bg-slate-50/50"
+              className="w-full px-4 py-2.5 rounded-xl border border-purple-200 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4A1D96] bg-purple-50/20 cursor-pointer shadow-2xs"
             >
               {publishedCourses.map(course => (
                 <option key={course.id} value={course.id}>
@@ -332,6 +357,86 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               ))}
             </select>
           </div>
+
+          {/* Dynamic Selected Course Details (Strictly updates per selected course, hiding all other courses) */}
+          {currentCourse && (
+            <div 
+              key={`selected-course-card-${currentCourse.id}`}
+              className="p-4 sm:p-4.5 rounded-2xl bg-gradient-to-br from-purple-50/90 via-purple-50/40 to-slate-50 border border-purple-200/90 shadow-2xs space-y-3 transition-all"
+            >
+              {/* Header: Title, Level & Price */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#4A1D96] text-white">
+                      {currentCourse.level}
+                    </span>
+                    {currentCourse.badge && (
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-600" />
+                        {currentCourse.badge}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-['Outfit'] font-bold text-base sm:text-lg text-[#1E1B26] leading-tight">
+                    {currentCourse.name}
+                  </h3>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Course Fee</span>
+                  <span className="font-['Outfit'] text-xl sm:text-2xl font-black text-[#3B0764]">
+                    ₹{coursePrice.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Course Description */}
+              <p className="text-xs text-slate-600 leading-relaxed font-normal">
+                {currentCourse.shortDescription}
+              </p>
+
+              {/* Duration & Learning Format Metadata */}
+              {(currentCourse.duration || currentCourse.learningFormat) && (
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-purple-100 text-xs">
+                  {currentCourse.duration && (
+                    <div className="flex items-center gap-2 bg-white/80 p-2 rounded-xl border border-purple-100/80">
+                      <Clock className="w-3.5 h-3.5 text-[#4A1D96] shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] text-slate-400 block font-medium">Duration</span>
+                        <span className="font-bold text-slate-800 text-[11px] truncate block">{currentCourse.duration}</span>
+                      </div>
+                    </div>
+                  )}
+                  {currentCourse.learningFormat && (
+                    <div className="flex items-center gap-2 bg-white/80 p-2 rounded-xl border border-purple-100/80">
+                      <Video className="w-3.5 h-3.5 text-[#4A1D96] shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] text-slate-400 block font-medium">Format</span>
+                        <span className="font-bold text-slate-800 text-[11px] truncate block">{currentCourse.learningFormat}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Course-Specific Highlights & Benefits */}
+              {currentCourse.whatYouWillLearn && currentCourse.whatYouWillLearn.length > 0 && (
+                <div className="pt-2 border-t border-purple-100 space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-950 block">
+                    What You Will Learn & Benefits:
+                  </span>
+                  <ul className="space-y-1.5">
+                    {currentCourse.whatYouWillLearn.map((benefit, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-xs text-slate-700">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                        <span className="leading-snug">{benefit}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Student Name */}
           <div>
@@ -435,7 +540,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* Pricing Summary Card */}
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-600">
-              <span>Standard Course Fee</span>
+              <span>Standard Course Fee ({currentCourse?.name || 'Selected Course'})</span>
               <span className="font-semibold text-slate-800">₹{coursePrice.toLocaleString()}</span>
             </div>
 
@@ -449,7 +554,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-900 block">Total Payable</span>
-                <span className="text-[11px] text-slate-500">Includes all live sessions & study materials</span>
+                <span className="text-[11px] text-slate-500">Includes live sessions, replays & study materials</span>
               </div>
               <div className="text-right">
                 <span className="font-['Outfit'] text-2xl font-black text-[#3B0764]">
@@ -493,7 +598,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             ) : (
               <>
                 <CreditCard className="w-4 h-4" />
-                <span>Pay ₹{finalPayable.toLocaleString()} Now & Start Learning</span>
+                <span>Pay ₹{finalPayable.toLocaleString()} for {currentCourse?.name || 'Selected Course'} & Start Learning</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

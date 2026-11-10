@@ -16,7 +16,7 @@ export const WITS_LINGO_CONFIG = {
   // Academy Metadata
   ACADEMY_NAME: 'Wits Lingo Academy',
   ACADEMY_TAGLINE: 'A Global Language Platform',
-  SUPPORT_EMAIL: 'witslingo@gmail.com',
+  SUPPORT_EMAIL: 'hello@witslingo.com',
   WEBSITE_URL: 'https://witslingo.com',
   FALLBACK_START_DATE: '1st of the upcoming month',
   DEFAULT_SCHEDULE_TIME: 'Monday, Wednesday & Friday (7:30 PM - 8:30 PM IST)'

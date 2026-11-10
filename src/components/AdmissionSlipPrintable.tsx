@@ -351,7 +351,7 @@ Verify Online: https://witslingo.com/verify/${data.admissionId}`;
                     Premier Institution for Spoken English, Fluency & Communication Excellence
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Amroha, Uttar Pradesh, India - 244221 • Helpline: +91 9876543210 • Email: admissions@witslingo.com
+                    Amroha, Uttar Pradesh, India - 244221 • Helpline: +91 9876543210 • Email: hello@witslingo.com
                   </p>
                 </div>
               </div>
@@ -578,7 +578,7 @@ Verify Online: https://witslingo.com/verify/${data.admissionId}`;
               <li>Live class links, syllabus, study PDFs, and assignments are unlocked inside your Student Dashboard.</li>
               <li>A minimum of 80% attendance in live sessions is required for Academy Certification.</li>
               <li>Official batch WhatsApp group link and calendar invites are sent to your registered contact numbers.</li>
-              <li>For any academic or technical support, contact helpline <strong>+91 9876543210</strong> or email <strong>support@witslingo.com</strong>.</li>
+              <li>For any academic or technical support, contact helpline <strong>+91 9876543210</strong> or email <strong>hello@witslingo.com</strong>.</li>
             </ul>
           </div>
 

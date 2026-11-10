@@ -59,7 +59,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
   };
 
   const academyName = siteSettings?.academyName || 'Wits Lingo Academy';
-  const supportEmail = siteSettings?.email || 'Witslingo@gmail.com';
+  const supportEmail = siteSettings?.email || 'hello@witslingo.com';
   const supportPhone1 = siteSettings?.phone1 || '+91 73109 52271';
   const supportPhone2 = siteSettings?.phone2 || '+91 90277 29917';
   const address = siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh - 244222, India';

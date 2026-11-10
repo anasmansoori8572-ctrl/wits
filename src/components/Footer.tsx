@@ -1,6 +1,8 @@
 import React from 'react';
 import { Logo } from './Logo';
-import { MessageCircle, Instagram, Facebook, Youtube, Mail, Phone, MapPin, ArrowUp, FileText, ShieldCheck, Lock, RotateCcw, Truck } from 'lucide-react';
+import { Instagram, Facebook, Youtube, Mail, Phone, MapPin, ArrowUp, FileText, Lock, RotateCcw, Truck } from 'lucide-react';
+import { WhatsAppIcon } from './FloatingWhatsApp';
+import { WITS_LINGO_CONFIG } from '../config/witsLingoConfig';
 import { SiteSettings } from '../types';
 import { PolicyTab } from './PolicyPages';
 
@@ -8,23 +10,79 @@ interface FooterProps {
   onOpenSystemReport?: () => void;
   onNavigateGallery?: () => void;
   onNavigatePolicy?: (tab: PolicyTab) => void;
+  onNavigateSection?: (sectionId: string) => void;
+  onNavigateHome?: () => void;
   siteSettings?: SiteSettings;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGallery, onNavigatePolicy, siteSettings }) => {
+export const Footer: React.FC<FooterProps> = ({ 
+  onOpenSystemReport, 
+  onNavigateGallery, 
+  onNavigatePolicy, 
+  onNavigateSection,
+  onNavigateHome,
+  siteSettings 
+}) => {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Policy & legal tabs handler
   const handlePolicyClick = (e: React.MouseEvent, tab: PolicyTab) => {
+    e.preventDefault();
     if (onNavigatePolicy) {
-      e.preventDefault();
       onNavigatePolicy(tab);
     }
   };
 
+  // Robust in-page section scrolling handler (works on homepage as well as cross-page from gallery/policy)
+  const handleSectionClick = (e: React.MouseEvent, targetId: string) => {
+    e.preventDefault();
+    if (onNavigateSection) {
+      onNavigateSection(targetId);
+      return;
+    }
+    const el = document.getElementById(targetId);
+    if (el) {
+      const navHeight = 80;
+      const bodyRect = document.body.getBoundingClientRect().top;
+      const elementRect = el.getBoundingClientRect().top;
+      const offsetPosition = elementRect - bodyRect - navHeight;
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+      try {
+        window.history.pushState(null, '', `#${targetId}`);
+      } catch (err) {}
+    } else if (onNavigateHome) {
+      onNavigateHome();
+      setTimeout(() => {
+        const delayedEl = document.getElementById(targetId);
+        if (delayedEl) {
+          const navHeight = 80;
+          const bodyRect = document.body.getBoundingClientRect().top;
+          const elementRect = delayedEl.getBoundingClientRect().top;
+          const offsetPosition = elementRect - bodyRect - navHeight;
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: 'smooth'
+          });
+        }
+      }, 120);
+    }
+  };
+
+  const phone1 = siteSettings?.phone1 || '+91 7310952271';
+  const phone2 = siteSettings?.phone2 || '+91 90277 29917';
+  const cleanPhone1 = phone1.replace(/\s+/g, '');
+  const cleanPhone2 = phone2.replace(/\s+/g, '');
+  const email = siteSettings?.email || 'hello@witslingo.com';
+  const address = siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh - 244222, India';
+  const mapQueryUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('Wits Lingo Academy ' + address)}`;
+
   return (
-    <footer className="bg-[#14101D] text-white pt-16 sm:pt-20 pb-12 border-t border-purple-950/60">
+    <footer className="bg-[#14101D] text-white pt-16 sm:pt-20 pb-12 border-t border-purple-950/60 relative z-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Main Footer Grid */}
@@ -42,13 +100,16 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
 
             <div className="flex items-center gap-2 pt-2">
               <a
-                href={siteSettings?.whatsappChannelUrl || "https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-emerald-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs"
-                title="WhatsApp Channel"
+                href={`https://wa.me/${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}?text=${encodeURIComponent("Hello Wits Lingo, I would like to know more about your English courses.")}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.dispatchEvent(new CustomEvent('wits_open_whatsapp_popup'));
+                }}
+                className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-[#25D366] text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs cursor-pointer group"
+                title="Chat on WhatsApp"
+                aria-label="Open WhatsApp Support Chat"
               >
-                <MessageCircle className="w-4 h-4" />
+                <WhatsAppIcon className="w-4.5 h-4.5 fill-current text-slate-300 group-hover:text-white transition-colors" />
               </a>
               <a
                 href={siteSettings?.instagramUrl || "https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA=="}
@@ -56,6 +117,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
                 rel="noopener noreferrer"
                 className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-pink-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs"
                 title="Instagram"
+                aria-label="Instagram"
               >
                 <Instagram className="w-4 h-4" />
               </a>
@@ -65,6 +127,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
                 rel="noopener noreferrer"
                 className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-blue-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs"
                 title="Facebook"
+                aria-label="Facebook"
               >
                 <Facebook className="w-4 h-4" />
               </a>
@@ -74,55 +137,74 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
                 rel="noopener noreferrer"
                 className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-red-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs"
                 title="YouTube"
+                aria-label="YouTube"
               >
                 <Youtube className="w-4 h-4" />
               </a>
             </div>
           </div>
 
-          {/* Quick Links */}
+          {/* Quick Links (Platform Section) */}
           <div className="space-y-3.5">
             <h4 className="text-xs font-bold uppercase tracking-widest text-purple-300 font-['Outfit']">
               Platform
             </h4>
-            <ul className="space-y-2.5 text-xs text-slate-400">
+            <ul className="space-y-2 text-xs text-slate-400">
               <li>
-                <a href="#courses" className="hover:text-white transition-colors">Courses & Batches</a>
+                <a 
+                  href="#courses" 
+                  onClick={(e) => handleSectionClick(e, 'courses')}
+                  className="hover:text-white transition-colors py-1 block cursor-pointer"
+                >
+                  Courses & Batches
+                </a>
               </li>
               <li>
                 <a 
-                  href="/about" 
-                  onClick={(e) => handlePolicyClick(e, 'about')}
-                  className="hover:text-white transition-colors"
+                  href="#about" 
+                  onClick={(e) => handleSectionClick(e, 'about')}
+                  className="hover:text-white transition-colors py-1 block cursor-pointer"
                 >
                   About Us
                 </a>
               </li>
               <li>
-                <a href="#philosophy" className="hover:text-white transition-colors">Learning Philosophy</a>
+                <a 
+                  href="#philosophy" 
+                  onClick={(e) => handleSectionClick(e, 'philosophy')}
+                  className="hover:text-white transition-colors py-1 block cursor-pointer"
+                >
+                  Learning Philosophy
+                </a>
               </li>
               <li>
-                <a href="#learning-resources" className="hover:text-white transition-colors">Study Resources</a>
+                <a 
+                  href="#learning-resources" 
+                  onClick={(e) => handleSectionClick(e, 'learning-resources')}
+                  className="hover:text-white transition-colors py-1 block cursor-pointer"
+                >
+                  Study Resources
+                </a>
               </li>
               <li>
                 <a 
                   href="/gallery" 
                   onClick={(e) => {
+                    e.preventDefault();
                     if (onNavigateGallery) {
-                      e.preventDefault();
                       onNavigateGallery();
                     }
                   }}
-                  className="hover:text-white transition-colors font-medium text-purple-200"
+                  className="hover:text-white transition-colors font-medium text-purple-200 py-1 block cursor-pointer"
                 >
                   Gallery & Moments
                 </a>
               </li>
               <li>
                 <a 
-                  href="/contact" 
-                  onClick={(e) => handlePolicyClick(e, 'contact')}
-                  className="hover:text-white transition-colors"
+                  href="#contact" 
+                  onClick={(e) => handleSectionClick(e, 'contact')}
+                  className="hover:text-white transition-colors py-1 block cursor-pointer"
                 >
                   Contact & Support
                 </a>
@@ -130,19 +212,19 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
             </ul>
           </div>
 
-          {/* Legal & Compliance (Mandatory for Razorpay Approval) */}
+          {/* Legal & Policy Section */}
           <div className="space-y-3.5">
             <h4 className="text-xs font-bold uppercase tracking-widest text-purple-300 font-['Outfit']">
               Legal & Policy
             </h4>
-            <ul className="space-y-2.5 text-xs text-slate-400">
+            <ul className="space-y-2 text-xs text-slate-400">
               <li>
                 <a 
                   href="/terms" 
                   onClick={(e) => handlePolicyClick(e, 'terms')}
-                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                  className="hover:text-white transition-colors flex items-center gap-1.5 py-1 cursor-pointer"
                 >
-                  <FileText className="w-3.5 h-3.5 text-purple-400/80" />
+                  <FileText className="w-3.5 h-3.5 text-purple-400/80 shrink-0" />
                   <span>Terms & Conditions</span>
                 </a>
               </li>
@@ -150,9 +232,9 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
                 <a 
                   href="/privacy" 
                   onClick={(e) => handlePolicyClick(e, 'privacy')}
-                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                  className="hover:text-white transition-colors flex items-center gap-1.5 py-1 cursor-pointer"
                 >
-                  <Lock className="w-3.5 h-3.5 text-purple-400/80" />
+                  <Lock className="w-3.5 h-3.5 text-purple-400/80 shrink-0" />
                   <span>Privacy Policy</span>
                 </a>
               </li>
@@ -160,9 +242,9 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
                 <a 
                   href="/refund-policy" 
                   onClick={(e) => handlePolicyClick(e, 'refund-policy')}
-                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                  className="hover:text-white transition-colors flex items-center gap-1.5 py-1 cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5 text-purple-400/80" />
+                  <RotateCcw className="w-3.5 h-3.5 text-purple-400/80 shrink-0" />
                   <span>Refund & Cancellation</span>
                 </a>
               </li>
@@ -170,9 +252,9 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
                 <a 
                   href="/shipping-policy" 
                   onClick={(e) => handlePolicyClick(e, 'shipping-policy')}
-                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                  className="hover:text-white transition-colors flex items-center gap-1.5 py-1 cursor-pointer"
                 >
-                  <Truck className="w-3.5 h-3.5 text-purple-400/80" />
+                  <Truck className="w-3.5 h-3.5 text-purple-400/80 shrink-0" />
                   <span>Shipping & Delivery</span>
                 </a>
               </li>
@@ -180,19 +262,20 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
                 <a 
                   href="/contact" 
                   onClick={(e) => handlePolicyClick(e, 'contact')}
-                  className="hover:text-white transition-colors flex items-center gap-1.5"
+                  className="hover:text-white transition-colors flex items-center gap-1.5 py-1 cursor-pointer"
                 >
-                  <Phone className="w-3.5 h-3.5 text-purple-400/80" />
+                  <Phone className="w-3.5 h-3.5 text-purple-400/80 shrink-0" />
                   <span>Grievance Redressal</span>
                 </a>
               </li>
               {onOpenSystemReport && (
-                <li className="pt-1">
+                <li className="pt-0.5">
                   <button
+                    type="button"
                     onClick={onOpenSystemReport}
-                    className="text-purple-300 hover:text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="text-purple-300 hover:text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer py-1"
                   >
-                    <FileText className="w-3.5 h-3.5" />
+                    <FileText className="w-3.5 h-3.5 shrink-0" />
                     <span>Website Report (PDF)</span>
                   </button>
                 </li>
@@ -200,7 +283,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
             </ul>
           </div>
 
-          {/* Institutional Contact */}
+          {/* Institutional Contact Section */}
           <div className="space-y-3.5">
             <h4 className="text-xs font-bold uppercase tracking-widest text-purple-300 font-['Outfit']">
               {siteSettings?.academyName || 'Wits Lingo Academy'}
@@ -208,18 +291,43 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
             <div className="space-y-2.5 text-xs text-slate-400">
               <p className="flex items-start gap-2">
                 <MapPin className="w-3.5 h-3.5 text-purple-400 flex-shrink-0 mt-0.5" />
-                <span>{siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh - 244222, India'}</span>
+                <a 
+                  href={mapQueryUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-white transition-colors hover:underline"
+                  title="Open location in Google Maps"
+                >
+                  {address}
+                </a>
               </p>
               <p className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-                <a href={`mailto:${siteSettings?.email || 'Witslingo@gmail.com'}`} className="hover:text-white">
-                  {siteSettings?.email || 'Witslingo@gmail.com'}
+                <a 
+                  href={`mailto:${email}`} 
+                  className="hover:text-white transition-colors hover:underline"
+                >
+                  {email}
                 </a>
               </p>
               <p className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-                <span>
-                  {siteSettings?.phone1 || '+91 7310952271'} {siteSettings?.phone2 ? `/ ${siteSettings.phone2}` : '/ 9027729917'}
+                <span className="flex items-center gap-1.5 flex-wrap">
+                  <a 
+                    href={`tel:${cleanPhone1}`} 
+                    className="hover:text-white transition-colors hover:underline"
+                    title={`Call ${phone1}`}
+                  >
+                    {phone1}
+                  </a>
+                  <span className="text-slate-600">/</span>
+                  <a 
+                    href={`tel:${cleanPhone2}`} 
+                    className="hover:text-white transition-colors hover:underline"
+                    title={`Call ${phone2}`}
+                  >
+                    {phone2}
+                  </a>
                 </span>
               </p>
               <p className="text-[11px] text-slate-500 pt-1">
@@ -230,86 +338,22 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGa
 
         </div>
 
-        {/* Razorpay Trust & Payment Badges Banner */}
-        <div className="py-6 border-b border-white/10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-white font-semibold text-xs font-['Outfit']">
-                100% Secure Payments Powered by Razorpay
-              </p>
-              <p className="text-[11px] text-slate-400">
-                RBI Authorized Payment Aggregator • 256-Bit SSL Encrypted • PCI-DSS Level 1 Certified
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center flex-wrap gap-2 text-[11px]">
-            <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-slate-300">UPI (GPay / PhonePe / Paytm)</span>
-            <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-slate-300">RuPay</span>
-            <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-slate-300">Visa / MasterCard</span>
-            <span className="px-2.5 py-1 rounded bg-white/5 border border-white/10 text-slate-300">Net Banking (50+ Banks)</span>
-          </div>
-        </div>
-
-        {/* Bottom Bar with Copyright & Back to Top */}
+        {/* Bottom Bar: Copyright & Scroll to Top */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>© {siteSettings?.academyName || 'WITS LINGO'}. All Rights Reserved. Operating in Amroha, Uttar Pradesh, India.</p>
-          
-          <div className="flex items-center flex-wrap gap-4 sm:gap-6">
-            <a 
-              href="/privacy" 
-              onClick={(e) => handlePolicyClick(e, 'privacy')}
-              className="hover:text-slate-300 transition-colors"
-            >
-              Privacy Policy
-            </a>
-            <a 
-              href="/terms" 
-              onClick={(e) => handlePolicyClick(e, 'terms')}
-              className="hover:text-slate-300 transition-colors"
-            >
-              Terms & Conditions
-            </a>
-            <a 
-              href="/refund-policy" 
-              onClick={(e) => handlePolicyClick(e, 'refund-policy')}
-              className="hover:text-slate-300 transition-colors"
-            >
-              Refund Policy
-            </a>
-            <a 
-              href="/shipping-policy" 
-              onClick={(e) => handlePolicyClick(e, 'shipping-policy')}
-              className="hover:text-slate-300 transition-colors"
-            >
-              Shipping Policy
-            </a>
-            
-            {onOpenSystemReport && (
-              <button
-                onClick={onOpenSystemReport}
-                className="flex items-center gap-1.5 text-purple-300 hover:text-white transition-colors bg-purple-900/40 hover:bg-purple-900/80 px-2.5 py-1 rounded-lg border border-purple-800/40 font-medium cursor-pointer"
-                title="Download Website Report (PDF)"
-              >
-                <FileText className="w-3.5 h-3.5 text-purple-400" />
-                <span>Website Report (PDF)</span>
-              </button>
-            )}
-
-            <button
-              onClick={scrollToTop}
-              className="flex items-center gap-1 text-purple-300 hover:text-white transition-colors cursor-pointer"
-            >
-              <span>Back to top</span>
-              <ArrowUp className="w-3 h-3" />
-            </button>
-          </div>
+          <p>© {new Date().getFullYear()} {siteSettings?.academyName || 'WITS LINGO'}. All rights reserved.</p>
+          <button
+            type="button"
+            onClick={scrollToTop}
+            className="flex items-center gap-1.5 text-purple-400 hover:text-purple-300 font-medium transition-colors cursor-pointer group py-1"
+          >
+            <span>Back to top</span>
+            <ArrowUp className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" />
+          </button>
         </div>
 
       </div>
     </footer>
   );
 };
+
+export default Footer;

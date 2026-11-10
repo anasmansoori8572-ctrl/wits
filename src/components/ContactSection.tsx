@@ -21,7 +21,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ siteSettings }) 
 
   const phone1 = siteSettings?.phone1 || '+91 7310952271';
   const phone2 = siteSettings?.phone2 || WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER;
-  const email = siteSettings?.email || 'Witslingo@gmail.com';
+  const email = siteSettings?.email || 'hello@witslingo.com';
   const address = siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh, India';
   const academyName = siteSettings?.academyName || 'WITS LINGO';
   const tagline = siteSettings?.tagline || 'A Global Language Platform';

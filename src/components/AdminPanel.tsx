@@ -366,7 +366,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   });
 
   // Local site settings copy for CMS editing
-  const [localSettings, setLocalSettings] = useState<SiteSettings>({ ...siteSettings });
+  const [localSettings, setLocalSettings] = useState<SiteSettings>(() => {
+    const s = { ...siteSettings };
+    if (!s.email || s.email.toLowerCase() === 'witslingo@gmail.com' || s.email.toLowerCase() === 'admissions@witslingo.com' || s.email.toLowerCase() === 'support@witslingo.com') {
+      s.email = 'hello@witslingo.com';
+    }
+    return s;
+  });
+
+  useEffect(() => {
+    if (siteSettings) {
+      setLocalSettings(prev => ({
+        ...prev,
+        ...siteSettings,
+        email: (!siteSettings.email || siteSettings.email.toLowerCase() === 'witslingo@gmail.com' || siteSettings.email.toLowerCase() === 'admissions@witslingo.com' || siteSettings.email.toLowerCase() === 'support@witslingo.com') ? 'hello@witslingo.com' : siteSettings.email
+      }));
+    }
+  }, [siteSettings]);
 
   // YouTube Channel URL & Management states
   const [youtubeChannelUrl, setYoutubeChannelUrl] = useState<string>(() => {

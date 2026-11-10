@@ -1421,7 +1421,7 @@ var WITS_LINGO_CONFIG = {
   // Academy Metadata
   ACADEMY_NAME: "Wits Lingo Academy",
   ACADEMY_TAGLINE: "A Global Language Platform",
-  SUPPORT_EMAIL: "witslingo@gmail.com",
+  SUPPORT_EMAIL: "hello@witslingo.com",
   WEBSITE_URL: "https://witslingo.com",
   FALLBACK_START_DATE: "1st of the upcoming month",
   DEFAULT_SCHEDULE_TIME: "Monday, Wednesday & Friday (7:30 PM - 8:30 PM IST)"
@@ -1839,7 +1839,7 @@ Please ensure you are logged in with your registered email before joining the cl
     category: "refund",
     title: "Refund & Cancellation Policy",
     keywords: ["refund", "money back", "cancel", "cancellation", "wapas", "return"],
-    content: "Wits Lingo offers a 100% money-back guarantee within the first 7 days of batch commencement if you are not fully satisfied with the teaching quality. To initiate a refund, simply request support here or email witslingo@gmail.com with your transaction ID.",
+    content: "Wits Lingo offers a 100% money-back guarantee within the first 7 days of batch commencement if you are not fully satisfied with the teaching quality. To initiate a refund, simply request support here or email hello@witslingo.com with your transaction ID.",
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   },
   {

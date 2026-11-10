@@ -178,7 +178,13 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
   const [confirmedSlip, setConfirmedSlip] = useState<AdmissionSlipData | null>(null);
   const [copiedSlipMsg, setCopiedSlipMsg] = useState(false);
 
-  const selectedCourse = courses.find(c => c.id === formData.courseId) || courses[0];
+  const selectedCourse = courses.find(c => 
+    c.id === formData.courseId || 
+    (formData.courseId === 'course-communication' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
+    (formData.courseId === 'course-communication-skills' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
+    (formData.courseId === 'course-advanced' && (c.id === 'course-advanced-english' || c.id === 'course-advanced')) ||
+    (formData.courseId === 'course-advanced-english' && (c.id === 'course-advanced-english' || c.id === 'course-advanced'))
+  ) || courses[0];
   const selectedBatch = batches.find(b => b.id === formData.batchId) || batches[0];
   const feeAmount = selectedCourse ? selectedCourse.fee : 1499;
 
@@ -1198,15 +1204,22 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
 
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
-                        Choose Course *
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-slate-700 block">
+                          Choose Course *
+                        </label>
+                        {selectedCourse && (
+                          <span className="text-[11px] font-bold text-[#4A1D96]">
+                            ₹{selectedCourse.fee.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
                       <select
                         value={formData.courseId}
                         onChange={(e) => {
                           setFormData({ ...formData, courseId: e.target.value });
                         }}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 focus:outline-hidden focus:border-[#4A1D96]"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-purple-200 text-xs font-medium text-slate-900 focus:outline-hidden focus:border-[#4A1D96] bg-purple-50/20"
                       >
                         {courses.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -1215,6 +1228,68 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
                         ))}
                       </select>
                     </div>
+
+                    {/* Dynamic Selected Course Details Card (Strictly isolated to selected course) */}
+                    {selectedCourse && (
+                      <div 
+                        key={`adm-course-card-${selectedCourse.id}`}
+                        className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-50/90 via-purple-50/30 to-slate-50 border border-purple-200/90 shadow-2xs space-y-2.5 animate-fade-in"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#4A1D96] text-white">
+                              {selectedCourse.level}
+                            </span>
+                            <h4 className="font-['Outfit'] font-bold text-sm text-[#1E1B26] mt-1">
+                              {selectedCourse.name}
+                            </h4>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Fee</span>
+                            <span className="font-['Outfit'] font-black text-base text-[#3B0764]">
+                              ₹{selectedCourse.fee.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                          {selectedCourse.shortDescription}
+                        </p>
+
+                        {(selectedCourse.duration || selectedCourse.learningFormat) && (
+                          <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-700 pt-1 border-t border-purple-100">
+                            {selectedCourse.duration && (
+                              <div className="bg-white/80 p-1.5 rounded-lg border border-purple-100/80">
+                                <span className="text-slate-400 block">Duration:</span>
+                                <span className="font-bold text-slate-800 text-[11px] truncate block">{selectedCourse.duration}</span>
+                              </div>
+                            )}
+                            {selectedCourse.learningFormat && (
+                              <div className="bg-white/80 p-1.5 rounded-lg border border-purple-100/80">
+                                <span className="text-slate-400 block">Format:</span>
+                                <span className="font-bold text-slate-800 text-[11px] truncate block">{selectedCourse.learningFormat}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {selectedCourse.whatYouWillLearn && selectedCourse.whatYouWillLearn.length > 0 && (
+                          <div className="pt-1.5 border-t border-purple-100 space-y-1">
+                            <span className="text-[10px] font-bold text-purple-950 uppercase tracking-wider block">
+                              What You Will Learn & Benefits:
+                            </span>
+                            <ul className="space-y-1">
+                              {selectedCourse.whatYouWillLearn.map((point, idx) => (
+                                <li key={idx} className="flex items-start gap-1.5 text-[11px] text-slate-700 leading-snug">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                  <span>{point}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div>
                       <label className="text-xs font-bold text-slate-700 block mb-1">

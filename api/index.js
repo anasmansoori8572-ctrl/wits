@@ -16,7 +16,7 @@ var WITS_LINGO_CONFIG = {
   // Academy Metadata
   ACADEMY_NAME: "Wits Lingo Academy",
   ACADEMY_TAGLINE: "A Global Language Platform",
-  SUPPORT_EMAIL: "witslingo@gmail.com",
+  SUPPORT_EMAIL: "hello@witslingo.com",
   WEBSITE_URL: "https://witslingo.com",
   FALLBACK_START_DATE: "1st of the upcoming month",
   DEFAULT_SCHEDULE_TIME: "Monday, Wednesday & Friday (7:30 PM - 8:30 PM IST)"
@@ -1844,7 +1844,7 @@ Please ensure you are logged in with your registered email before joining the cl
     category: "refund",
     title: "Refund & Cancellation Policy",
     keywords: ["refund", "money back", "cancel", "cancellation", "wapas", "return"],
-    content: "Wits Lingo offers a 100% money-back guarantee within the first 7 days of batch commencement if you are not fully satisfied with the teaching quality. To initiate a refund, simply request support here or email witslingo@gmail.com with your transaction ID.",
+    content: "Wits Lingo offers a 100% money-back guarantee within the first 7 days of batch commencement if you are not fully satisfied with the teaching quality. To initiate a refund, simply request support here or email hello@witslingo.com with your transaction ID.",
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   },
   {
@@ -3649,7 +3649,7 @@ var cmsContent = {
     youtubeUrl: "https://www.youtube.com/@witslingoeng"
   },
   phoneNumbers: ["7310952271", "9027729917"],
-  email: "Witslingo@gmail.com",
+  email: "hello@witslingo.com",
   location: "Wits Lingo Academy, Dhakka, Amroha, Uttar Pradesh, India",
   whatsappChannel: "https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k",
   instagram: "https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA==",
@@ -4082,6 +4082,9 @@ function loadAllPersistedData() {
             ...data.settings || {}
           }
         };
+        if (!cmsContent.email || cmsContent.email.toLowerCase() === "witslingo@gmail.com" || cmsContent.email.toLowerCase() === "admissions@witslingo.com" || cmsContent.email.toLowerCase() === "support@witslingo.com") {
+          cmsContent.email = "hello@witslingo.com";
+        }
         console.log(`[Persistence] Loaded custom CMS content & settings.`);
       }
     }
@@ -5743,7 +5746,9 @@ app.post("/api/orders/create", async (req, res) => {
     if (!courseId) {
       return res.status(400).json({ success: false, error: "Please select a course to continue." });
     }
-    const foundCourse = (cmsContent.courses || []).find((c) => c.id === courseId) || cmsContent.courses?.[0];
+    const foundCourse = (cmsContent.courses || []).find(
+      (c) => c.id === courseId || courseId === "course-communication" && (c.id === "course-communication-skills" || c.id === "course-communication") || courseId === "course-communication-skills" && (c.id === "course-communication-skills" || c.id === "course-communication") || courseId === "course-advanced" && (c.id === "course-advanced-english" || c.id === "course-advanced") || courseId === "course-advanced-english" && (c.id === "course-advanced-english" || c.id === "course-advanced") || c.name && courseId && c.name.toLowerCase().trim() === courseId.toLowerCase().trim()
+    ) || (cmsContent.courses || []).find((c) => c.id === courseId);
     if (!foundCourse) {
       return res.status(404).json({ success: false, error: "Selected course was not found." });
     }

@@ -1489,7 +1489,7 @@ let cmsContent: any = {
     youtubeUrl: "https://www.youtube.com/@witslingoeng"
   },
   phoneNumbers: ["7310952271", "9027729917"],
-  email: "Witslingo@gmail.com",
+  email: "hello@witslingo.com",
   location: "Wits Lingo Academy, Dhakka, Amroha, Uttar Pradesh, India",
   whatsappChannel: "https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k",
   instagram: "https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA==",
@@ -1952,6 +1952,9 @@ function loadAllPersistedData(): void {
             ...(data.settings || {})
           }
         };
+        if (!cmsContent.email || cmsContent.email.toLowerCase() === 'witslingo@gmail.com' || cmsContent.email.toLowerCase() === 'admissions@witslingo.com' || cmsContent.email.toLowerCase() === 'support@witslingo.com') {
+          cmsContent.email = "hello@witslingo.com";
+        }
         console.log(`[Persistence] Loaded custom CMS content & settings.`);
       }
     }
@@ -3976,8 +3979,14 @@ www.witslingo.com`;
       }
 
       // Determine price strictly on server side from trusted course records
-      const foundCourse = (cmsContent.courses || []).find((c: any) => c.id === courseId) ||
-        (cmsContent.courses?.[0]);
+      const foundCourse = (cmsContent.courses || []).find((c: any) => 
+        c.id === courseId ||
+        (courseId === 'course-communication' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
+        (courseId === 'course-communication-skills' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
+        (courseId === 'course-advanced' && (c.id === 'course-advanced-english' || c.id === 'course-advanced')) ||
+        (courseId === 'course-advanced-english' && (c.id === 'course-advanced-english' || c.id === 'course-advanced')) ||
+        (c.name && courseId && c.name.toLowerCase().trim() === courseId.toLowerCase().trim())
+      ) || (cmsContent.courses || []).find((c: any) => c.id === courseId);
 
       if (!foundCourse) {
         return res.status(404).json({ success: false, error: "Selected course was not found." });

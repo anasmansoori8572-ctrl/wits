@@ -742,7 +742,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               </div>
               <div className="pt-2 border-t border-white/10 text-[11px] text-purple-200 space-y-1">
                 <p>Support WhatsApp: +91 7310952271</p>
-                <p>Email: Witslingo@gmail.com</p>
+                <p>Email: hello@witslingo.com</p>
               </div>
             </div>
 

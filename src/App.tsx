@@ -8,6 +8,7 @@ import { Hero } from './components/Hero';
 import { AboutSection } from './components/AboutSection';
 import { StatsSection } from './components/StatsSection';
 import { WhatWeTeach } from './components/WhatWeTeach';
+import { PhilosophySection } from './components/PhilosophySection';
 import { CoursesSection } from './components/CoursesSection';
 import { BatchesSection } from './components/BatchesSection';
 import { LearningResources } from './components/LearningResources';
@@ -209,6 +210,9 @@ export default function App() {
         if (!merged.youtubeUrl || merged.youtubeUrl.includes('@witslingo') && !merged.youtubeUrl.includes('@witslingoeng')) {
           merged.youtubeUrl = 'https://youtube.com/@witslingoeng';
         }
+        if (!merged.email || merged.email.toLowerCase() === 'witslingo@gmail.com' || merged.email.toLowerCase() === 'admissions@witslingo.com' || merged.email.toLowerCase() === 'support@witslingo.com') {
+          merged.email = 'hello@witslingo.com';
+        }
         return merged;
       }
     } catch (e) {}
@@ -386,11 +390,17 @@ export default function App() {
     fetch('/api/cms/content')
       .then(res => res.json())
       .then(data => {
-        if (data?.content?.settings) {
+        if (data?.content) {
           setSiteSettings(prev => {
-            const merged = { ...prev, ...data.content.settings };
+            const incomingEmail = data.content.email || data.content.settings?.email;
+            const merged = { ...prev, ...(data.content.settings || {}) };
+            if (incomingEmail && incomingEmail.toLowerCase() !== 'witslingo@gmail.com' && incomingEmail.toLowerCase() !== 'admissions@witslingo.com' && incomingEmail.toLowerCase() !== 'support@witslingo.com') {
+              merged.email = incomingEmail;
+            } else {
+              merged.email = 'hello@witslingo.com';
+            }
             localStorage.setItem('wits_lingo_site_settings', JSON.stringify(merged));
-            if (data.content.settings.logoUrl) {
+            if (data.content.settings?.logoUrl) {
               window.dispatchEvent(new CustomEvent('wits_lingo_logo_updated', {
                 detail: {
                   logoUrl: data.content.settings.logoUrl,
@@ -516,6 +526,38 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Handle In-Page Section Navigation (supported from any view: Home, Gallery, Policy, etc.)
+  const handleNavigateSection = (targetId: string) => {
+    const scrollToTarget = () => {
+      const el = document.getElementById(targetId);
+      if (el) {
+        const navHeight = 80;
+        const bodyRect = document.body.getBoundingClientRect().top;
+        const elementRect = el.getBoundingClientRect().top;
+        const offsetPosition = elementRect - bodyRect - navHeight;
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    if (currentView !== 'home') {
+      try {
+        window.history.pushState(null, '', `/#${targetId}`);
+      } catch (e) {}
+      setCurrentView('home');
+      setTimeout(() => {
+        scrollToTarget();
+      }, 120);
+    } else {
+      try {
+        window.history.pushState(null, '', `#${targetId}`);
+      } catch (e) {}
+      scrollToTarget();
+    }
+  };
+
   // Open Admission Modal
   const handleOpenAdmission = (courseId?: string, batchId?: string) => {
     setSelectedCourseForAdmission(courseId || courses[1]?.id || courses[0]?.id);
@@ -564,7 +606,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-['Plus_Jakarta_Sans'] selection:bg-purple-100 selection:text-purple-900">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden relative bg-white text-slate-900 font-['Plus_Jakarta_Sans'] selection:bg-purple-100 selection:text-purple-900">
       
       {/* Universal Top Navigation Bar */}
       <Navbar
@@ -692,6 +734,9 @@ export default function App() {
           {/* 5. What We Teach: 6 Curriculum Cards (Informational Only) */}
           <WhatWeTeach />
 
+          {/* 6. Learning Philosophy: 5 Steps Progression */}
+          <PhilosophySection onOpenAdmission={() => handleOpenAdmission()} />
+
           {/* 7. Learning Resources (Combined Learn & Resources Hub in an Optimized Layout) */}
           <LearningResources
             siteSettings={siteSettings}
@@ -725,6 +770,11 @@ export default function App() {
           setCurrentView('gallery');
         }}
         onNavigatePolicy={handleNavigatePolicy}
+        onNavigateSection={handleNavigateSection}
+        onNavigateHome={() => {
+          try { window.history.pushState(null, '', '/'); } catch (e) {}
+          setCurrentView('home');
+        }}
         siteSettings={siteSettings}
       />
 

@@ -119,7 +119,7 @@ export const DEFAULT_KNOWLEDGE_BASE: KnowledgeItem[] = [
     category: 'refund',
     title: 'Refund & Cancellation Policy',
     keywords: ['refund', 'money back', 'cancel', 'cancellation', 'wapas', 'return'],
-    content: 'Wits Lingo offers a 100% money-back guarantee within the first 7 days of batch commencement if you are not fully satisfied with the teaching quality. To initiate a refund, simply request support here or email witslingo@gmail.com with your transaction ID.',
+    content: 'Wits Lingo offers a 100% money-back guarantee within the first 7 days of batch commencement if you are not fully satisfied with the teaching quality. To initiate a refund, simply request support here or email hello@witslingo.com with your transaction ID.',
     updatedAt: new Date().toISOString()
   },
   {

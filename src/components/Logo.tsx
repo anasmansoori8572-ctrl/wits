@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
-  variant?: 'light' | 'dark';
+  variant?: 'light' | 'dark' | 'serif' | 'brand-serif';
   showTagline?: boolean;
   className?: string;
   iconOnly?: boolean;
@@ -100,16 +100,22 @@ export const Logo: React.FC<LogoProps> = ({
 
       {!iconOnly && (
         <div className="flex flex-col min-w-0 justify-center">
-          <div className="flex items-center gap-1.5 leading-none">
-            <span
-              className={`${textSizes[size]} font-extrabold tracking-tight font-['Outfit'] uppercase ${
-                isLight ? 'text-white' : 'text-[#1E1B26]'
-              }`}
-            >
-              WITS <span className={isLight ? 'text-purple-300' : 'text-[#581C87]'}>LINGO</span>
+          {variant === 'serif' || variant === 'brand-serif' ? (
+            <span className="text-xl sm:text-2xl font-bold font-['Playfair_Display',Georgia,serif] tracking-tight text-[#1E123B] leading-none">
+              Wits Lingo
             </span>
-          </div>
-          {showTagline && (
+          ) : (
+            <div className="flex items-center gap-1.5 leading-none">
+              <span
+                className={`${textSizes[size]} font-extrabold tracking-tight font-['Outfit'] uppercase ${
+                  isLight ? 'text-white' : 'text-[#1E1B26]'
+                }`}
+              >
+                WITS <span className={isLight ? 'text-purple-300' : 'text-[#581C87]'}>LINGO</span>
+              </span>
+            </div>
+          )}
+          {showTagline && variant !== 'serif' && variant !== 'brand-serif' && (
             <span
               className={`${taglineSizes[size]} font-medium tracking-tight sm:tracking-wide mt-0.5 whitespace-nowrap leading-tight ${
                 isLight ? 'text-purple-200/90' : 'text-slate-500'
