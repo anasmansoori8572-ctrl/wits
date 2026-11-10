@@ -45,16 +45,9 @@ function parseAdminSubroute(path: string, hash: string): AdminTabType | undefine
   if (sub === 'resources' || sub === 'materials' || sub === 'notes' || sub === 'pdfs') return 'materials';
   if (sub === 'youtube' || sub === 'youtube-lessons' || sub === 'video-lessons' || sub === 'videos') return 'youtube-lessons';
   if (sub === 'gallery') return 'gallery';
-  if (sub === 'hero-video' || sub === 'video') return 'hero-video';
-  if (sub === 'classes') return 'classes';
-  if (sub === 'recordings') return 'recordings';
   if (sub === 'testimonials' || sub === 'reviews') return 'testimonials';
   if (sub === 'announcements' || sub === 'notices') return 'announcements';
   if (sub === 'settings' || sub === 'logo' || sub === 'cms') return 'settings';
-  if (sub === 'orders' || sub === 'payments' || sub === 'orders-payments') return 'orders-payments';
-  if (sub === 'whatsapp' || sub === 'notifications' || sub === 'whatsapp-notifications') return 'whatsapp-notifications';
-  if (sub === 'tickets' || sub === 'support' || sub === 'support-tickets') return 'support-tickets';
-  if (sub === 'knowledge' || sub === 'knowledge-base' || sub === 'faqs' || sub === 'faq') return 'knowledge-base';
   return undefined;
 }
 

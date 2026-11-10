@@ -71,10 +71,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   initialTab,
   onTabChange
 }) => {
-  const [activeTab, setActiveTab] = useState<AdminTabType>(initialTab || 'students');
+  const validTabs: AdminTabType[] = [
+    'students', 'courses', 'batches', 'materials', 
+    'youtube-lessons', 'gallery', 'testimonials', 'announcements', 'settings'
+  ];
+  const initialActive = initialTab && validTabs.includes(initialTab) ? initialTab : 'students';
+  const [activeTab, setActiveTab] = useState<AdminTabType>(initialActive);
 
   useEffect(() => {
-    if (initialTab && initialTab !== activeTab) {
+    if (initialTab && initialTab !== activeTab && validTabs.includes(initialTab)) {
       setActiveTab(initialTab);
     }
   }, [initialTab]);
@@ -2065,15 +2070,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             { id: 'students', label: `Admissions & Students (${students.length})`, icon: Users },
             { id: 'courses', label: `Courses & Pricing (${courses.length})`, icon: Layers },
             { id: 'batches', label: `Batches & Capacity (${batches.length})`, icon: RefreshCw },
-            { id: 'orders-payments', label: 'Orders & Payments', icon: CreditCard },
-            { id: 'whatsapp-notifications', label: 'WhatsApp Logs', icon: MessageSquare },
-            { id: 'support-tickets', label: 'Support Tickets & AI', icon: AlertCircle },
-            { id: 'knowledge-base', label: 'AI Knowledge & FAQs', icon: BookOpen },
-            { id: 'classes', label: 'Live Classes Scheduler', icon: Video },
-            { id: 'recordings', label: 'Class Recordings', icon: Play },
             { id: 'materials', label: `Study Notes & PDFs (${materials.filter(m => m.resourceType !== 'youtube' && m.fileType !== 'youtube').length})`, icon: FileText },
             { id: 'youtube-lessons', label: `Video Lessons / YouTube (${materials.filter(m => m.resourceType === 'youtube' || m.fileType === 'youtube').length})`, icon: Youtube },
-            { id: 'hero-video', label: 'Hero Video', icon: Film },
             { id: 'gallery', label: `Gallery (${galleryItems.length})`, icon: ImageIcon },
             { id: 'testimonials', label: `Student Reviews (${testimonials.length})`, icon: MessageSquare },
             { id: 'announcements', label: `Notices & Holidays (${localAnnouncements.length})`, icon: Megaphone },
