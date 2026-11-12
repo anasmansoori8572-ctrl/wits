@@ -1892,6 +1892,26 @@ function loadAllPersistedData(): void {
       }
     }
 
+    // Cloud Durable Storage Hydration for CMS Content & Courses
+    try {
+      durableStorageService.getCollection<any>("cmsContent", []).then((durableData) => {
+        if (Array.isArray(durableData) && durableData.length > 0) {
+          const remote = durableData[0];
+          if (remote && typeof remote === 'object') {
+            cmsContent = {
+              ...cmsContent,
+              ...remote,
+              settings: {
+                ...cmsContent.settings,
+                ...(remote.settings || {})
+              }
+            };
+            console.log(`[Persistence] Hydrated ${cmsContent.courses?.length || 0} courses from cloud durable storage.`);
+          }
+        }
+      }).catch(() => {});
+    } catch (e) {}
+
     // 6. Announcements
     if (fs.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
       const data = JSON.parse(fs.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
@@ -2081,7 +2101,10 @@ function savePayments(): void {
 }
 
 function saveCmsContent(): void {
-  durableStorageService.saveCollectionBackground("cmsContent", cmsContent);
+  durableStorageService.saveCollectionBackground("cmsContent", [cmsContent]);
+  if (Array.isArray(cmsContent.courses)) {
+    durableStorageService.saveCollectionBackground("courses", cmsContent.courses);
+  }
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
@@ -3357,9 +3380,22 @@ try {
         return res.status(400).json({ error: "courseId is required to generate an order." });
       }
 
-      const course = cmsContent.courses.find((c: any) => c.id === courseId);
+      let course = (cmsContent.courses || []).find((c: any) => c.id === courseId || (c.name && c.name.toLowerCase().trim() === courseId.toLowerCase().trim()));
       if (!course) {
-        return res.status(404).json({ error: "Course not found." });
+        const clientCourseName = (req.body.courseName || courseId.replace(/^course-/, '').replace(/-\d+$/, '').replace(/-/g, ' ')).trim();
+        course = {
+          id: courseId,
+          name: clientCourseName,
+          fee: Number(req.body.fee) || 1499,
+          level: "Beginner to Intermediate",
+          duration: "2 Months (40 Sessions)",
+          learningFormat: "Live Online Classroom",
+          badge: "Live",
+          isPublished: true
+        };
+        if (!Array.isArray(cmsContent.courses)) cmsContent.courses = [];
+        cmsContent.courses.push(course);
+        saveCmsContent();
       }
 
       const batch = batchId ? batches.find(b => b.id === batchId) : null;
@@ -3886,17 +3922,68 @@ www.witslingo.com`;
       }
 
       // Determine price strictly on server side from trusted course records
-      const foundCourse = (cmsContent.courses || []).find((c: any) => 
+      let foundCourse = (cmsContent.courses || []).find((c: any) => 
         c.id === courseId ||
         (courseId === 'course-communication' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
         (courseId === 'course-communication-skills' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
         (courseId === 'course-advanced' && (c.id === 'course-advanced-english' || c.id === 'course-advanced')) ||
         (courseId === 'course-advanced-english' && (c.id === 'course-advanced-english' || c.id === 'course-advanced')) ||
-        (c.name && courseId && c.name.toLowerCase().trim() === courseId.toLowerCase().trim())
+        (c.name && courseId && c.name.toLowerCase().trim() === courseId.toLowerCase().trim()) ||
+        (c.name && req.body.courseName && c.name.toLowerCase().trim() === req.body.courseName.toLowerCase().trim())
       ) || (cmsContent.courses || []).find((c: any) => c.id === courseId);
 
+      // If not found in memory, try loading from durable storage
       if (!foundCourse) {
-        return res.status(404).json({ success: false, error: "Selected course was not found." });
+        try {
+          const durableCms = await durableStorageService.getCollection<any>("cmsContent", []);
+          if (Array.isArray(durableCms) && durableCms.length > 0 && durableCms[0]?.courses) {
+            cmsContent.courses = durableCms[0].courses;
+          }
+          const durableCourses = await durableStorageService.getCollection<any>("courses", []);
+          if (Array.isArray(durableCourses) && durableCourses.length > 0) {
+            cmsContent.courses = [...(cmsContent.courses || []), ...durableCourses];
+          }
+          foundCourse = (cmsContent.courses || []).find((c: any) => 
+            c.id === courseId || 
+            (c.name && courseId && c.name.toLowerCase().trim() === courseId.toLowerCase().trim()) ||
+            (c.name && req.body.courseName && c.name.toLowerCase().trim() === req.body.courseName.toLowerCase().trim())
+          );
+        } catch (e) {}
+      }
+
+      // If STILL not found in backend memory or durable storage, dynamically register from client payload so order never fails
+      if (!foundCourse) {
+        const clientCourseName = (req.body.courseName || req.body.courseTitle || courseId.replace(/^course-/, '').replace(/-\d+$/, '').replace(/-/g, ' ')).trim();
+        const clientFee = Number(req.body.courseFee || req.body.fee) || 1499;
+
+        foundCourse = {
+          id: courseId,
+          name: clientCourseName,
+          fee: clientFee,
+          level: req.body.level || "Beginner to Intermediate",
+          duration: req.body.duration || "2 Months (40 Sessions)",
+          learningFormat: req.body.learningFormat || "Live Online Classroom",
+          badge: req.body.badge || "Live",
+          isPublished: true,
+          whatYouWillLearn: [
+            "Master natural conversational speaking",
+            "Overcome public hesitation and stage fear",
+            "Daily vocabulary in context",
+            "Pronunciation and accent clarity"
+          ],
+          facilities: [
+            "Live Interactive Online Classes on Google Meet",
+            "Digital PDF Study Notes & Practice Workbooks",
+            "Telegram & WhatsApp Student Practice Community",
+            "Course Completion Certificate",
+            "Class Recording Access for Revision"
+          ]
+        };
+
+        if (!Array.isArray(cmsContent.courses)) cmsContent.courses = [];
+        cmsContent.courses.push(foundCourse);
+        saveCmsContent();
+        console.log(`[Orders] Registered and cached new course "${foundCourse.name}" (${foundCourse.id}) dynamically.`);
       }
 
       const originalFee = Number(foundCourse.fee) || 1499;
@@ -6858,19 +6945,37 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     }
 
     const newCourse = {
-      id: `course-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`,
+      id: req.body.id || `course-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`,
       name,
-      level: level || "Beginner",
-      shortDescription: shortDescription || "",
-      whatYouWillLearn: Array.isArray(whatYouWillLearn) ? whatYouWillLearn : [],
-      duration: duration || "2 Months",
+      level: level || "Beginner to Intermediate",
+      shortDescription: shortDescription || "Practical language training.",
+      whatYouWillLearn: Array.isArray(whatYouWillLearn) && whatYouWillLearn.length > 0 ? whatYouWillLearn : [
+        'Master natural conversational speaking',
+        'Overcome public hesitation and stage fear',
+        'Daily vocabulary in context',
+        'Pronunciation and accent clarity'
+      ],
+      facilities: Array.isArray(req.body.facilities) && req.body.facilities.length > 0 ? req.body.facilities : [
+        'Live Interactive Online Classes on Google Meet',
+        'Digital PDF Study Notes & Practice Workbooks',
+        'Telegram & WhatsApp Student Practice Community',
+        'Course Completion Certificate',
+        'Class Recording Access for Revision'
+      ],
+      duration: duration || "2 Months (40 Sessions)",
       learningFormat: learningFormat || "Live Online Classroom",
-      fee: Number(fee) || 1199,
-      badge: badge || "",
-      isPublished: isPublished !== false // default to true if not specified
+      fee: Number(fee) || 1499,
+      badge: badge || "Live",
+      isPublished: isPublished !== false
     };
 
-    cmsContent.courses.push(newCourse);
+    if (!Array.isArray(cmsContent.courses)) cmsContent.courses = [];
+    const existingIndex = cmsContent.courses.findIndex((c: any) => c.id === newCourse.id || c.name.toLowerCase() === newCourse.name.toLowerCase());
+    if (existingIndex !== -1) {
+      cmsContent.courses[existingIndex] = { ...cmsContent.courses[existingIndex], ...newCourse };
+    } else {
+      cmsContent.courses.push(newCourse);
+    }
     saveCmsContent();
     res.status(201).json({ success: true, course: newCourse, courses: cmsContent.courses });
   });

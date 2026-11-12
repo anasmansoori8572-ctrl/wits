@@ -189,7 +189,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           studentName: fullName.trim(),
           whatsapp: cleanPhone,
           email: email.trim() || undefined,
-          courseId: selectedCourseId
+          courseId: selectedCourseId,
+          courseName: currentCourse?.name,
+          courseFee: currentCourse?.fee || 1499,
+          fee: currentCourse?.fee || 1499,
+          level: currentCourse?.level,
+          duration: currentCourse?.duration,
+          learningFormat: currentCourse?.learningFormat,
+          badge: currentCourse?.badge
         })
       });
 

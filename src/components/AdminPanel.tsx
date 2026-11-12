@@ -738,6 +738,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
     const updated = [...courses, courseToAdd];
     onUpdateCourses(updated);
+    try {
+      fetch('/api/courses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(courseToAdd)
+      }).catch(err => console.warn('Could not sync course addition to backend:', err));
+    } catch (e) {}
     setShowAddCourseModal(false);
     setNewBulletPointForAdd('');
     setNewFacilityForAdd('');
@@ -753,6 +763,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (!editingCourse) return;
     const updated = courses.map(c => c.id === editingCourse.id ? editingCourse : c);
     onUpdateCourses(updated);
+    try {
+      fetch(`/api/courses/${editingCourse.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(editingCourse)
+      }).catch(err => console.warn('Could not sync course edit to backend:', err));
+    } catch (e) {}
     setEditingCourse(null);
     setNewBulletPointForEdit('');
     setNewFacilityForEdit('');
@@ -765,6 +785,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const nextStatus = !(course.isPublished !== false);
     const updated = courses.map(c => c.id === courseId ? { ...c, isPublished: nextStatus } : c);
     onUpdateCourses(updated);
+    try {
+      fetch(`/api/courses/${courseId}/publish`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({ isPublished: nextStatus })
+      }).catch(err => console.warn('Could not sync course toggle to backend:', err));
+    } catch (e) {}
     triggerFeedback(
       nextStatus
         ? `Course "${course.name}" is now LIVE on website (Published)!`
@@ -782,6 +812,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       onConfirm: () => {
         const updated = courses.filter(c => c.id !== courseId);
         onUpdateCourses(updated);
+        try {
+          fetch(`/api/courses/${courseId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : ''
+            }
+          }).catch(err => console.warn('Could not sync course deletion to backend:', err));
+        } catch (e) {}
         triggerFeedback(`Course "${name}" deleted.`);
       }
     });
