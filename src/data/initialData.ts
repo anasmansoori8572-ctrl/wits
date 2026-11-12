@@ -14,9 +14,9 @@ export const INITIAL_COURSES: CourseData[] = [
       'Overcoming stage fear & basic self-introduction'
     ],
     duration: '2 Months (40 Sessions)',
-    learningFormat: 'Live Online Classroom (Evening Batches)',
+    learningFormat: 'Live Online Interactive Classroom',
     fee: 1199,
-    badge: 'Popular Foundation'
+    badge: 'Live'
   },
   {
     id: 'course-spoken-english',
@@ -30,9 +30,9 @@ export const INITIAL_COURSES: CourseData[] = [
       'Thinking directly in English during daily conversations'
     ],
     duration: '2.5 Months (50 Sessions)',
-    learningFormat: 'Live Batches + Daily Speaking Drills',
+    learningFormat: 'Live Online Classroom + Speaking Drills',
     fee: 1499,
-    badge: 'Most Popular'
+    badge: 'Live'
   },
   {
     id: 'course-vocabulary',
@@ -47,7 +47,8 @@ export const INITIAL_COURSES: CourseData[] = [
     ],
     duration: '1.5 Months (30 Sessions)',
     learningFormat: 'Interactive Vocabulary Workshops',
-    fee: 999
+    fee: 999,
+    badge: 'Live'
   },
   {
     id: 'course-conversation',
@@ -62,7 +63,8 @@ export const INITIAL_COURSES: CourseData[] = [
     ],
     duration: '2 Months (40 Sessions)',
     learningFormat: '100% Speaking & Dialogue Practice',
-    fee: 1299
+    fee: 1299,
+    badge: 'Upcoming'
   },
   {
     id: 'course-communication',
@@ -78,7 +80,7 @@ export const INITIAL_COURSES: CourseData[] = [
     duration: '2 Months (35 Sessions)',
     learningFormat: 'Masterclass Format + Mock Interviews',
     fee: 1699,
-    badge: 'Career Boost'
+    badge: 'Live'
   },
   {
     id: 'course-advanced',
@@ -92,8 +94,9 @@ export const INITIAL_COURSES: CourseData[] = [
       'Complex idea synthesis and persuasive speech'
     ],
     duration: '3 Months (60 Sessions)',
-    learningFormat: 'Executive Live Batch',
-    fee: 1999
+    learningFormat: 'Executive Live Online Classroom',
+    fee: 1999,
+    badge: 'Upcoming'
   }
 ];
 
@@ -188,11 +191,11 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   phone2: WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER,
   email: 'hello@witslingo.com',
   address: 'Dhakka, Amroha, Uttar Pradesh, India',
-  whatsappChannelUrl: 'https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k',
+  whatsappChannelUrl: 'https://whatsapp.com/channel/0029VbDjNY9InlqQJsC6G02Y',
   instagramUrl: 'https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA==',
   facebookUrl: 'https://www.facebook.com/share/1BP5jTfk9B/',
   youtubeUrl: 'https://youtube.com/@witslingoeng',
-  announcementText: 'New Batch Starts from 1st of each month • Admissions Open for October & November 2026',
+  announcementText: 'Admissions Open for Live Courses • Master Spoken English with Personal Attention',
   announcementBtnText: '',
   showAnnouncement: true,
   showBatchesSection: true,

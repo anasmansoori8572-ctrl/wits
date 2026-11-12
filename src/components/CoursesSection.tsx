@@ -72,12 +72,17 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
                   <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-purple-50 text-[#4A1D96] border border-purple-100">
                     {course.level}
                   </span>
-                  {course.badge && (
-                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1 shadow-2xs">
-                      <Sparkles className="w-3 h-3 text-amber-600" />
-                      {course.badge}
+                  {course.badge?.toLowerCase() === 'live' ? (
+                    <span className="text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Live
                     </span>
-                  )}
+                  ) : course.badge?.toLowerCase() === 'upcoming' ? (
+                    <span className="text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5 shadow-2xs">
+                      <Clock className="w-3 h-3 text-amber-600" />
+                      Upcoming
+                    </span>
+                  ) : null}
                 </div>
 
                 <div>
@@ -142,14 +147,26 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => (onBuyNow ? onBuyNow(course.id) : onEnroll(course.id))}
-                    id={`course-buy-${course.id}`}
-                    className="px-5 py-2.5 rounded-full bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold tracking-wide shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <span>Buy Now</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  {course.badge?.toLowerCase() === 'live' ? (
+                    <button
+                      onClick={() => (onBuyNow ? onBuyNow(course.id) : onEnroll(course.id))}
+                      id={`course-buy-${course.id}`}
+                      className="px-5 py-2.5 rounded-full bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold tracking-wide shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Buy Now</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      id={`course-upcoming-${course.id}`}
+                      className="px-5 py-2.5 rounded-full bg-slate-100 text-slate-400 text-xs font-bold tracking-wide cursor-not-allowed border border-slate-200 flex items-center gap-1.5"
+                      title="Admissions opening soon for upcoming courses"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Upcoming Soon</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -173,7 +190,13 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => (onBuyNow ? onBuyNow(courses[0]?.id || 'course-spoken-english') : onEnroll(courses[0]?.id || 'course-spoken-english'))}
+              onClick={() => {
+                const firstLive = courses.find(c => c.badge?.toLowerCase() === 'live') || courses[0];
+                if (firstLive) {
+                  if (onBuyNow) onBuyNow(firstLive.id);
+                  else onEnroll(firstLive.id);
+                }
+              }}
               className="px-6 py-2.5 bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold rounded-xl transition-colors whitespace-nowrap cursor-pointer shadow-xs flex items-center gap-2"
             >
               <span>Buy Course Now</span>

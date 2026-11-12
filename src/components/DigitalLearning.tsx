@@ -21,7 +21,7 @@ export const DigitalLearning: React.FC<DigitalLearningProps> = ({
 }) => {
   const [socialModalOpen, setSocialModalOpen] = useState(false);
 
-  const whatsappUrl = siteSettings?.whatsappChannelUrl || 'https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k';
+  const whatsappUrl = siteSettings?.whatsappChannelUrl || 'https://whatsapp.com/channel/0029VbDjNY9InlqQJsC6G02Y';
   const youtubeUrl = siteSettings?.youtubeUrl || 'https://youtube.com/@witslingoeng';
 
   const channels = [

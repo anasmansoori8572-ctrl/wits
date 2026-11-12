@@ -103,7 +103,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
   const [viewingResource, setViewingResource] = useState<ResourceItem | null>(null);
 
   const youtubeUrl = siteSettings?.youtubeUrl || 'https://youtube.com/@witslingoeng';
-  const whatsappUrl = siteSettings?.whatsappChannelUrl || 'https://whatsapp.com/channel/0029Vb7B369AInPrYhK23Y1Q';
+  const whatsappUrl = siteSettings?.whatsappChannelUrl || 'https://whatsapp.com/channel/0029VbDjNY9InlqQJsC6G02Y';
 
   // 1. Digital Channels Data (Image 2 & 5)
   const channels = [

@@ -155,7 +155,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ siteSettings }) 
                 <span className="text-xs font-bold text-slate-600 block mb-2.5">Connect with us:</span>
                 <div className="flex items-center gap-2">
                   <a
-                    href="https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k"
+                    href="https://whatsapp.com/channel/0029VbDjNY9InlqQJsC6G02Y"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="p-2.5 rounded-xl bg-white border border-slate-200 text-emerald-600 hover:bg-emerald-50 transition-colors shadow-2xs"

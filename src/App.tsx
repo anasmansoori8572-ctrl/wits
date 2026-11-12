@@ -158,7 +158,9 @@ export default function App() {
   const [paymentStatusData, setPaymentStatusData] = useState<any>(null);
 
   const handleOpenCheckout = (courseId?: string) => {
-    setSelectedCourseForCheckout(courseId || courses[0]?.id || 'course-spoken-english');
+    const liveCourses = courses.filter(c => c.badge?.toLowerCase() === 'live');
+    const chosen = courseId || liveCourses[0]?.id || courses[0]?.id || 'course-spoken-english';
+    setSelectedCourseForCheckout(chosen);
     setIsCheckoutOpen(true);
   };
 
@@ -832,7 +834,8 @@ export default function App() {
         initialData={paymentStatusData}
         onGoToCourse={() => {
           setIsPaymentStatusOpen(false);
-          setCurrentView('student-dashboard');
+          const el = document.getElementById('courses');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
         }}
         onRetryPayment={(courseId) => {
           setIsPaymentStatusOpen(false);

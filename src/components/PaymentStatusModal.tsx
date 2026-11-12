@@ -277,7 +277,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
                   className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#4A1D96] to-[#6B21A8] hover:from-[#3B0764] hover:to-[#581C87] text-white font-bold text-sm tracking-wide shadow-lg shadow-purple-900/20 hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <BookOpen className="w-4 h-4" />
-                  <span>Go to My Course (Student Portal)</span>
+                  <span>Done & View Courses</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
 

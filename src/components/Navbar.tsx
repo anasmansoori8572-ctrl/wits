@@ -173,13 +173,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>About</span>
             </a>
 
-            {/* 4. Blog */}
+            {/* 4. Gallery */}
             <a
-              href="#learning-resources"
-              onClick={(e) => handleNavClick(e, 'learning-resources')}
-              className="relative py-2 text-[#5A526E] hover:text-[#1E123B] transition-colors cursor-pointer"
+              href="/gallery"
+              onClick={(e) => {
+                e.preventDefault();
+                if (onNavigateGallery) onNavigateGallery();
+              }}
+              className={`relative py-2 transition-colors cursor-pointer ${
+                activeSection === 'gallery' ? 'text-[#1E123B] font-semibold' : 'text-[#5A526E] hover:text-[#1E123B]'
+              }`}
             >
-              <span>Blog</span>
+              <span>Gallery</span>
+              {activeSection === 'gallery' && (
+                <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-9 h-[3px] bg-[#281648] rounded-full" />
+              )}
             </a>
 
             {/* 5. Contact */}
@@ -205,19 +213,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Search className="w-5 h-5 text-[#281648] stroke-[2.2]" />
             </button>
 
-            {/* Login Link or Logged-in User Dashboard */}
-            {currentUser ? (
+            {/* Admin Link (Only for logged-in admin) */}
+            {currentUser && currentUser.role === 'admin' && (
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (currentUser.role === 'admin') onOpenAdmin();
-                    else onOpenDashboard();
-                  }}
-                  className="flex items-center gap-1.5 text-[16px] font-semibold text-[#281648] hover:text-[#6D28D9] transition-colors cursor-pointer"
+                  onClick={onOpenAdmin}
+                  className="flex items-center gap-1.5 text-[15px] font-semibold text-[#281648] hover:text-[#6D28D9] transition-colors cursor-pointer"
                 >
                   <BookOpen className="w-4 h-4 text-[#6D28D9]" />
-                  <span>{currentUser.role === 'admin' ? 'Admin' : 'Dashboard'}</span>
+                  <span>Admin</span>
                 </button>
                 <button
                   type="button"
@@ -228,21 +233,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onOpenAuth('student')}
-                className="text-[16px] font-semibold text-[#281648] hover:text-[#6D28D9] transition-colors cursor-pointer px-1"
-              >
-                Login
-              </button>
             )}
 
-            {/* Buy Course Button */}
+            {/* Buy Course Button (Directly reaches courses section) */}
             <button
               type="button"
-              onClick={() => (onBuyCourse ? onBuyCourse() : onOpenAdmission())}
-              id="nav-get-started-btn"
+              onClick={(e) => handleNavClick(e, 'courses')}
+              id="nav-buy-course-btn"
               style={{ backgroundColor: '#281648', color: '#ffffff' }}
               className="px-6 py-2.5 rounded-full font-bold text-[14px] shadow-sm hover:bg-[#1E0F38] hover:shadow-md transition-all active:scale-[0.98] cursor-pointer text-white flex items-center gap-1.5"
             >
@@ -356,14 +353,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               About
             </a>
             <a
-              href="#learning-resources"
+              href="/gallery"
               onClick={(e) => {
+                e.preventDefault();
                 setMobileMenuOpen(false);
-                handleNavClick(e, 'learning-resources');
+                if (onNavigateGallery) onNavigateGallery();
               }}
-              className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
+              className={`block px-3 py-2.5 rounded-xl ${
+                activeSection === 'gallery' ? 'text-[#1E123B] font-semibold bg-purple-50' : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+              }`}
             >
-              Blog
+              Gallery
             </a>
             <a
               href="#contact"
@@ -378,41 +378,29 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           <div className="pt-4 space-y-3">
-            {currentUser ? (
+            {currentUser && currentUser.role === 'admin' && (
               <button
                 type="button"
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  if (currentUser.role === 'admin') onOpenAdmin();
-                  else onOpenDashboard();
+                  onOpenAdmin();
                 }}
                 className="w-full py-2.5 rounded-full bg-purple-50 text-[#281648] font-bold text-sm border border-purple-200 cursor-pointer"
               >
-                Go to {currentUser.role === 'admin' ? 'Admin Panel' : 'Student Dashboard'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenAuth('student');
-                }}
-                className="w-full py-2.5 rounded-full bg-purple-50 hover:bg-purple-100 text-[#281648] font-bold text-sm border border-purple-200 cursor-pointer"
-              >
-                Login to Student Portal
+                Go to Admin Panel
               </button>
             )}
 
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
                 setMobileMenuOpen(false);
-                onOpenAdmission();
+                handleNavClick(e, 'courses');
               }}
               style={{ backgroundColor: '#281648', color: '#ffffff' }}
               className="w-full py-3 rounded-full text-white text-sm font-bold shadow-md shadow-purple-950/20 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Get Started</span>
+              <span>Buy Course</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

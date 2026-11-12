@@ -286,7 +286,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     duration: '2 Months (40 Sessions)',
     learningFormat: 'Live Online Classroom',
     fee: 1499,
-    badge: 'Popular'
+    badge: 'Live'
   });
 
   const [newBatch, setNewBatch] = useState<Partial<Batch>>({
@@ -2338,7 +2338,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         duration: '2 Months (40 Sessions)',
                         learningFormat: 'Live Online Classroom',
                         fee: 1499,
-                        badge: 'Popular Foundation',
+                        badge: 'Live',
                         isPublished: true
                       });
                       setNewBulletPointForAdd('');
@@ -2500,12 +2500,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-[#4A1D96] border border-purple-200">
                                 {course.level}
                               </span>
-                              {course.badge && (
-                                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 flex items-center gap-1">
-                                  <Sparkles className="w-3 h-3" />
-                                  <span>{course.badge}</span>
+                              {course.badge?.toLowerCase() === 'live' ? (
+                                <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span>Live</span>
                                 </span>
-                              )}
+                              ) : course.badge?.toLowerCase() === 'upcoming' ? (
+                                <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-2xs">
+                                  <Clock className="w-3 h-3 text-amber-600" />
+                                  <span>Upcoming</span>
+                                </span>
+                              ) : null}
                             </div>
 
                             {/* Title */}
@@ -5775,31 +5780,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Badge / Ribbon */}
+                {/* Badge Tag (Strictly "Live" or "Upcoming") */}
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
-                    Badge / Ribbon <span className="text-slate-400 font-normal">(Optional label shown on course card)</span>
+                    Course Tag <span className="text-rose-500">*</span> <span className="text-slate-400 font-normal">(Only "Live" or "Upcoming" allowed)</span>
                   </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newCourse.badge || ''}
-                      onChange={(e) => setNewCourse({ ...newCourse, badge: e.target.value })}
-                      placeholder="e.g. Popular Foundation, Most Popular, Career Boost"
-                      className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-slate-800 text-xs focus:outline-hidden focus:border-[#4A1D96]"
-                    />
-                    <div className="flex items-center gap-1">
-                      {['Popular Foundation', 'Most Popular', 'Career Boost'].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setNewCourse({ ...newCourse, badge: preset })}
-                          className="px-2 py-1 bg-slate-100 hover:bg-purple-100 hover:text-[#4A1D96] rounded-lg text-[10px] font-semibold transition-colors cursor-pointer"
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewCourse({ ...newCourse, badge: 'Live' })}
+                      className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        newCourse.badge?.toLowerCase() === 'live' || !newCourse.badge
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Live (Students can Buy Now)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewCourse({ ...newCourse, badge: 'Upcoming' })}
+                      className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        newCourse.badge?.toLowerCase() === 'upcoming'
+                          ? 'bg-amber-50 border-amber-300 text-amber-800 shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Clock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Upcoming (Admissions opening soon)</span>
+                    </button>
                   </div>
                 </div>
 
@@ -6152,40 +6162,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Badge */}
+                {/* Badge Tag (Strictly "Live" or "Upcoming") */}
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
-                    Badge / Ribbon <span className="text-slate-400 font-normal">(Shown on course card, or leave blank)</span>
+                    Course Tag <span className="text-rose-500">*</span> <span className="text-slate-400 font-normal">(Only "Live" or "Upcoming" allowed)</span>
                   </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={editingCourse.badge || ''}
-                      onChange={(e) => setEditingCourse({ ...editingCourse, badge: e.target.value })}
-                      placeholder="e.g. Popular Foundation, Most Popular, Career Boost"
-                      className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-slate-800 text-xs focus:outline-hidden focus:border-[#4A1D96]"
-                    />
-                    <div className="flex items-center gap-1">
-                      {['Popular Foundation', 'Most Popular', 'Career Boost'].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setEditingCourse({ ...editingCourse, badge: preset })}
-                          className="px-2 py-1 bg-slate-100 hover:bg-purple-100 hover:text-[#4A1D96] rounded-lg text-[10px] font-semibold transition-colors cursor-pointer"
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                      {editingCourse.badge && (
-                        <button
-                          type="button"
-                          onClick={() => setEditingCourse({ ...editingCourse, badge: '' })}
-                          className="px-2 py-1 text-slate-400 hover:text-red-600 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingCourse({ ...editingCourse, badge: 'Live' })}
+                      className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        editingCourse.badge?.toLowerCase() === 'live' || !editingCourse.badge
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Live (Students can Buy Now)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCourse({ ...editingCourse, badge: 'Upcoming' })}
+                      className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        editingCourse.badge?.toLowerCase() === 'upcoming'
+                          ? 'bg-amber-50 border-amber-300 text-amber-800 shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Clock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Upcoming (Admissions opening soon)</span>
+                    </button>
                   </div>
                 </div>
 

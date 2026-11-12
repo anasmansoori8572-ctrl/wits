@@ -1424,7 +1424,7 @@ let cmsContent: any = {
   phoneNumbers: ["7310952271", "9027729917"],
   email: "hello@witslingo.com",
   location: "Wits Lingo Academy, Dhakka, Amroha, Uttar Pradesh, India",
-  whatsappChannel: "https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k",
+  whatsappChannel: "https://whatsapp.com/channel/0029VbDjNY9InlqQJsC6G02Y",
   instagram: "https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA==",
   facebook: "https://www.facebook.com/share/1BP5jTfk9B/",
   courses: [
@@ -3870,7 +3870,7 @@ www.witslingo.com`;
 
   app.post("/api/orders/create", async (req, res) => {
     try {
-      const { studentName, whatsapp, email, courseId, couponCode } = req.body;
+      const { studentName, whatsapp, email, courseId } = req.body;
 
       if (!studentName || !studentName.trim()) {
         return res.status(400).json({ success: false, error: "Full Name is required." });
@@ -3900,25 +3900,7 @@ www.witslingo.com`;
       }
 
       const originalFee = Number(foundCourse.fee) || 1499;
-      let discountAmount = 0;
-      let appliedCoupon: string | undefined = undefined;
-
-      // Coupon / discount calculation
-      if (couponCode && typeof couponCode === "string") {
-        const codeClean = couponCode.trim().toUpperCase();
-        if (codeClean === "WELCOME10") {
-          discountAmount = Math.round(originalFee * 0.10);
-          appliedCoupon = "WELCOME10 (10% Off)";
-        } else if (codeClean === "WITS100") {
-          discountAmount = 100;
-          appliedCoupon = "WITS100 (₹100 Off)";
-        } else if (codeClean === "TEST100" || codeClean === "DEMO99") {
-          discountAmount = Math.max(0, originalFee - 1); // 1 rupee test mode
-          appliedCoupon = `${codeClean} (Test Mode: ₹1)`;
-        }
-      }
-
-      const finalPayable = Math.max(1, originalFee - discountAmount);
+      const finalPayable = originalFee;
       const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const { keyId, keySecret, isTestMode } = getRazorpayConfig();
 
@@ -3972,8 +3954,8 @@ www.witslingo.com`;
         courseId: foundCourse.id,
         courseName: foundCourse.name,
         coursePrice: originalFee,
-        discountAmount,
-        discountCode: appliedCoupon,
+        discountAmount: 0,
+        discountCode: undefined,
         expectedAmount: finalPayable,
         currency: "INR",
         orderStatus: "pending",

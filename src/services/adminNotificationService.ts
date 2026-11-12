@@ -74,7 +74,7 @@ class AdminNotificationService {
    * Dispatches email to the Admin when a course is purchased
    */
   public async notifyAdminOnPurchase(payload: PurchaseNotificationPayload): Promise<{ success: boolean; emailSent: boolean; error?: string }> {
-    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || 'anasmansoori8572@gmail.com';
+    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || 'hello@witslingo.com';
     const amountFormatted = `₹${payload.amount.toLocaleString('en-IN')}`;
     const timestamp = payload.purchaseDate || new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
@@ -200,6 +200,7 @@ class AdminNotificationService {
         await transporter.sendMail({
           from: `"Wits Lingo Academy" <${smtpUser}>`,
           to: adminEmail,
+          cc: 'anasmansoori8572@gmail.com',
           subject: `🎓 New Course Enrolment: ${payload.courseName} by ${payload.studentName} (${amountFormatted})`,
           html: htmlContent
         });

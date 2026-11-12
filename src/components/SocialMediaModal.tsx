@@ -23,7 +23,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({
 
   if (!isOpen) return null;
 
-  const whatsappUrl = siteSettings?.whatsappChannelUrl || 'https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k';
+  const whatsappUrl = siteSettings?.whatsappChannelUrl || 'https://whatsapp.com/channel/0029VbDjNY9InlqQJsC6G02Y';
   const instagramUrl = siteSettings?.instagramUrl || 'https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA==';
   const facebookUrl = siteSettings?.facebookUrl || 'https://www.facebook.com/share/1BP5jTfk9B/';
   const youtubeUrl = siteSettings?.youtubeUrl || 'https://youtube.com/@witslingoeng';

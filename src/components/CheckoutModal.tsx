@@ -45,9 +45,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [fullName, setFullName] = useState<string>('');
   const [whatsapp, setWhatsapp] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [couponCode, setCouponCode] = useState<string>('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number; label: string } | null>(null);
-  const [couponError, setCouponError] = useState<string>('');
+
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
@@ -142,36 +140,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   ) || defaultCourse;
 
   const coursePrice = currentCourse ? Number(currentCourse.fee) : 1499;
-  const discountAmount = appliedCoupon ? appliedCoupon.discount : 0;
-  const finalPayable = Math.max(1, coursePrice - discountAmount);
-
-  // Apply Coupon Client-side Preview (Final verification is strictly enforced by server)
-  const handleApplyCoupon = () => {
-    setCouponError('');
-    const code = couponCode.trim().toUpperCase();
-    if (!code) return;
-
-    if (code === 'WELCOME10') {
-      const disc = Math.round(coursePrice * 0.10);
-      setAppliedCoupon({ code, discount: disc, label: '10% Launch Discount Applied!' });
-    } else if (code === 'WITS100') {
-      const disc = Math.min(coursePrice - 1, 100);
-      setAppliedCoupon({ code, discount: disc, label: '₹100 Flat Discount Applied!' });
-    } else if (code === 'TEST100' || code === 'DEMO99') {
-      const disc = Math.max(0, coursePrice - 1);
-      setAppliedCoupon({ code, discount: disc, label: 'Test Simulation Mode (Pay ₹1)' });
-    } else {
-      setCouponError('Invalid or expired coupon code. Try WELCOME10 for 10% off.');
-      setAppliedCoupon(null);
-    }
-  };
-
-  const handleRemoveCoupon = () => {
-    setAppliedCoupon(null);
-    setCouponCode('');
-    setCouponError('');
-  };
-
+  const finalPayable = coursePrice;
   // Dynamically load Razorpay SDK
   const loadRazorpayScript = (): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -220,8 +189,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           studentName: fullName.trim(),
           whatsapp: cleanPhone,
           email: email.trim() || undefined,
-          courseId: selectedCourseId,
-          couponCode: appliedCoupon?.code || couponCode.trim() || undefined
+          courseId: selectedCourseId
         })
       });
 
@@ -411,31 +379,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           )}
 
-          {/* Course Selection */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Select Course <span className="text-rose-500">*</span>
-              </label>
-              <span className="text-[11px] font-bold text-[#4A1D96]">
-                ₹{coursePrice.toLocaleString()}
-              </span>
-            </div>
-            <select
-              value={selectedCourseId}
-              onChange={(e) => {
-                setSelectedCourseId(e.target.value);
-                setAppliedCoupon(null);
-              }}
-              className="w-full px-4 py-2.5 rounded-xl border border-purple-200 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4A1D96] bg-purple-50/20 cursor-pointer shadow-2xs"
-            >
-              {publishedCourses.map(course => (
-                <option key={course.id} value={course.id}>
-                  {course.name} ({course.level}) — ₹{Number(course.fee).toLocaleString()}
-                </option>
-              ))}
-            </select>
-          </div>
 
           {/* Dynamic Selected Course Details (Strictly updates per selected course, hiding all other courses) */}
           {currentCourse && (
@@ -579,62 +522,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             />
           </div>
 
-          {/* Coupon Code Section */}
-          <div className="pt-1 border-t border-slate-100">
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
-              <Tag className="w-3.5 h-3.5 text-purple-700" />
-              Discount Coupon Code
-            </label>
-            {!appliedCoupon ? (
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="e.g. WELCOME10"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 text-xs uppercase tracking-wider font-semibold focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
-                />
-                <button
-                  type="button"
-                  onClick={handleApplyCoupon}
-                  className="px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-[#4A1D96] text-xs font-bold transition-colors cursor-pointer"
-                >
-                  Apply
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>{appliedCoupon.label}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleRemoveCoupon}
-                  className="text-xs text-rose-600 hover:underline cursor-pointer"
-                >
-                  Remove
-                </button>
-              </div>
-            )}
-            {couponError && (
-              <p className="text-[11px] text-rose-600 mt-1 font-medium">{couponError}</p>
-            )}
-          </div>
-
           {/* Pricing Summary Card */}
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-600">
               <span>Standard Course Fee ({currentCourse?.name || 'Selected Course'})</span>
               <span className="font-semibold text-slate-800">₹{coursePrice.toLocaleString()}</span>
             </div>
-
-            {discountAmount > 0 && (
-              <div className="flex items-center justify-between text-xs text-emerald-700">
-                <span>Discount ({appliedCoupon?.code})</span>
-                <span className="font-bold">-₹{discountAmount.toLocaleString()}</span>
-              </div>
-            )}
 
             <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
               <div>
