@@ -239,7 +239,12 @@ export interface TestimonialData {
   city?: string;
   date?: string;
   verified?: boolean;
+  rating?: number;
+  authorKey?: string;
+  isApproved?: boolean;
 }
+
+export type ReviewData = TestimonialData;
 
 export interface ResourceItem {
   id: string;

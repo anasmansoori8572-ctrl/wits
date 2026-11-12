@@ -15,6 +15,7 @@ interface NavbarProps {
   onNavigateGallery?: () => void;
   onNavigateHome?: () => void;
   activeSection: string;
+  onBuyCourse?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -28,6 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigateGallery,
   onNavigateHome,
   activeSection,
+  onBuyCourse,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -90,7 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { title: 'Spoken English & Daily Fluency', target: 'courses', desc: 'Core spoken English batch for daily fluency and active conversation' },
     { title: 'Foundation English & Grammar', target: 'courses', desc: 'Tenses, sentence formation, vocabulary building, and syntax' },
     { title: 'Executive Communication & Public Speaking', target: 'courses', desc: 'Professional fluency, interviews, corporate communication' },
-    { title: 'Upcoming Batches & Timings', target: 'batches', desc: 'Monthly batches, morning and evening live interactive sessions' },
+    { title: 'Student Reviews & Success Stories', target: 'testimonials', desc: 'Verified reviews and feedback from our students' },
     { title: 'Free Study Materials & Notes', target: 'learning-resources', desc: 'Downloadable PDF study guides, diagnostic assessments, daily vocabulary' },
     { title: 'About Wits Lingo Academy', target: 'about', desc: 'Our methodology, learning framework, and academy details' },
     { title: 'Contact & Support', target: 'contact', desc: 'WhatsApp support, call assistance, admissions helpline' },
@@ -151,6 +153,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="relative py-2 text-[#5A526E] hover:text-[#1E123B] transition-colors cursor-pointer"
             >
               <span>Courses</span>
+            </a>
+
+            {/* 2b. Reviews */}
+            <a
+              href="#testimonials"
+              onClick={(e) => handleNavClick(e, 'testimonials')}
+              className="relative py-2 text-[#5A526E] hover:text-[#1E123B] transition-colors cursor-pointer"
+            >
+              <span>Reviews</span>
             </a>
 
             {/* 3. About */}
@@ -227,15 +238,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* Get Started Button */}
+            {/* Buy Course Button */}
             <button
               type="button"
-              onClick={() => onOpenAdmission()}
+              onClick={() => (onBuyCourse ? onBuyCourse() : onOpenAdmission())}
               id="nav-get-started-btn"
               style={{ backgroundColor: '#281648', color: '#ffffff' }}
-              className="px-7 py-3 rounded-full font-semibold text-[15px] shadow-sm hover:bg-[#1E0F38] hover:shadow-md transition-all active:scale-[0.98] cursor-pointer text-white"
+              className="px-6 py-2.5 rounded-full font-bold text-[14px] shadow-sm hover:bg-[#1E0F38] hover:shadow-md transition-all active:scale-[0.98] cursor-pointer text-white flex items-center gap-1.5"
             >
-              Get Started
+              <span>Buy Course</span>
             </button>
           </div>
 

@@ -154,7 +154,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={(e) => handleSectionClick(e, 'courses')}
                   className="hover:text-white transition-colors py-1 block cursor-pointer"
                 >
-                  Courses & Batches
+                  Our Courses
                 </a>
               </li>
               <li>

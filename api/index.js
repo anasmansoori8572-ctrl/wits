@@ -1,9 +1,9 @@
 // server.ts
 import "dotenv/config";
 import express from "express";
-import path6 from "path";
+import path7 from "path";
 import crypto3 from "crypto";
-import fs6 from "fs";
+import fs7 from "fs";
 import { S3Client as S3Client2, PutObjectCommand as PutObjectCommand2 } from "@aws-sdk/client-s3";
 
 // src/config/witsLingoConfig.ts
@@ -2586,6 +2586,187 @@ var StudentSupportService = class _StudentSupportService {
 };
 var studentSupportService = StudentSupportService.getInstance();
 
+// src/services/adminNotificationService.ts
+import nodemailer from "nodemailer";
+import fs6 from "fs";
+import path6 from "path";
+var AdminNotificationService = class {
+  constructor() {
+    this.notificationsFile = path6.join(process.cwd(), "uploads", "data", "admin-notifications.json");
+    this.notifications = [];
+    this.loadNotifications();
+  }
+  loadNotifications() {
+    try {
+      if (fs6.existsSync(this.notificationsFile)) {
+        const raw = fs6.readFileSync(this.notificationsFile, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          this.notifications = parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("[AdminNotificationService] Could not load admin-notifications.json:", e);
+    }
+  }
+  saveNotifications() {
+    try {
+      const dir = path6.dirname(this.notificationsFile);
+      if (!fs6.existsSync(dir)) fs6.mkdirSync(dir, { recursive: true });
+      fs6.writeFileSync(this.notificationsFile, JSON.stringify(this.notifications, null, 2), "utf-8");
+      durableStorageService.saveCollectionBackground("adminNotifications", this.notifications);
+    } catch (e) {
+      console.warn("[AdminNotificationService] Could not save notifications:", e);
+    }
+  }
+  getAllNotifications() {
+    return this.notifications;
+  }
+  /**
+   * Dispatches email to the Admin when a course is purchased
+   */
+  async notifyAdminOnPurchase(payload) {
+    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || "anasmansoori8572@gmail.com";
+    const amountFormatted = `\u20B9${payload.amount.toLocaleString("en-IN")}`;
+    const timestamp = payload.purchaseDate || (/* @__PURE__ */ new Date()).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+    console.log(`[AdminNotificationService] Processing course purchase notification for: ${payload.studentName} (${payload.courseName})`);
+    const notifRecord = {
+      id: `admin_notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      type: "course_purchase",
+      title: `New Course Purchase: ${payload.courseName}`,
+      message: `${payload.studentName} purchased ${payload.courseName} for ${amountFormatted}`,
+      studentName: payload.studentName,
+      studentPhone: payload.studentPhone,
+      studentEmail: payload.studentEmail,
+      courseName: payload.courseName,
+      amount: payload.amount,
+      razorpayPaymentId: payload.razorpayPaymentId,
+      razorpayOrderId: payload.razorpayOrderId,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      emailSent: false
+    };
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; }
+        .card { background-color: #ffffff; border-radius: 16px; max-width: 600px; margin: 0 auto; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #3B0764 0%, #4A1D96 50%, #6B21A8 100%); color: #ffffff; padding: 28px 24px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 800; }
+        .header p { margin: 6px 0 0 0; font-size: 14px; color: #e9d5ff; }
+        .content { padding: 24px; }
+        .badge { display: inline-block; background-color: #ecfdf5; color: #047857; font-weight: 700; font-size: 12px; padding: 4px 12px; border-radius: 9999px; border: 1px solid #a7f3d0; margin-bottom: 16px; }
+        .details-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .details-table tr { border-bottom: 1px solid #f1f5f9; }
+        .details-table td { padding: 12px 6px; font-size: 14px; }
+        .details-table td.label { color: #64748b; font-weight: 600; width: 38%; }
+        .details-table td.value { color: #0f172a; font-weight: 700; }
+        .footer { background-color: #f8fafc; padding: 18px 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+        .btn { display: inline-block; background-color: #4A1D96; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-weight: bold; font-size: 14px; margin-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="header">
+          <h1>\u{1F393} New Course Purchase Received!</h1>
+          <p>Wits Lingo Academy Automated Admission Notification</p>
+        </div>
+        <div class="content">
+          <div style="text-align: center;">
+            <span class="badge">Payment Confirmed & Verified</span>
+          </div>
+          <p style="font-size: 15px; line-height: 1.5;">Hello Admin,</p>
+          <p style="font-size: 14px; color: #475569; line-height: 1.5;">A student has successfully enrolled and paid for a course on <a href="https://witslingo.com" style="color: #4A1D96; font-weight: bold;">witslingo.com</a>. Here are the full enrolment details:</p>
+          
+          <table class="details-table">
+            <tr>
+              <td class="label">Course Enrolled:</td>
+              <td class="value" style="color: #4A1D96;">${payload.courseName}</td>
+            </tr>
+            <tr>
+              <td class="label">Amount Paid:</td>
+              <td class="value" style="color: #059669; font-size: 16px;">${amountFormatted}</td>
+            </tr>
+            <tr>
+              <td class="label">Student Name:</td>
+              <td class="value">${payload.studentName}</td>
+            </tr>
+            <tr>
+              <td class="label">WhatsApp Number:</td>
+              <td class="value"><a href="https://wa.me/${payload.studentPhone.replace(/\D/g, "")}" style="color: #0284c7;">+${payload.studentPhone}</a></td>
+            </tr>
+            <tr>
+              <td class="label">Student Email:</td>
+              <td class="value"><a href="mailto:${payload.studentEmail}" style="color: #0284c7;">${payload.studentEmail}</a></td>
+            </tr>
+            <tr>
+              <td class="label">Payment ID:</td>
+              <td class="value" style="font-family: monospace; font-size: 13px;">${payload.razorpayPaymentId || "Verified via Razorpay"}</td>
+            </tr>
+            <tr>
+              <td class="label">Order ID:</td>
+              <td class="value" style="font-family: monospace; font-size: 13px;">${payload.orderId}</td>
+            </tr>
+            <tr>
+              <td class="label">Date & Time:</td>
+              <td class="value">${timestamp}</td>
+            </tr>
+          </table>
+
+          <div style="text-align: center;">
+            <a href="https://witslingo.com/admin" class="btn" style="color: #ffffff;">Open Admin Dashboard</a>
+          </div>
+        </div>
+        <div class="footer">
+          This is an automated notification from Wits Lingo Academy Payment Gateway System.
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpPort = Number(process.env.SMTP_PORT) || 587;
+    if (smtpHost && smtpUser && smtpPass) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass
+          }
+        });
+        await transporter.sendMail({
+          from: `"Wits Lingo Academy" <${smtpUser}>`,
+          to: adminEmail,
+          subject: `\u{1F393} New Course Enrolment: ${payload.courseName} by ${payload.studentName} (${amountFormatted})`,
+          html: htmlContent
+        });
+        notifRecord.emailSent = true;
+        console.log(`[AdminNotificationService] Live email successfully dispatched to ${adminEmail}`);
+      } catch (mailErr) {
+        notifRecord.emailError = mailErr?.message || "SMTP send failure";
+        console.warn(`[AdminNotificationService] SMTP email dispatch error:`, mailErr?.message || mailErr);
+      }
+    } else {
+      console.log(`[AdminNotificationService] SMTP credentials not set in .env. Notification logged locally and stored for Admin dashboard.`);
+    }
+    this.notifications.unshift(notifRecord);
+    this.saveNotifications();
+    return {
+      success: true,
+      emailSent: notifRecord.emailSent,
+      error: notifRecord.emailError
+    };
+  }
+};
+var adminNotificationService = new AdminNotificationService();
+
 // server.ts
 var s3ClientInstance = null;
 function getBackblazeConfig() {
@@ -2861,7 +3042,7 @@ async function deleteFileFromB2(fileId, fileName) {
 }
 var FORBIDDEN_EXEC_EXTS = /* @__PURE__ */ new Set([".exe", ".sh", ".bat", ".cmd", ".js", ".ts", ".vbs", ".msi", ".jar", ".py", ".bin"]);
 function getSafeFileMimeType(filename, providedMime) {
-  const ext = path6.extname(filename).toLowerCase();
+  const ext = path7.extname(filename).toLowerCase();
   if (ext === ".pdf") return "application/pdf";
   if (ext === ".doc") return "application/msword";
   if (ext === ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -3856,27 +4037,27 @@ function verifyPlaybackToken(token) {
     return null;
   }
 }
-var DATA_STORAGE_DIR = path6.join(process.cwd(), "uploads", "data");
+var DATA_STORAGE_DIR = path7.join(process.cwd(), "uploads", "data");
 try {
-  if (!fs6.existsSync(DATA_STORAGE_DIR)) {
-    fs6.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
+  if (!fs7.existsSync(DATA_STORAGE_DIR)) {
+    fs7.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
   }
 } catch (e) {
   console.warn("Could not create data storage directory:", e);
 }
-var REGISTRATIONS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "registrations.json");
-var USERS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "users.json");
-var BATCHES_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "batches.json");
-var PAYMENTS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "payments.json");
-var CMS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "cms-content.json");
-var ANNOUNCEMENTS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "announcements.json");
-var MATERIALS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "materials.json");
-var GALLERY_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "gallery.json");
-var ORDERS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "orders.json");
-var NOTIFICATIONS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "notifications.json");
-var CONVERSATIONS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "conversations.json");
-var MESSAGES_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "messages.json");
-var SUPPORT_TICKETS_STORAGE_FILE = path6.join(DATA_STORAGE_DIR, "support-tickets.json");
+var REGISTRATIONS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "registrations.json");
+var USERS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "users.json");
+var BATCHES_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "batches.json");
+var PAYMENTS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "payments.json");
+var CMS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "cms-content.json");
+var ANNOUNCEMENTS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "announcements.json");
+var MATERIALS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "materials.json");
+var GALLERY_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "gallery.json");
+var ORDERS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "orders.json");
+var NOTIFICATIONS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "notifications.json");
+var CONVERSATIONS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "conversations.json");
+var MESSAGES_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "messages.json");
+var SUPPORT_TICKETS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "support-tickets.json");
 var payments = [];
 var orders = [];
 var notifications = [];
@@ -3953,8 +4134,8 @@ var galleryItems = [
 ];
 function loadAllPersistedData() {
   try {
-    if (fs6.existsSync(REGISTRATIONS_STORAGE_FILE)) {
-      const data = JSON.parse(fs6.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
+    if (fs7.existsSync(REGISTRATIONS_STORAGE_FILE)) {
+      const data = JSON.parse(fs7.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         const existingIds = new Set(data.map((r) => r.id || r.admissionId));
         for (const r of registrations) {
@@ -3967,8 +4148,8 @@ function loadAllPersistedData() {
         console.log(`[Persistence] Loaded ${registrations.length} student registrations.`);
       }
     }
-    if (fs6.existsSync(USERS_STORAGE_FILE)) {
-      const data = JSON.parse(fs6.readFileSync(USERS_STORAGE_FILE, "utf-8"));
+    if (fs7.existsSync(USERS_STORAGE_FILE)) {
+      const data = JSON.parse(fs7.readFileSync(USERS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         const existingEmails = new Set(data.map((u) => u.email?.toLowerCase()));
         for (const u of users) {
@@ -3981,8 +4162,8 @@ function loadAllPersistedData() {
         console.log(`[Persistence] Loaded ${users.length} users.`);
       }
     }
-    if (fs6.existsSync(BATCHES_STORAGE_FILE)) {
-      const data = JSON.parse(fs6.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
+    if (fs7.existsSync(BATCHES_STORAGE_FILE)) {
+      const data = JSON.parse(fs7.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         const existingIds = new Set(data.map((b) => b.id));
         for (const b of batches) {
@@ -3995,16 +4176,16 @@ function loadAllPersistedData() {
         console.log(`[Persistence] Loaded ${batches.length} batches.`);
       }
     }
-    if (fs6.existsSync(PAYMENTS_STORAGE_FILE)) {
-      const data = JSON.parse(fs6.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
+    if (fs7.existsSync(PAYMENTS_STORAGE_FILE)) {
+      const data = JSON.parse(fs7.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         payments.length = 0;
         payments.push(...data);
         console.log(`[Persistence] Loaded ${payments.length} verified payment transactions.`);
       }
     }
-    if (fs6.existsSync(CMS_STORAGE_FILE)) {
-      const data = JSON.parse(fs6.readFileSync(CMS_STORAGE_FILE, "utf-8"));
+    if (fs7.existsSync(CMS_STORAGE_FILE)) {
+      const data = JSON.parse(fs7.readFileSync(CMS_STORAGE_FILE, "utf-8"));
       if (data && typeof data === "object") {
         cmsContent = {
           ...cmsContent,
@@ -4020,8 +4201,8 @@ function loadAllPersistedData() {
         console.log(`[Persistence] Loaded custom CMS content & settings.`);
       }
     }
-    if (fs6.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
-      const data = JSON.parse(fs6.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
+    if (fs7.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
+      const data = JSON.parse(fs7.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
         announcements.length = 0;
         announcements.push(...data);
@@ -4029,9 +4210,9 @@ function loadAllPersistedData() {
       }
     }
     let materialsLoaded = false;
-    if (fs6.existsSync(MATERIALS_STORAGE_FILE)) {
+    if (fs7.existsSync(MATERIALS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs6.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs7.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           for (const m of data) {
             if (m.resourceType === "youtube" || m.fileType === "youtube") {
@@ -4050,9 +4231,9 @@ function loadAllPersistedData() {
       }
     }
     let galleryLoaded = false;
-    if (fs6.existsSync(GALLERY_STORAGE_FILE)) {
+    if (fs7.existsSync(GALLERY_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs6.readFileSync(GALLERY_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs7.readFileSync(GALLERY_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data) && data.length > 0) {
           galleryItems.length = 0;
           galleryItems.push(...data);
@@ -4064,10 +4245,10 @@ function loadAllPersistedData() {
       }
     }
     if (!galleryLoaded) {
-      const legacyPath = path6.join(process.cwd(), "uploads", "gallery.json");
-      if (fs6.existsSync(legacyPath)) {
+      const legacyPath = path7.join(process.cwd(), "uploads", "gallery.json");
+      if (fs7.existsSync(legacyPath)) {
         try {
-          const data = JSON.parse(fs6.readFileSync(legacyPath, "utf-8"));
+          const data = JSON.parse(fs7.readFileSync(legacyPath, "utf-8"));
           if (Array.isArray(data) && data.length > 0) {
             galleryItems.length = 0;
             galleryItems.push(...data);
@@ -4080,9 +4261,9 @@ function loadAllPersistedData() {
         savePersistedGallery();
       }
     }
-    if (fs6.existsSync(ORDERS_STORAGE_FILE)) {
+    if (fs7.existsSync(ORDERS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs6.readFileSync(ORDERS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs7.readFileSync(ORDERS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           orders.length = 0;
           orders.push(...data);
@@ -4092,9 +4273,9 @@ function loadAllPersistedData() {
         console.warn("[Persistence] Could not parse orders.json:", e);
       }
     }
-    if (fs6.existsSync(NOTIFICATIONS_STORAGE_FILE)) {
+    if (fs7.existsSync(NOTIFICATIONS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs6.readFileSync(NOTIFICATIONS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs7.readFileSync(NOTIFICATIONS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           notifications.length = 0;
           notifications.push(...data);
@@ -4104,9 +4285,9 @@ function loadAllPersistedData() {
         console.warn("[Persistence] Could not parse notifications.json:", e);
       }
     }
-    if (fs6.existsSync(CONVERSATIONS_STORAGE_FILE)) {
+    if (fs7.existsSync(CONVERSATIONS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs6.readFileSync(CONVERSATIONS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs7.readFileSync(CONVERSATIONS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           conversations.length = 0;
           conversations.push(...data);
@@ -4114,9 +4295,9 @@ function loadAllPersistedData() {
       } catch (e) {
       }
     }
-    if (fs6.existsSync(MESSAGES_STORAGE_FILE)) {
+    if (fs7.existsSync(MESSAGES_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs6.readFileSync(MESSAGES_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs7.readFileSync(MESSAGES_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           messages.length = 0;
           messages.push(...data);
@@ -4124,9 +4305,9 @@ function loadAllPersistedData() {
       } catch (e) {
       }
     }
-    if (fs6.existsSync(SUPPORT_TICKETS_STORAGE_FILE)) {
+    if (fs7.existsSync(SUPPORT_TICKETS_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs6.readFileSync(SUPPORT_TICKETS_STORAGE_FILE, "utf-8"));
+        const data = JSON.parse(fs7.readFileSync(SUPPORT_TICKETS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           supportTickets.length = 0;
           supportTickets.push(...data);
@@ -4144,7 +4325,7 @@ function savePersistedGallery() {
   durableStorageService.saveCollectionBackground("gallery", galleryItems);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
+      fs7.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save gallery.json:", e);
     }
@@ -4154,7 +4335,7 @@ function saveRegistrations() {
   durableStorageService.saveCollectionBackground("registrations", registrations);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
+      fs7.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save registrations:", e);
     }
@@ -4164,7 +4345,7 @@ function saveUsers() {
   durableStorageService.saveCollectionBackground("users", users);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
+      fs7.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save users:", e);
     }
@@ -4174,7 +4355,7 @@ function saveBatches() {
   durableStorageService.saveCollectionBackground("batches", batches);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
+      fs7.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save batches:", e);
     }
@@ -4184,7 +4365,7 @@ function savePayments() {
   durableStorageService.saveCollectionBackground("payments", payments);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
+      fs7.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save payments:", e);
     }
@@ -4194,7 +4375,7 @@ function saveCmsContent() {
   durableStorageService.saveCollectionBackground("cmsContent", cmsContent);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
+      fs7.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save cmsContent:", e);
     }
@@ -4204,7 +4385,7 @@ function savePersistedMaterials() {
   durableStorageService.saveCollectionBackground("materials", studyMaterials);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
+      fs7.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save materials:", e);
     }
@@ -4214,7 +4395,7 @@ function saveOrders() {
   durableStorageService.saveCollectionBackground("orders", orders);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
+      fs7.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save orders:", e);
     }
@@ -4224,7 +4405,7 @@ function saveNotifications() {
   durableStorageService.saveCollectionBackground("notifications", notifications);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(NOTIFICATIONS_STORAGE_FILE, JSON.stringify(notifications, null, 2), "utf-8");
+      fs7.writeFileSync(NOTIFICATIONS_STORAGE_FILE, JSON.stringify(notifications, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save notifications:", e);
     }
@@ -4234,7 +4415,7 @@ function saveConversations() {
   durableStorageService.saveCollectionBackground("conversations", conversations);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(CONVERSATIONS_STORAGE_FILE, JSON.stringify(conversations, null, 2), "utf-8");
+      fs7.writeFileSync(CONVERSATIONS_STORAGE_FILE, JSON.stringify(conversations, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save conversations:", e);
     }
@@ -4244,7 +4425,7 @@ function saveMessages() {
   durableStorageService.saveCollectionBackground("messages", messages);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(MESSAGES_STORAGE_FILE, JSON.stringify(messages, null, 2), "utf-8");
+      fs7.writeFileSync(MESSAGES_STORAGE_FILE, JSON.stringify(messages, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save messages:", e);
     }
@@ -4254,7 +4435,7 @@ function saveSupportTickets() {
   durableStorageService.saveCollectionBackground("support-tickets", supportTickets);
   if (process.env.VERCEL !== "1") {
     try {
-      fs6.writeFileSync(SUPPORT_TICKETS_STORAGE_FILE, JSON.stringify(supportTickets, null, 2), "utf-8");
+      fs7.writeFileSync(SUPPORT_TICKETS_STORAGE_FILE, JSON.stringify(supportTickets, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save support tickets:", e);
     }
@@ -4570,10 +4751,10 @@ async function handleInboundStudentMessage(recipientPhone, messageText, provider
 }
 var app = express();
 var PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3e3;
-var uploadsDir = path6.join(process.cwd(), "uploads");
+var uploadsDir = path7.join(process.cwd(), "uploads");
 try {
-  if (!fs6.existsSync(uploadsDir)) {
-    fs6.mkdirSync(uploadsDir, { recursive: true });
+  if (!fs7.existsSync(uploadsDir)) {
+    fs7.mkdirSync(uploadsDir, { recursive: true });
   }
 } catch (e) {
 }
@@ -5901,6 +6082,22 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
     } catch (waErr) {
       console.warn("[WhatsApp] Async confirmation error:", waErr);
     }
+    try {
+      await adminNotificationService.notifyAdminOnPurchase({
+        orderId: order.id,
+        studentName: order.studentName,
+        studentPhone: order.studentPhone,
+        studentEmail: order.studentEmail,
+        courseId: order.courseId,
+        courseName: order.courseName,
+        amount: order.expectedAmount,
+        razorpayPaymentId: order.razorpayPaymentId,
+        razorpayOrderId: order.razorpayOrderId,
+        purchaseDate: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    } catch (adminMailErr) {
+      console.warn("[AdminNotification] Could not dispatch admin purchase email:", adminMailErr);
+    }
     res.json({
       success: true,
       message: "Payment successfully verified! Your course access is activated.",
@@ -6276,9 +6473,9 @@ app.post("/api/admin/hero-video/upload", async (req, res) => {
   const rawBase64 = dataBase64.includes(",") ? dataBase64.split(",")[1] : dataBase64;
   const buffer = Buffer.from(rawBase64, "base64");
   const safeFilename = (filename || "hero-video.mp4").replace(/[^a-zA-Z0-9._-]/g, "_");
-  const diskPath = path6.join(uploadsDir, "hero-video.mp4");
+  const diskPath = path7.join(uploadsDir, "hero-video.mp4");
   try {
-    fs6.writeFileSync(diskPath, buffer);
+    fs7.writeFileSync(diskPath, buffer);
   } catch (diskErr) {
     console.warn("Could not save hero video to disk:", diskErr);
   }
@@ -6319,11 +6516,11 @@ app.post("/api/admin/hero-video/reset", (req, res) => {
   });
 });
 app.get("/api/files/hero-video/:filename?", (req, res) => {
-  const diskPath = path6.join(uploadsDir, "hero-video.mp4");
-  if (!fs6.existsSync(diskPath)) {
+  const diskPath = path7.join(uploadsDir, "hero-video.mp4");
+  if (!fs7.existsSync(diskPath)) {
     return res.redirect("/video/wits-lingo-intro.mp4");
   }
-  const stat = fs6.statSync(diskPath);
+  const stat = fs7.statSync(diskPath);
   const fileSize = stat.size;
   const range = req.headers.range;
   if (range) {
@@ -6331,7 +6528,7 @@ app.get("/api/files/hero-video/:filename?", (req, res) => {
     const start = parseInt(parts[0], 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
     const chunksize = end - start + 1;
-    const file = fs6.createReadStream(diskPath, { start, end });
+    const file = fs7.createReadStream(diskPath, { start, end });
     const head = {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
@@ -6347,7 +6544,7 @@ app.get("/api/files/hero-video/:filename?", (req, res) => {
       "Accept-Ranges": "bytes"
     };
     res.writeHead(200, head);
-    fs6.createReadStream(diskPath).pipe(res);
+    fs7.createReadStream(diskPath).pipe(res);
   }
 });
 app.post("/api/admin/logo/upload", async (req, res) => {
@@ -6381,11 +6578,11 @@ app.post("/api/admin/logo/upload", async (req, res) => {
     if (buffer.length > 8 * 1024 * 1024) {
       return res.status(400).json({ error: "Logo file size exceeds 8MB limit." });
     }
-    const ext = path6.extname(filename || "logo.png") || (cleanMime.includes("svg") ? ".svg" : ".png");
+    const ext = path7.extname(filename || "logo.png") || (cleanMime.includes("svg") ? ".svg" : ".png");
     const safeFilename = `wits-lingo-logo-${Date.now()}${ext}`.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const diskPath = path6.join(uploadsDir, safeFilename);
+    const diskPath = path7.join(uploadsDir, safeFilename);
     try {
-      fs6.writeFileSync(diskPath, buffer);
+      fs7.writeFileSync(diskPath, buffer);
     } catch (diskErr) {
       console.warn("[Logo] Could not save logo to disk:", diskErr);
     }
@@ -6443,10 +6640,10 @@ app.post("/api/admin/logo/reset", (req, res) => {
   });
 });
 app.get("/api/files/logo/:filename?", (req, res) => {
-  const requestedFile = req.params.filename ? path6.basename(req.params.filename) : "";
+  const requestedFile = req.params.filename ? path7.basename(req.params.filename) : "";
   if (requestedFile) {
-    const diskPath = path6.join(uploadsDir, requestedFile);
-    if (fs6.existsSync(diskPath)) {
+    const diskPath = path7.join(uploadsDir, requestedFile);
+    if (fs7.existsSync(diskPath)) {
       res.setHeader("Cache-Control", "public, max-age=86400");
       return res.sendFile(diskPath);
     }
@@ -6554,9 +6751,9 @@ app.post("/api/admin/gallery/upload", async (req, res) => {
       const id = `gal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const safeOriginalName = (item.filename || `photo-${Date.now()}.jpg`).replace(/[^a-zA-Z0-9._-]/g, "_");
       const diskFilename = `${id}-${safeOriginalName}`;
-      const diskPath = path6.join(uploadsDir, diskFilename);
+      const diskPath = path7.join(uploadsDir, diskFilename);
       try {
-        fs6.writeFileSync(diskPath, buffer);
+        fs7.writeFileSync(diskPath, buffer);
       } catch (diskErr) {
         console.warn("[Gallery] Could not cache image on disk:", diskErr);
       }
@@ -6669,12 +6866,12 @@ app.delete("/api/admin/gallery/:id", async (req, res) => {
   galleryItems.splice(idx, 1);
   savePersistedGallery();
   try {
-    if (fs6.existsSync(uploadsDir)) {
-      const files = fs6.readdirSync(uploadsDir);
+    if (fs7.existsSync(uploadsDir)) {
+      const files = fs7.readdirSync(uploadsDir);
       for (const file of files) {
         if (file.startsWith(id) || file.startsWith(`gal-${id}`)) {
           try {
-            fs6.unlinkSync(path6.join(uploadsDir, file));
+            fs7.unlinkSync(path7.join(uploadsDir, file));
           } catch (unlinkErr) {
           }
         }
@@ -6697,19 +6894,19 @@ app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
   const { id, filename } = req.params;
   let foundPath = null;
   try {
-    if (fs6.existsSync(uploadsDir)) {
-      const files = fs6.readdirSync(uploadsDir);
+    if (fs7.existsSync(uploadsDir)) {
+      const files = fs7.readdirSync(uploadsDir);
       for (const f of files) {
         if (f.startsWith(id)) {
-          foundPath = path6.join(uploadsDir, f);
+          foundPath = path7.join(uploadsDir, f);
           break;
         }
       }
     }
   } catch (e) {
   }
-  if (foundPath && fs6.existsSync(foundPath)) {
-    const ext = path6.extname(foundPath).toLowerCase();
+  if (foundPath && fs7.existsSync(foundPath)) {
+    const ext = path7.extname(foundPath).toLowerCase();
     const mimeTypes = {
       ".jpg": "image/jpeg",
       ".jpeg": "image/jpeg",
@@ -6721,7 +6918,7 @@ app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
     };
     res.setHeader("Content-Type", mimeTypes[ext] || "image/jpeg");
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    return fs6.createReadStream(foundPath).pipe(res);
+    return fs7.createReadStream(foundPath).pipe(res);
   }
   const item = galleryItems.find((g) => g.id === id);
   if (item && (item.b2FileId || item.b2FileName)) {
@@ -6729,8 +6926,8 @@ app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
       const b2Res = await downloadBufferFromB2(item.b2FileId, item.b2FileName);
       if (b2Res.success && b2Res.buffer) {
         try {
-          const diskSave = path6.join(uploadsDir, `${id}-${filename || "image.jpg"}`);
-          fs6.writeFileSync(diskSave, b2Res.buffer);
+          const diskSave = path7.join(uploadsDir, `${id}-${filename || "image.jpg"}`);
+          fs7.writeFileSync(diskSave, b2Res.buffer);
         } catch (e) {
         }
         res.setHeader("Content-Type", b2Res.contentType || "image/jpeg");
@@ -7538,11 +7735,11 @@ app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], as
     });
   }
   try {
-    const diskPath1 = path6.join(uploadsDir, `${id}.pdf`);
-    if (fs6.existsSync(diskPath1)) fs6.unlinkSync(diskPath1);
+    const diskPath1 = path7.join(uploadsDir, `${id}.pdf`);
+    if (fs7.existsSync(diskPath1)) fs7.unlinkSync(diskPath1);
     if (mat.b2FileName) {
-      const diskPath2 = path6.join(uploadsDir, path6.basename(mat.b2FileName));
-      if (fs6.existsSync(diskPath2)) fs6.unlinkSync(diskPath2);
+      const diskPath2 = path7.join(uploadsDir, path7.basename(mat.b2FileName));
+      if (fs7.existsSync(diskPath2)) fs7.unlinkSync(diskPath2);
     }
   } catch (e) {
   }
@@ -7591,7 +7788,7 @@ app.post("/api/admin/upload-file", async (req, res) => {
     return res.status(400).json({ error: "No file data received." });
   }
   const rawFilename = (filename || "document.pdf").trim();
-  const ext = path6.extname(rawFilename).toLowerCase() || ".pdf";
+  const ext = path7.extname(rawFilename).toLowerCase() || ".pdf";
   if (FORBIDDEN_EXEC_EXTS.has(ext)) {
     return res.status(400).json({ error: `File type ${ext} is not allowed for security reasons.` });
   }
@@ -7604,10 +7801,10 @@ app.post("/api/admin/upload-file", async (req, res) => {
     return res.status(400).json({ error: "File exceeds maximum allowed size of 50 MB." });
   }
   try {
-    const diskPath = path6.join(uploadsDir, `${fileId}-${safeFilename}`);
-    fs6.writeFileSync(diskPath, buffer);
-    const diskPathShort = path6.join(uploadsDir, `${fileId}.pdf`);
-    fs6.writeFileSync(diskPathShort, buffer);
+    const diskPath = path7.join(uploadsDir, `${fileId}-${safeFilename}`);
+    fs7.writeFileSync(diskPath, buffer);
+    const diskPathShort = path7.join(uploadsDir, `${fileId}.pdf`);
+    fs7.writeFileSync(diskPathShort, buffer);
   } catch (err) {
     console.warn("Failed saving upload to disk:", err);
   }
@@ -7676,17 +7873,17 @@ app.get("/api/files/pdf/:id/:filename?", async (req, res) => {
     if (match) extractedFileId = match[1];
   }
   const possibleDiskPaths = [
-    path6.join(uploadsDir, `${id}.pdf`),
-    path6.join(uploadsDir, `${id}-${filename}`),
-    extractedFileId ? path6.join(uploadsDir, `${extractedFileId}.pdf`) : "",
-    extractedFileId ? path6.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
-    mat?.b2FileName ? path6.join(uploadsDir, path6.basename(mat.b2FileName)) : "",
-    memFile?.b2FileName ? path6.join(uploadsDir, path6.basename(memFile.b2FileName)) : ""
+    path7.join(uploadsDir, `${id}.pdf`),
+    path7.join(uploadsDir, `${id}-${filename}`),
+    extractedFileId ? path7.join(uploadsDir, `${extractedFileId}.pdf`) : "",
+    extractedFileId ? path7.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
+    mat?.b2FileName ? path7.join(uploadsDir, path7.basename(mat.b2FileName)) : "",
+    memFile?.b2FileName ? path7.join(uploadsDir, path7.basename(memFile.b2FileName)) : ""
   ].filter(Boolean);
   for (const dp of possibleDiskPaths) {
-    if (fs6.existsSync(dp)) {
+    if (fs7.existsSync(dp)) {
       try {
-        buffer = fs6.readFileSync(dp);
+        buffer = fs7.readFileSync(dp);
         break;
       } catch (e) {
       }
@@ -7695,10 +7892,10 @@ app.get("/api/files/pdf/:id/:filename?", async (req, res) => {
   if (!buffer && (id || extractedFileId)) {
     const searchPrefix = extractedFileId || id;
     try {
-      const files = fs6.readdirSync(uploadsDir);
+      const files = fs7.readdirSync(uploadsDir);
       const matchFile = files.find((f) => f.startsWith(searchPrefix));
       if (matchFile) {
-        buffer = fs6.readFileSync(path6.join(uploadsDir, matchFile));
+        buffer = fs7.readFileSync(path7.join(uploadsDir, matchFile));
       }
     } catch (e) {
     }
@@ -7763,17 +7960,17 @@ app.get("/api/files/download/:id", async (req, res) => {
       if (match) extractedFileId = match[1];
     }
     const possibleDiskPaths = [
-      path6.join(uploadsDir, `${id}.pdf`),
-      path6.join(uploadsDir, `${id}-${filename}`),
-      extractedFileId ? path6.join(uploadsDir, `${extractedFileId}.pdf`) : "",
-      extractedFileId ? path6.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
-      mat?.b2FileName ? path6.join(uploadsDir, path6.basename(mat.b2FileName)) : "",
-      memFile?.b2FileName ? path6.join(uploadsDir, path6.basename(memFile.b2FileName)) : ""
+      path7.join(uploadsDir, `${id}.pdf`),
+      path7.join(uploadsDir, `${id}-${filename}`),
+      extractedFileId ? path7.join(uploadsDir, `${extractedFileId}.pdf`) : "",
+      extractedFileId ? path7.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
+      mat?.b2FileName ? path7.join(uploadsDir, path7.basename(mat.b2FileName)) : "",
+      memFile?.b2FileName ? path7.join(uploadsDir, path7.basename(memFile.b2FileName)) : ""
     ].filter(Boolean);
     for (const dp of possibleDiskPaths) {
-      if (fs6.existsSync(dp)) {
+      if (fs7.existsSync(dp)) {
         try {
-          buffer = fs6.readFileSync(dp);
+          buffer = fs7.readFileSync(dp);
           break;
         } catch (e) {
         }
@@ -7782,10 +7979,10 @@ app.get("/api/files/download/:id", async (req, res) => {
     if (!buffer && (id || extractedFileId)) {
       const searchPrefix = extractedFileId || id;
       try {
-        const files = fs6.readdirSync(uploadsDir);
+        const files = fs7.readdirSync(uploadsDir);
         const matchFile = files.find((f) => f.startsWith(searchPrefix));
         if (matchFile) {
-          buffer = fs6.readFileSync(path6.join(uploadsDir, matchFile));
+          buffer = fs7.readFileSync(path7.join(uploadsDir, matchFile));
         }
       } catch (e) {
       }
@@ -7866,7 +8063,7 @@ app.get("/api/proxy-pdf", async (req, res) => {
     const contentType = fetchRes.headers.get("content-type") || "application/pdf";
     const buffer = Buffer.from(await fetchRes.arrayBuffer());
     const pathname = parsedUrl.pathname;
-    const basename = path6.basename(pathname) || "document.pdf";
+    const basename = path7.basename(pathname) || "document.pdf";
     const safeBasename = basename.endsWith(".pdf") ? basename : `${basename}.pdf`;
     res.setHeader("Content-Type", contentType.includes("pdf") ? "application/pdf" : contentType);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(safeBasename)}"`);
@@ -8154,6 +8351,7 @@ app.post("/api/courses", (req, res) => {
     // default to true if not specified
   };
   cmsContent.courses.push(newCourse);
+  saveCmsContent();
   res.status(201).json({ success: true, course: newCourse, courses: cmsContent.courses });
 });
 app.put("/api/courses/:id", (req, res) => {
@@ -8180,6 +8378,7 @@ app.put("/api/courses/:id", (req, res) => {
     isPublished: isPublished !== void 0 ? isPublished : currentCourse.isPublished
   };
   cmsContent.courses[courseIndex] = updatedCourse;
+  saveCmsContent();
   res.json({ success: true, course: updatedCourse, courses: cmsContent.courses });
 });
 app.patch("/api/courses/:id/publish", (req, res) => {
@@ -8194,6 +8393,7 @@ app.patch("/api/courses/:id/publish", (req, res) => {
   const currentCourse = cmsContent.courses[courseIndex];
   const newStatus = req.body.isPublished !== void 0 ? Boolean(req.body.isPublished) : !Boolean(currentCourse.isPublished);
   currentCourse.isPublished = newStatus;
+  saveCmsContent();
   res.json({ success: true, course: currentCourse, isPublished: newStatus, courses: cmsContent.courses });
 });
 app.delete("/api/courses/:id", (req, res) => {
@@ -8206,7 +8406,111 @@ app.delete("/api/courses/:id", (req, res) => {
     return res.status(404).json({ error: "Course not found." });
   }
   const deleted = cmsContent.courses.splice(courseIndex, 1)[0];
+  saveCmsContent();
   res.json({ success: true, deleted, courses: cmsContent.courses });
+});
+app.post("/api/courses", (req, res, next) => {
+  next();
+});
+app.get("/api/reviews", (req, res) => {
+  const auth = verifyAuthToken(req.headers.authorization);
+  const isAdmin = auth && auth.role === "admin";
+  const all = cmsContent.testimonials || [];
+  if (isAdmin) {
+    return res.json({ success: true, reviews: all });
+  }
+  const publicReviews = all.filter((r) => r.isApproved !== false);
+  res.json({ success: true, reviews: publicReviews });
+});
+app.post("/api/reviews", (req, res) => {
+  const { studentName, courseName, courseBatch, rating, testimonial, city } = req.body;
+  if (!studentName || !testimonial) {
+    return res.status(400).json({ success: false, error: "Name and review text are required." });
+  }
+  const reviewId = `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const authorKey = `auth_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+  const newReview = {
+    id: reviewId,
+    studentName: studentName.trim(),
+    courseBatch: courseBatch || courseName || "Wits Lingo Course",
+    testimonial: testimonial.trim(),
+    rating: Math.min(5, Math.max(1, Number(rating) || 5)),
+    city: city ? city.trim() : "Verified Student",
+    date: (/* @__PURE__ */ new Date()).toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
+    verified: true,
+    isApproved: true,
+    authorKey
+  };
+  if (!Array.isArray(cmsContent.testimonials)) {
+    cmsContent.testimonials = [];
+  }
+  cmsContent.testimonials.unshift(newReview);
+  saveCmsContent();
+  res.status(201).json({
+    success: true,
+    message: "Review submitted successfully!",
+    review: newReview,
+    authorKey
+  });
+});
+app.put("/api/reviews/:id", (req, res) => {
+  const { id } = req.params;
+  const { studentName, courseName, courseBatch, rating, testimonial, city, authorKey, isApproved } = req.body;
+  const auth = verifyAuthToken(req.headers.authorization);
+  const isAdmin = auth && auth.role === "admin";
+  if (!Array.isArray(cmsContent.testimonials)) {
+    cmsContent.testimonials = [];
+  }
+  const reviewIndex = cmsContent.testimonials.findIndex((r) => r.id === id);
+  if (reviewIndex === -1) {
+    return res.status(404).json({ success: false, error: "Review not found." });
+  }
+  const targetReview = cmsContent.testimonials[reviewIndex];
+  const providedAuthorKey = authorKey || req.headers["x-author-key"];
+  const isAuthor = targetReview.authorKey && providedAuthorKey === targetReview.authorKey;
+  if (!isAuthor && !isAdmin) {
+    return res.status(403).json({ success: false, error: "Unauthorized. You can only edit your own reviews." });
+  }
+  const updatedReview = {
+    ...targetReview,
+    studentName: studentName ? studentName.trim() : targetReview.studentName,
+    courseBatch: courseBatch || courseName ? (courseBatch || courseName).trim() : targetReview.courseBatch,
+    testimonial: testimonial ? testimonial.trim() : targetReview.testimonial,
+    rating: rating !== void 0 ? Math.min(5, Math.max(1, Number(rating) || 5)) : targetReview.rating,
+    city: city !== void 0 ? city.trim() : targetReview.city,
+    isApproved: isAdmin && isApproved !== void 0 ? Boolean(isApproved) : targetReview.isApproved
+  };
+  cmsContent.testimonials[reviewIndex] = updatedReview;
+  saveCmsContent();
+  res.json({ success: true, message: "Review updated successfully!", review: updatedReview });
+});
+app.delete("/api/reviews/:id", (req, res) => {
+  const { id } = req.params;
+  const auth = verifyAuthToken(req.headers.authorization);
+  const isAdmin = auth && auth.role === "admin";
+  const authorKey = req.body.authorKey || req.headers["x-author-key"] || req.query.authorKey;
+  if (!Array.isArray(cmsContent.testimonials)) {
+    cmsContent.testimonials = [];
+  }
+  const reviewIndex = cmsContent.testimonials.findIndex((r) => r.id === id);
+  if (reviewIndex === -1) {
+    return res.status(404).json({ success: false, error: "Review not found." });
+  }
+  const targetReview = cmsContent.testimonials[reviewIndex];
+  const isAuthor = targetReview.authorKey && authorKey === targetReview.authorKey;
+  if (!isAuthor && !isAdmin) {
+    return res.status(403).json({ success: false, error: "Unauthorized to delete this review." });
+  }
+  const deleted = cmsContent.testimonials.splice(reviewIndex, 1)[0];
+  saveCmsContent();
+  res.json({ success: true, message: "Review deleted successfully.", deleted });
+});
+app.get("/api/admin/notifications", (req, res) => {
+  const auth = verifyAuthToken(req.headers.authorization);
+  if (!auth || auth.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required." });
+  }
+  res.json({ success: true, notifications: adminNotificationService.getAllNotifications() });
 });
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
@@ -8221,11 +8525,11 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path6.join(process.cwd(), "dist");
-    if (fs6.existsSync(distPath)) {
+    const distPath = path7.join(process.cwd(), "dist");
+    if (fs7.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get("*", (req, res) => {
-        res.sendFile(path6.join(distPath, "index.html"));
+        res.sendFile(path7.join(distPath, "index.html"));
       });
     }
   }

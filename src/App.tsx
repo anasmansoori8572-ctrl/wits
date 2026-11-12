@@ -10,7 +10,7 @@ import { StatsSection } from './components/StatsSection';
 import { WhatWeTeach } from './components/WhatWeTeach';
 import { PhilosophySection } from './components/PhilosophySection';
 import { CoursesSection } from './components/CoursesSection';
-import { BatchesSection } from './components/BatchesSection';
+import { TestimonialsSection } from './components/TestimonialsSection';
 import { LearningResources } from './components/LearningResources';
 import { CommunitySection } from './components/CommunitySection';
 import { FounderSection } from './components/FounderSection';
@@ -251,9 +251,21 @@ export default function App() {
     localStorage.setItem('wits_lingo_batches', JSON.stringify(newBatches));
   };
 
-  const handleUpdateTestimonials = (newTestimonials: TestimonialData[]) => {
+  const handleUpdateTestimonials = async (newTestimonials: TestimonialData[]) => {
     setTestimonials(newTestimonials);
     localStorage.setItem('wits_lingo_testimonials', JSON.stringify(newTestimonials));
+    try {
+      await fetch('/api/cms/content', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
+        },
+        body: JSON.stringify({ testimonials: newTestimonials })
+      });
+    } catch (e) {
+      console.warn('Could not sync testimonials to backend:', e);
+    }
   };
 
   const handleUpdateSiteSettings = (newSettings: SiteSettings) => {
@@ -382,6 +394,14 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         if (data?.content) {
+          if (Array.isArray(data.content.courses) && data.content.courses.length > 0) {
+            setCourses(data.content.courses);
+            localStorage.setItem('wits_lingo_courses', JSON.stringify(data.content.courses));
+          }
+          if (Array.isArray(data.content.testimonials) && data.content.testimonials.length > 0) {
+            setTestimonials(data.content.testimonials);
+            localStorage.setItem('wits_lingo_testimonials', JSON.stringify(data.content.testimonials));
+          }
           setSiteSettings(prev => {
             const incomingEmail = data.content.email || data.content.settings?.email;
             const merged = { ...prev, ...(data.content.settings || {}) };
@@ -604,6 +624,7 @@ export default function App() {
         currentUser={currentUser}
         siteSettings={siteSettings}
         onOpenAdmission={() => handleOpenAdmission()}
+        onBuyCourse={() => handleOpenCheckout()}
         onOpenAuth={(role) => handleOpenAuth(role || 'student')}
         onOpenDashboard={() => {
           if (currentUser && currentUser.role === 'student') {
@@ -707,12 +728,6 @@ export default function App() {
             onBuyNow={(courseId) => handleOpenCheckout(courseId)}
           />
 
-          {/* 2b. Batches & Seat Capacity */}
-          <BatchesSection
-            batches={batches}
-            onEnrollBatch={(courseId, batchId) => handleOpenAdmission(courseId, batchId)}
-            siteSettings={siteSettings}
-          />
 
           {/* 3. About Section: Learn → Understand → Practise → Speak → Grow */}
           <AboutSection />
@@ -741,6 +756,13 @@ export default function App() {
           <CommunitySection
             siteSettings={siteSettings}
             onJoinNewJourney={() => handleOpenAdmission()}
+          />
+
+          {/* 9. Interactive Reviews & Ratings */}
+          <TestimonialsSection
+            testimonials={testimonials}
+            onOpenAdmission={() => handleOpenCheckout()}
+            onUpdateTestimonials={handleUpdateTestimonials}
           />
 
           {/* 12. About the Founder: Ziyaur Rehman Zia */}

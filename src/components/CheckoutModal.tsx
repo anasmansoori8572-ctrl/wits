@@ -204,6 +204,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return;
     }
 
+    if (!email.trim() || !email.includes('@')) {
+      setErrorMsg('Please enter a valid email address for receiving purchase confirmation.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -386,10 +391,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </div>
 
           <h2 className="font-['Outfit'] text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Enrol in {currentCourse?.name || 'Wits Lingo'}
+            Buy {currentCourse?.name || 'Course'}
           </h2>
           <p className="text-xs sm:text-sm text-purple-200 mt-1">
-            {currentCourse?.shortDescription || 'Instant admission, batch seat confirmation & WhatsApp joining instructions.'}
+            Instant online purchase, live classroom access & instant WhatsApp confirmation.
           </p>
         </div>
 
@@ -556,12 +561,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
           {/* Email Address */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-              Email Address <span className="text-slate-400 font-normal">(Optional for receipt)</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Email Address <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[11px] text-purple-700 font-semibold">
+                Receipt & course link will be sent here
+              </span>
+            </div>
             <input
               type="email"
-              placeholder="e.g. student@gmail.com"
+              required
+              placeholder="e.g. yourname@gmail.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
@@ -672,7 +683,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             ) : (
               <>
                 <CreditCard className="w-4 h-4" />
-                <span>Pay ₹{finalPayable.toLocaleString()} for {currentCourse?.name || 'Selected Course'} & Start Learning</span>
+                <span>Pay ₹{finalPayable.toLocaleString()} via Razorpay (UPI, Cards, NetBanking)</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

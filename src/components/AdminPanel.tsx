@@ -284,7 +284,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       'Class Recording Access for Revision'
     ],
     duration: '2 Months (40 Sessions)',
-    learningFormat: 'Live Online Classroom (Evening Batches)',
+    learningFormat: 'Live Online Classroom',
     fee: 1499,
     badge: 'Popular'
   });
@@ -1423,7 +1423,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       courseBatch: newTestimonial.courseBatch || 'Spoken English',
       city: newTestimonial.city || 'India',
       testimonial: newTestimonial.testimonial,
-      verified: newTestimonial.verified ?? true
+      verified: newTestimonial.verified ?? true,
+      rating: Number(newTestimonial.rating) || 5,
     };
     const updated = [item, ...testimonials];
     onUpdateTestimonials(updated);
@@ -2067,7 +2068,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {[
             { id: 'students', label: `Admissions & Students (${students.length})`, icon: Users },
             { id: 'courses', label: `Courses & Pricing (${courses.length})`, icon: Layers },
-            { id: 'batches', label: `Batches & Capacity (${batches.length})`, icon: RefreshCw },
             { id: 'materials', label: `Study Notes & PDFs (${materials.filter(m => m.resourceType !== 'youtube' && m.fileType !== 'youtube').length})`, icon: FileText },
             { id: 'youtube-lessons', label: `Video Lessons / YouTube (${materials.filter(m => m.resourceType === 'youtube' || m.fileType === 'youtube').length})`, icon: Youtube },
             { id: 'gallery', label: `Gallery (${galleryItems.length})`, icon: ImageIcon },
@@ -2336,7 +2336,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           'Pronunciation and accent clarity'
                         ],
                         duration: '2 Months (40 Sessions)',
-                        learningFormat: 'Live Online Classroom (Evening Batches)',
+                        learningFormat: 'Live Online Classroom',
                         fee: 1499,
                         badge: 'Popular Foundation',
                         isPublished: true
@@ -4320,7 +4320,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="font-bold text-sm text-slate-900">{test.studentName}</h4>
-                        <p className="text-[11px] text-purple-700 font-semibold">{test.courseBatch}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <p className="text-[11px] text-purple-700 font-semibold">{test.courseBatch}</p>
+                          <span className="text-amber-500 font-bold text-xs">★ {test.rating || 5}</span>
+                        </div>
                       </div>
                       {test.verified && (
                         <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
@@ -6143,7 +6146,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       type="text"
                       value={editingCourse.learningFormat || ''}
                       onChange={(e) => setEditingCourse({ ...editingCourse, learningFormat: e.target.value })}
-                      placeholder="e.g. Live Online Classroom (Evening Batches)"
+                      placeholder="e.g. Live Online Classroom"
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-slate-800 text-xs focus:outline-hidden focus:border-[#4A1D96]"
                     />
                   </div>
@@ -7289,12 +7292,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Course / Batch</label>
+                    <label className="font-bold text-slate-700 block mb-1">Course Name</label>
                     <input
                       type="text"
                       value={newTestimonial.courseBatch || ''}
                       onChange={(e) => setNewTestimonial({ ...newTestimonial, courseBatch: e.target.value })}
-                      placeholder="e.g. Spoken English • Batch 01"
+                      placeholder="e.g. Spoken English"
                       className="w-full px-3 py-2 rounded-xl border border-slate-200"
                     />
                   </div>
@@ -7371,7 +7374,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Course / Batch</label>
+                    <label className="font-bold text-slate-700 block mb-1">Course Name</label>
                     <input
                       type="text"
                       value={editingTestimonial.courseBatch}

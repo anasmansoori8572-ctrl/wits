@@ -537,7 +537,7 @@ export const Hero: React.FC<HeroProps> = ({
               </button>
             </div>
             <p className="text-sm text-slate-600 mb-4 leading-relaxed">
-              Our 50-Question Spoken English Diagnostic Assessment evaluates your current proficiency (Beginner, Intermediate, or Advanced) and provides personalized batch recommendations.
+              Our 50-Question Spoken English Diagnostic Assessment evaluates your current proficiency (Beginner, Intermediate, or Advanced) and provides personalized course recommendations.
             </p>
             <div className="bg-purple-50 rounded-xl p-3.5 mb-5 text-xs text-purple-900 border border-purple-100">
               <span className="font-bold block mb-1">Status:</span>

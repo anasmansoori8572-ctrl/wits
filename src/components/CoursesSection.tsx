@@ -35,13 +35,10 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
             Designed for learners from schools, colleges, competitive exam preparation, and working professionals looking for real fluency.
           </p>
           <div className="pt-2">
-            <a
-              href="#batches"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#4A1D96] hover:text-[#3B0764] bg-purple-50 hover:bg-purple-100/80 px-4 py-2 rounded-full border border-purple-200 transition-colors shadow-2xs"
-            >
-              <span>📅 View Live Batch Timings & Seat Availability</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </a>
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#4A1D96] bg-purple-50 px-4 py-2 rounded-full border border-purple-200 shadow-2xs">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Direct Online Enrolment • Live Sessions on Google Meet • Study Notes Included</span>
+            </span>
           </div>
         </div>
 
@@ -140,7 +137,7 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
                     <span className="font-['Outfit'] text-2xl font-black text-[#3B0764]">
                       ₹{course.fee.toLocaleString()}
                     </span>
-                    <span className="text-[10px] text-slate-500 font-medium">/ batch</span>
+                    <span className="text-[10px] text-slate-500 font-medium">/ full course</span>
                   </div>
                 </div>
 
@@ -148,18 +145,10 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
                   <button
                     onClick={() => (onBuyNow ? onBuyNow(course.id) : onEnroll(course.id))}
                     id={`course-buy-${course.id}`}
-                    className="px-4 py-2.5 rounded-full bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold tracking-wide shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-5 py-2.5 rounded-full bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold tracking-wide shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <span>Buy Now</span>
                     <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => onEnroll(course.id)}
-                    id={`course-enroll-${course.id}`}
-                    className="px-3 py-2 rounded-full bg-white hover:bg-purple-50 text-[#4A1D96] border border-purple-200 text-xs font-semibold transition-all cursor-pointer"
-                    title="Open Detailed Admission Form"
-                  >
-                    <span>Form</span>
                   </button>
                 </div>
               </div>
@@ -185,15 +174,10 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
           <div className="flex items-center gap-2">
             <button
               onClick={() => (onBuyNow ? onBuyNow(courses[0]?.id || 'course-spoken-english') : onEnroll(courses[0]?.id || 'course-spoken-english'))}
-              className="px-4 py-2.5 bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold rounded-xl transition-colors whitespace-nowrap cursor-pointer shadow-xs"
+              className="px-6 py-2.5 bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold rounded-xl transition-colors whitespace-nowrap cursor-pointer shadow-xs flex items-center gap-2"
             >
-              Instant Checkout →
-            </button>
-            <button
-              onClick={() => onEnroll(courses[0]?.id || 'course-spoken-english')}
-              className="px-3.5 py-2.5 bg-purple-50 hover:bg-purple-100 text-[#4A1D96] font-bold rounded-xl border border-purple-200 transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
-            >
-              Admission Form
+              <span>Buy Course Now</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>

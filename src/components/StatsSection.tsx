@@ -10,8 +10,8 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
   const stats = [
     {
       metric: siteSettings?.batchesCompletedCount || '15+',
-      label: 'Completed Offline & Online Batches',
-      subtext: 'Proven batch-based track record',
+      label: 'Completed Course Cohorts',
+      subtext: 'Proven practical training track record',
       icon: Award,
     },
     {
@@ -29,7 +29,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
     {
       metric: 'Offline + Online',
       label: 'Flexible Learning',
-      subtext: 'Live digital batches + class recordings',
+      subtext: 'Live digital sessions + class recordings',
       icon: Laptop,
     },
   ];

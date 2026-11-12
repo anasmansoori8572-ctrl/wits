@@ -11,6 +11,7 @@ import { studentSupportService } from "./src/services/studentSupportService";
 import { supportTicketService } from "./src/services/supportTicketService";
 import { getAiSupportService } from "./src/services/aiSupportService";
 import { durableStorageService } from "./src/services/durableStorageService";
+import { adminNotificationService } from "./src/services/adminNotificationService";
 
 let s3ClientInstance: S3Client | null = null;
 
@@ -4181,6 +4182,24 @@ www.witslingo.com`;
         console.warn("[WhatsApp] Async confirmation error:", waErr);
       }
 
+      // 6. Send Automatic Admin Email Notification (Student & Course Purchase Details)
+      try {
+        await adminNotificationService.notifyAdminOnPurchase({
+          orderId: order.id,
+          studentName: order.studentName,
+          studentPhone: order.studentPhone,
+          studentEmail: order.studentEmail,
+          courseId: order.courseId,
+          courseName: order.courseName,
+          amount: order.expectedAmount,
+          razorpayPaymentId: order.razorpayPaymentId,
+          razorpayOrderId: order.razorpayOrderId,
+          purchaseDate: new Date().toISOString()
+        });
+      } catch (adminMailErr) {
+        console.warn("[AdminNotification] Could not dispatch admin purchase email:", adminMailErr);
+      }
+
       res.json({
         success: true,
         message: "Payment successfully verified! Your course access is activated.",
@@ -6870,6 +6889,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     };
 
     cmsContent.courses.push(newCourse);
+    saveCmsContent();
     res.status(201).json({ success: true, course: newCourse, courses: cmsContent.courses });
   });
 
@@ -6901,6 +6921,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     };
 
     cmsContent.courses[courseIndex] = updatedCourse;
+    saveCmsContent();
     res.json({ success: true, course: updatedCourse, courses: cmsContent.courses });
   });
 
@@ -6918,7 +6939,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     const currentCourse = cmsContent.courses[courseIndex];
     const newStatus = req.body.isPublished !== undefined ? Boolean(req.body.isPublished) : !Boolean(currentCourse.isPublished);
     currentCourse.isPublished = newStatus;
-
+    saveCmsContent();
     res.json({ success: true, course: currentCourse, isPublished: newStatus, courses: cmsContent.courses });
   });
 
@@ -6934,7 +6955,141 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     }
 
     const deleted = cmsContent.courses.splice(courseIndex, 1)[0];
+    saveCmsContent();
     res.json({ success: true, deleted, courses: cmsContent.courses });
+  });
+
+  // Save on course creation
+  app.post("/api/courses", (req, res, next) => {
+    // will be caught by route handler
+    next();
+  });
+
+  // =========================================================================
+  // 24C. REVIEWS & TESTIMONIALS API (PUBLIC SUBMISSIONS + AUTHOR EDIT/DELETE + ADMIN)
+  // =========================================================================
+
+  app.get("/api/reviews", (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    const isAdmin = auth && auth.role === "admin";
+    const all = cmsContent.testimonials || [];
+    if (isAdmin) {
+      return res.json({ success: true, reviews: all });
+    }
+    const publicReviews = all.filter((r: any) => r.isApproved !== false);
+    res.json({ success: true, reviews: publicReviews });
+  });
+
+  app.post("/api/reviews", (req, res) => {
+    const { studentName, courseName, courseBatch, rating, testimonial, city } = req.body;
+    if (!studentName || !testimonial) {
+      return res.status(400).json({ success: false, error: "Name and review text are required." });
+    }
+
+    const reviewId = `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const authorKey = `auth_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+
+    const newReview = {
+      id: reviewId,
+      studentName: studentName.trim(),
+      courseBatch: courseBatch || courseName || "Wits Lingo Course",
+      testimonial: testimonial.trim(),
+      rating: Math.min(5, Math.max(1, Number(rating) || 5)),
+      city: city ? city.trim() : "Verified Student",
+      date: new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
+      verified: true,
+      isApproved: true,
+      authorKey
+    };
+
+    if (!Array.isArray(cmsContent.testimonials)) {
+      cmsContent.testimonials = [];
+    }
+
+    cmsContent.testimonials.unshift(newReview);
+    saveCmsContent();
+
+    res.status(201).json({
+      success: true,
+      message: "Review submitted successfully!",
+      review: newReview,
+      authorKey
+    });
+  });
+
+  app.put("/api/reviews/:id", (req, res) => {
+    const { id } = req.params;
+    const { studentName, courseName, courseBatch, rating, testimonial, city, authorKey, isApproved } = req.body;
+    const auth = verifyAuthToken(req.headers.authorization);
+    const isAdmin = auth && auth.role === "admin";
+
+    if (!Array.isArray(cmsContent.testimonials)) {
+      cmsContent.testimonials = [];
+    }
+
+    const reviewIndex = cmsContent.testimonials.findIndex((r: any) => r.id === id);
+    if (reviewIndex === -1) {
+      return res.status(404).json({ success: false, error: "Review not found." });
+    }
+
+    const targetReview = cmsContent.testimonials[reviewIndex];
+    const providedAuthorKey = authorKey || req.headers["x-author-key"];
+    const isAuthor = targetReview.authorKey && providedAuthorKey === targetReview.authorKey;
+
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({ success: false, error: "Unauthorized. You can only edit your own reviews." });
+    }
+
+    const updatedReview = {
+      ...targetReview,
+      studentName: studentName ? studentName.trim() : targetReview.studentName,
+      courseBatch: (courseBatch || courseName) ? (courseBatch || courseName).trim() : targetReview.courseBatch,
+      testimonial: testimonial ? testimonial.trim() : targetReview.testimonial,
+      rating: rating !== undefined ? Math.min(5, Math.max(1, Number(rating) || 5)) : targetReview.rating,
+      city: city !== undefined ? city.trim() : targetReview.city,
+      isApproved: (isAdmin && isApproved !== undefined) ? Boolean(isApproved) : targetReview.isApproved
+    };
+
+    cmsContent.testimonials[reviewIndex] = updatedReview;
+    saveCmsContent();
+
+    res.json({ success: true, message: "Review updated successfully!", review: updatedReview });
+  });
+
+  app.delete("/api/reviews/:id", (req, res) => {
+    const { id } = req.params;
+    const auth = verifyAuthToken(req.headers.authorization);
+    const isAdmin = auth && auth.role === "admin";
+    const authorKey = req.body.authorKey || req.headers["x-author-key"] || req.query.authorKey;
+
+    if (!Array.isArray(cmsContent.testimonials)) {
+      cmsContent.testimonials = [];
+    }
+
+    const reviewIndex = cmsContent.testimonials.findIndex((r: any) => r.id === id);
+    if (reviewIndex === -1) {
+      return res.status(404).json({ success: false, error: "Review not found." });
+    }
+
+    const targetReview = cmsContent.testimonials[reviewIndex];
+    const isAuthor = targetReview.authorKey && authorKey === targetReview.authorKey;
+
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({ success: false, error: "Unauthorized to delete this review." });
+    }
+
+    const deleted = cmsContent.testimonials.splice(reviewIndex, 1)[0];
+    saveCmsContent();
+
+    res.json({ success: true, message: "Review deleted successfully.", deleted });
+  });
+
+  app.get("/api/admin/notifications", (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required." });
+    }
+    res.json({ success: true, notifications: adminNotificationService.getAllNotifications() });
   });
 
   async function startServer() {
