@@ -20,7 +20,7 @@ import { CountryCodePhoneInput } from './CountryCodePhoneInput';
 import { CountryPhoneCode, DEFAULT_COUNTRY_CODE, ALL_COUNTRY_PHONE_CODES } from '../data/countryPhoneCodes';
 import { AddressHierarchySelector } from './AddressHierarchySelector';
 
-export type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings' | 'orders-payments' | 'whatsapp-notifications' | 'support-tickets' | 'knowledge-base';
+export type AdminTabType = 'students' | 'courses' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings' | 'orders-payments' | 'whatsapp-notifications' | 'support-tickets' | 'knowledge-base';
 
 function extractYouTubeVideoId(url?: string): string {
   if (!url) return '';
@@ -70,7 +70,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onTabChange
 }) => {
   const validTabs: AdminTabType[] = [
-    'students', 'courses', 'batches', 'materials', 
+    'students', 'courses', 'materials', 
     'youtube-lessons', 'gallery', 'testimonials', 'announcements', 'settings'
   ];
   const initialActive = initialTab && validTabs.includes(initialTab) ? initialTab : 'students';
@@ -255,7 +255,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Form states for new additions
   const [adminPhoneCountry, setAdminPhoneCountry] = useState<CountryPhoneCode>(DEFAULT_COUNTRY_CODE);
   const [adminWhatsappCountry, setAdminWhatsappCountry] = useState<CountryPhoneCode>(DEFAULT_COUNTRY_CODE);
-  const [newStudent, setNewStudent] = useState({
+  const [newStudent, setNewStudent] = useState<{
+    name: string;
+    fatherName: string;
+    dob: string;
+    phone: string;
+    whatsapp: string;
+    email: string;
+    country: string;
+    state: string;
+    district: string;
+    pincode: string;
+    address: string;
+    batchId: string;
+    batchName?: string;
+    courseId: string;
+    courseName?: string;
+  }>({
     name: '',
     fatherName: '',
     dob: '2000-01-01',
@@ -268,7 +284,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     pincode: '244221',
     address: '',
     batchId: batches[0]?.id || 'batch-spoken-oct-2026',
-    courseId: courses[0]?.id || 'course-spoken-english'
+    batchName: courses[0]?.name || 'Spoken English',
+    courseId: courses[0]?.id || 'course-spoken-english',
+    courseName: courses[0]?.name || 'Spoken English'
   });
 
   const [newCourse, setNewCourse] = useState<Partial<CourseData>>({
@@ -524,15 +542,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // 1. STUDENTS / ADMISSIONS HANDLERS
   // ----------------------------------------------------------------------
   const filteredStudents = students.filter((st) => {
-    const matchesBatch = selectedBatchFilter === 'All' || 
-      st.batchId === selectedBatchFilter || 
-      (st.enrolledBatchIds && st.enrolledBatchIds.includes(selectedBatchFilter));
+    const matchesCourse = selectedBatchFilter === 'All' ||
+      st.courseName === selectedBatchFilter ||
+      st.courseBatch === selectedBatchFilter ||
+      st.batchName === selectedBatchFilter ||
+      st.enrolledCourseId === selectedBatchFilter;
     const matchesSearch = 
       st.name?.toLowerCase().includes(searchStudent.toLowerCase()) ||
       st.district?.toLowerCase().includes(searchStudent.toLowerCase()) ||
       st.phone?.includes(searchStudent) ||
       st.admissionId?.toLowerCase().includes(searchStudent.toLowerCase());
-    return matchesBatch && matchesSearch;
+    return matchesCourse && matchesSearch;
   });
 
   const handleDeleteStudent = (studentId: string, name: string) => {
@@ -541,7 +561,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       title: 'Delete Student Admission',
       itemName: name,
       itemType: 'student admission record',
-      description: `Are you sure you want to delete the admission record for "${name}" (${studentId})? This student will be removed from all enrolled batch rosters and portal access.`,
+      description: `Are you sure you want to delete the admission record for "${name}" (${studentId})? This student will be removed from all enrolled course rosters and portal access.`,
       onConfirm: async () => {
         try {
           await fetch(`/api/admin/students/${studentId}`, {
@@ -2124,11 +2144,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <select
                     value={selectedBatchFilter}
                     onChange={(e) => setSelectedBatchFilter(e.target.value)}
-                    className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none"
-                  >
-                    <option value="All">All Batches</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                    className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none">
+                    <option value="All">All Courses</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -2164,7 +2183,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <th className="py-3 px-4">Student & Parent</th>
                     <th className="py-3 px-4">District & State</th>
                     <th className="py-3 px-4">Contact</th>
-                    <th className="py-3 px-4">Batch Enrolled</th>
+                    <th className="py-3 px-4">Course Enrolled</th>
                     <th className="py-3 px-4">Payment</th>
                     <th className="py-3 px-4">WhatsApp Status</th>
                     <th className="py-3 px-4 text-right rounded-r-xl">Actions</th>
@@ -2193,7 +2212,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </td>
                         <td className="py-3.5 px-4">
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-[#4A1D96] border border-purple-200">
-                            {batches.find(b => b.id === st.batchId)?.name || st.batchName || 'October Batch'}
+                            {st.courseName || batches.find(b => b.id === st.batchId)?.name || 'Spoken English'}
                           </span>
                         </td>
                         <td className="py-3.5 px-4">
@@ -2622,506 +2641,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         })()}
 
         {/* ==================================================================== */}
-        {/* TAB 3: BATCHES MANAGEMENT */}
-        {/* ==================================================================== */}
-        {activeTab === 'batches' && (() => {
-          const isSectionVisible = localSettings.showBatchesSection ?? true;
-          const visibleBatchesCount = batches.filter(b => b.isVisibleOnWebsite !== false).length;
-          const hiddenBatchesCount = batches.filter(b => b.isVisibleOnWebsite === false).length;
-
-          const filteredBatches = batches.filter((batch) => {
-            if (batchVisibilityFilter === 'visible' && batch.isVisibleOnWebsite === false) return false;
-            if (batchVisibilityFilter === 'hidden' && batch.isVisibleOnWebsite !== false) return false;
-
-            if (batchSearchQuery.trim()) {
-              const q = batchSearchQuery.toLowerCase();
-              const matchName = batch.name?.toLowerCase().includes(q);
-              const matchCode = batch.batchCode?.toLowerCase().includes(q);
-              const matchCourse = batch.courseName?.toLowerCase().includes(q);
-              const matchMentor = batch.teacherName?.toLowerCase().includes(q);
-              if (!matchName && !matchCode && !matchCourse && !matchMentor) return false;
-            }
-            return true;
-          });
-
-          return (
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
-              {/* Header & Master Section Switch */}
-              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
-                      Batches & Seat Capacity Control
-                    </h2>
-                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
-                      isSectionVisible 
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                        : 'bg-amber-100 text-amber-800 border border-amber-200'
-                    }`}>
-                      {isSectionVisible ? (
-                        <>
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <span>Section Live on Website</span>
-                        </>
-                      ) : (
-                        <>
-                          <EyeOff className="w-3 h-3 text-amber-700" />
-                          <span>Section Hidden from Website</span>
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Manage batch names, schedules, timing, student capacity, and public website visibility.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
-                  {/* Master Section Visibility Toggle */}
-                  <button
-                    type="button"
-                    onClick={handleToggleShowBatchesSection}
-                    id="admin-toggle-batches-section-btn"
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer shadow-2xs ${
-                      isSectionVisible
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
-                        : 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100'
-                    }`}
-                    title={isSectionVisible ? 'Click to hide the Batches & Capacity section from the public website' : 'Click to show the Batches & Capacity section on the public website'}
-                  >
-                    {isSectionVisible ? (
-                      <>
-                        <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Hide Section from Website</span>
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="w-3.5 h-3.5 text-amber-700" />
-                        <span>Show Section on Website</span>
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => setShowAddBatchModal(true)}
-                    id="admin-add-batch-btn"
-                    className="px-4 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Create New Batch</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Master Status Notice (when whole section is hidden) */}
-              {!isSectionVisible && (
-                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 flex items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 flex-shrink-0">
-                      <EyeOff className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-amber-950">
-                        The entire "Batches & Capacity" section is currently hidden from the public website.
-                      </p>
-                      <p className="text-[11px] text-amber-800">
-                        Visitors cannot see this section or any batches until you click "Show Section on Website".
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleToggleShowBatchesSection}
-                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs whitespace-nowrap transition-colors flex-shrink-0 cursor-pointer"
-                  >
-                    Turn On Section
-                  </button>
-                </div>
-              )}
-
-              {/* Filter Tabs & Search Bar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-purple-50/40 p-3 rounded-2xl border border-purple-100">
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                  <button
-                    type="button"
-                    onClick={() => setBatchVisibilityFilter('all')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                      batchVisibilityFilter === 'all'
-                        ? 'bg-[#4A1D96] text-white shadow-xs'
-                        : 'bg-white text-slate-600 hover:bg-purple-100/60 border border-purple-100'
-                    }`}
-                  >
-                    All Batches ({batches.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBatchVisibilityFilter('visible')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                      batchVisibilityFilter === 'visible'
-                        ? 'bg-emerald-700 text-white shadow-xs'
-                        : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
-                    }`}
-                  >
-                    <Eye className="w-3 h-3" />
-                    <span>Live on Web ({visibleBatchesCount})</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBatchVisibilityFilter('hidden')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                      batchVisibilityFilter === 'hidden'
-                        ? 'bg-amber-700 text-white shadow-xs'
-                        : 'bg-white text-amber-800 hover:bg-amber-50 border border-amber-200'
-                    }`}
-                  >
-                    <EyeOff className="w-3 h-3" />
-                    <span>Hidden from Web ({hiddenBatchesCount})</span>
-                  </button>
-                </div>
-
-                {/* Search */}
-                <div className="relative min-w-[220px]">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search by batch, code, mentor..."
-                    value={batchSearchQuery}
-                    onChange={(e) => setBatchSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-7 py-1.5 bg-white rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-purple-400 placeholder:text-slate-400"
-                  />
-                  {batchSearchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setBatchSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Batches Grid */}
-              {filteredBatches.length === 0 ? (
-                <div className="text-center py-12 px-4 rounded-2xl bg-slate-50 border border-dashed border-slate-200">
-                  <EyeOff className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs font-bold text-slate-600">No batches match your filter or search.</p>
-                  <button
-                    type="button"
-                    onClick={() => { setBatchVisibilityFilter('all'); setBatchSearchQuery(''); }}
-                    className="mt-3 text-xs text-[#4A1D96] font-bold hover:underline cursor-pointer"
-                  >
-                    Reset filters and show all
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredBatches.map((batch) => {
-                    const enrolled = batch.enrolledCount ?? batch.currentStudentsCount ?? 0;
-                    const capacity = batch.maxCapacity ?? batch.maxStudents ?? 35;
-                    const pct = Math.min(100, Math.round((enrolled / capacity) * 100));
-                    const isVisible = batch.isVisibleOnWebsite !== false;
-
-                    return (
-                      <div
-                        key={batch.id}
-                        className={`p-5 rounded-2xl border transition-all flex flex-col justify-between ${
-                          isVisible
-                            ? 'border-purple-100 bg-[#FAF9FC] hover:border-purple-300 hover:shadow-xs'
-                            : 'border-dashed border-amber-300/80 bg-amber-50/25'
-                        }`}
-                      >
-                        <div className="space-y-3">
-                          {/* Badges Row */}
-                          <div className="flex items-start justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-mono text-[10px] font-bold text-[#4A1D96] bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                                {batch.batchCode}
-                              </span>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                batch.status === 'Active' ? 'bg-emerald-100 text-emerald-800' :
-                                batch.status === 'Upcoming' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
-                              }`}>
-                                {batch.status}
-                              </span>
-                            </div>
-
-                            {/* Live/Hidden indicator */}
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border ${
-                              isVisible
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-amber-100 text-amber-800 border-amber-300'
-                            }`}>
-                              {isVisible ? (
-                                <>
-                                  <Eye className="w-2.5 h-2.5 text-emerald-600" />
-                                  <span>Live on Web</span>
-                                </>
-                              ) : (
-                                <>
-                                  <EyeOff className="w-2.5 h-2.5 text-amber-700" />
-                                  <span>Hidden</span>
-                                </>
-                              )}
-                            </span>
-                          </div>
-
-                          <div>
-                            <h3 className="font-['Outfit'] font-bold text-base text-slate-900 mt-1">
-                              {batch.name}
-                            </h3>
-                            <p className="text-[11px] text-purple-700 font-medium">
-                              {batch.courseName || 'Spoken English'}
-                            </p>
-                          </div>
-
-                          <div className="space-y-1 text-xs text-slate-600">
-                            <p>
-                              <strong>Timing:</strong> {batch.scheduleTime}
-                            </p>
-                            <p>
-                              <strong>Mentor:</strong> {batch.teacherName || 'Ziyaur Rehman Zia'}
-                            </p>
-                            {batch.googleMeetLink && (
-                              <div className="pt-1 flex items-center justify-between bg-purple-50/70 px-2.5 py-1.5 rounded-lg border border-purple-200 text-[11px]">
-                                <span className="text-purple-900 font-semibold truncate flex items-center gap-1">
-                                  <Video className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-                                  <span className="truncate">Google Meet Link Configured</span>
-                                </span>
-                                <a
-                                  href={batch.googleMeetLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-purple-700 hover:text-purple-900 font-bold flex items-center gap-0.5 shrink-0 ml-1"
-                                >
-                                  <span>Open</span>
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Capacity Bar */}
-                          <div className="space-y-1 pt-1">
-                            <div className="flex justify-between text-[11px] font-semibold text-slate-600">
-                              <span>Capacity Enrollment</span>
-                              <span>{enrolled} / {capacity} Students ({pct}%)</span>
-                            </div>
-                            <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${pct >= 90 ? 'bg-amber-500' : 'bg-[#4A1D96]'}`}
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Actions Row */}
-                        <div className="pt-3 mt-4 border-t border-slate-200/60 flex items-center justify-between gap-2">
-                          {/* Toggle batch visibility */}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleBatchVisibility(batch.id)}
-                            className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                              isVisible
-                                ? 'bg-white hover:bg-slate-100 border-slate-200 text-slate-600'
-                                : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-800 shadow-2xs'
-                            }`}
-                            title={isVisible ? 'Hide this batch card from the public website' : 'Make this batch card visible on the public website'}
-                          >
-                            {isVisible ? (
-                              <>
-                                <EyeOff className="w-3 h-3 text-slate-500" />
-                                <span>Hide</span>
-                              </>
-                            ) : (
-                              <>
-                                <Eye className="w-3 h-3 text-emerald-600" />
-                                <span>Unhide</span>
-                              </>
-                            )}
-                          </button>
-
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => setEditingBatch({ ...batch })}
-                              className="px-3 py-1.5 rounded-lg border border-purple-200 bg-white hover:bg-purple-50 text-xs font-bold text-[#4A1D96] transition-colors flex items-center gap-1 cursor-pointer"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                              <span>Edit</span>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBatch(batch.id, batch.name)}
-                              className="p-1.5 rounded-lg border border-slate-200 hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                              title="Delete Batch"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })()}
-
-        {/* ==================================================================== */}
-        {/* TAB 4: LIVE CLASSES SCHEDULER */}
-        {/* ==================================================================== */}
-        {activeTab === 'classes' && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-              <div>
-                <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
-                  Live Class Sessions & Meeting Links
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Schedule live sessions, update Google Meet / Zoom links, and trigger live or completed status.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setShowAddClassModal(true)}
-                id="admin-add-class-btn"
-                className="px-4 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors self-start sm:self-auto"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Schedule New Class</span>
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {classes.length > 0 ? (
-                classes.map((cls) => (
-                  <div
-                    key={cls.id}
-                    className="p-5 rounded-2xl border border-slate-200 bg-[#FAF9FC] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-purple-200 transition-colors"
-                  >
-                    <div className="space-y-1.5 max-w-xl">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-slate-900">{cls.title}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          cls.status === 'Live' ? 'bg-red-100 text-red-700 animate-pulse' :
-                          cls.status === 'Completed' ? 'bg-slate-200 text-slate-700' : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {cls.status === 'Live' ? '🔴 LIVE NOW' : cls.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">
-                        <strong>Date:</strong> {cls.date} • <strong>Time:</strong> {cls.time}
-                      </p>
-                      {cls.joinUrl && (
-                        <p className="text-xs text-purple-700 font-mono truncate max-w-md">
-                          <strong>Meet Link:</strong> {cls.joinUrl}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
-                      {cls.status !== 'Live' && (
-                        <button
-                          onClick={() => handleToggleClassStatus(cls.id, 'Live')}
-                          className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors"
-                        >
-                          Start Live
-                        </button>
-                      )}
-                      {cls.status === 'Live' && (
-                        <button
-                          onClick={() => handleToggleClassStatus(cls.id, 'Completed')}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
-                        >
-                          Mark Completed
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDeleteClass(cls.id, cls.title)}
-                        className="p-2 rounded-lg border border-slate-200 hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
-                        title="Delete Class"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-slate-400">
-                  No classes scheduled yet. Click "Schedule New Class" above.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ==================================================================== */}
-        {/* TAB 5: CLASS RECORDINGS */}
-        {/* ==================================================================== */}
-        {activeTab === 'recordings' && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-              <div>
-                <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
-                  Batch Recorded Lectures & Vault
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Upload, manage, and delete lecture recordings accessible to authorized batch students.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setShowAddRecordingModal(true)}
-                id="admin-add-rec-btn"
-                className="px-4 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors self-start sm:self-auto"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add New Recording</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {recordings.length > 0 ? (
-                recordings.map((rec) => (
-                  <div
-                    key={rec.id}
-                    className="p-4 rounded-2xl border border-slate-200 bg-[#FAF9FC] space-y-2 flex flex-col justify-between"
-                  >
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs font-bold text-[#4A1D96]">
-                        <span>{rec.topic || 'Class Lecture'}</span>
-                        <span className="text-slate-400">{rec.duration || '60 min'}</span>
-                      </div>
-                      <h4 className="font-bold text-sm text-slate-900">{rec.title}</h4>
-                      <p className="text-[11px] text-slate-500">Recorded: {rec.recordedDate || 'Recent'}</p>
-                      {rec.description && (
-                        <p className="text-xs text-slate-600 line-clamp-2">{rec.description}</p>
-                      )}
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-200 flex justify-end">
-                      <button
-                        onClick={() => handleDeleteRecording(rec.id, rec.title)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete Recording"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="col-span-3 py-12 text-center text-slate-400">
-                  No recordings added yet. Click "Add New Recording" to attach lectures.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ==================================================================== */}
-        {/* ==================================================================== */}
         {/* TAB 6: STUDY NOTES & PDFS (VIEW-ONLY PROTECTED & DOWNLOADABLE GUIDES) */}
         {/* ==================================================================== */}
         {activeTab === 'materials' && (() => {
@@ -3201,11 +2720,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <select
                     value={materialFilterBatch}
                     onChange={(e) => setMaterialFilterBatch(e.target.value)}
-                    className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-hidden focus:border-[#4A1D96]"
-                  >
-                    <option value="all">All Batches</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-hidden focus:border-[#4A1D96]">
+                    <option value="all">All Courses</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
 
@@ -4495,7 +4013,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
                         <div className="flex items-center gap-3 flex-wrap text-slate-500">
                           <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                            Target: {ann.batchName}
+                            Audience: {ann.batchName ? ann.batchName.replace(/batch/gi, 'Course') : 'All Courses'}
                           </span>
                           {ann.effectiveDate && (
                             <span className="text-purple-700 font-medium">
@@ -4709,42 +4227,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       🎉 Free Demo Weekend
                     </button>
                   </div>
-                </div>
-              </div>
-
-              {/* Batches & Seat Capacity Section Visibility Control */}
-              <div className="p-5 rounded-2xl bg-gradient-to-br from-purple-50/70 via-white to-amber-50/40 border border-purple-200/80 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-[#4A1D96] text-white flex items-center justify-center shadow-xs">
-                      <Layers className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                        <span>Batches & Seat Capacity Public Section</span>
-                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
-                          (localSettings.showBatchesSection ?? true)
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {(localSettings.showBatchesSection ?? true) ? 'Live Section' : 'Section Hidden'}
-                        </span>
-                      </h3>
-                      <p className="text-[11px] text-slate-500">
-                        Controls whether the "Upcoming Batches & Seat Capacity" section is rendered on the public website homepage and navbar.
-                      </p>
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 bg-white px-3.5 py-1.5 rounded-xl border border-purple-200 shadow-2xs self-start sm:self-auto">
-                    <input
-                      type="checkbox"
-                      checked={localSettings.showBatchesSection ?? true}
-                      onChange={(e) => setLocalSettings({ ...localSettings, showBatchesSection: e.target.checked })}
-                      className="w-4 h-4 rounded text-[#4A1D96] accent-[#4A1D96] cursor-pointer"
-                    />
-                    <span>{(localSettings.showBatchesSection ?? true) ? '🟢 Section Visible' : '⚪ Section Hidden'}</span>
-                  </label>
                 </div>
               </div>
 
@@ -5291,7 +4773,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                   <div>
-                    <label className="font-semibold text-slate-600 block mb-1">Completed Batches Metric</label>
+                    <label className="font-semibold text-slate-600 block mb-1">Completed Courses Metric</label>
                     <input
                       type="text"
                       value={localSettings.batchesCompletedCount}
@@ -5509,14 +4991,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Assign to Batch *</label>
+                  <label className="font-bold text-slate-700 block mb-1">Enrolled Course *</label>
                   <select
-                    value={newStudent.batchId}
-                    onChange={(e) => setNewStudent({ ...newStudent, batchId: e.target.value })}
+                    value={newStudent.courseName || courses[0]?.name}
+                    onChange={(e) => {
+                      const c = courses.find(course => course.name === e.target.value);
+                      setNewStudent({ ...newStudent, courseName: e.target.value, courseId: c?.id || "", batchName: e.target.value });
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium"
                   >
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.batchCode})</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.name}>{c.name} ({c.level})</option>
                     ))}
                   </select>
                 </div>
@@ -5611,14 +5096,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Assigned Batch</label>
+                  <label className="font-bold text-slate-700 block mb-1">Enrolled Course</label>
                   <select
-                    value={editingStudent.batchId || ''}
-                    onChange={(e) => setEditingStudent({ ...editingStudent, batchId: e.target.value })}
+                    value={editingStudent.courseName || ""}
+                    onChange={(e) => {
+                      const c = courses.find(course => course.name === e.target.value);
+                      setEditingStudent({ ...editingStudent, courseName: e.target.value, courseId: c?.id || "", batchName: e.target.value });
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium"
                   >
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -6417,229 +5905,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* ==================================================================== */}
         {/* MODAL: ADD BATCH */}
         {/* ==================================================================== */}
-        {showAddBatchModal && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overscroll-contain smooth-scroll-viewport">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto overscroll-contain smooth-scroll-viewport">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="font-['Outfit'] font-bold text-lg text-slate-900">
-                  Create New Batch
-                </h3>
-                <button onClick={() => setShowAddBatchModal(false)} className="text-slate-400 hover:text-slate-600">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleAddBatch} className="space-y-3 text-xs">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Batch Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Spoken English — Batch November 2026"
-                    value={newBatch.name || ''}
-                    onChange={(e) => setNewBatch({ ...newBatch, name: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Batch Code *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. BATCH-NOV-2026"
-                      value={newBatch.batchCode || ''}
-                      onChange={(e) => setNewBatch({ ...newBatch, batchCode: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 uppercase font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Max Student Intake</label>
-                    <input
-                      type="number"
-                      value={newBatch.maxCapacity || 35}
-                      onChange={(e) => setNewBatch({ ...newBatch, maxCapacity: Number(e.target.value) })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Schedule Timing</label>
-                  <input
-                    type="text"
-                    value={newBatch.scheduleTime || ''}
-                    onChange={(e) => setNewBatch({ ...newBatch, scheduleTime: e.target.value })}
-                    placeholder="e.g. Mon, Wed, Fri 7:30 PM - 8:30 PM IST"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Start Date</label>
-                    <input
-                      type="date"
-                      value={newBatch.startDate || ''}
-                      onChange={(e) => setNewBatch({ ...newBatch, startDate: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Status</label>
-                    <select
-                      value={newBatch.status || 'Upcoming'}
-                      onChange={(e) => setNewBatch({ ...newBatch, status: e.target.value as any })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                    >
-                      <option value="Upcoming">Upcoming</option>
-                      <option value="Active">Active</option>
-                      <option value="Completed">Completed</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Website Visibility Toggle */}
-                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-purple-50/70 border border-purple-100">
-                  <div>
-                    <span className="font-bold text-slate-800 block text-xs">Show on Public Website</span>
-                    <span className="text-[11px] text-slate-500">Allow website visitors to see this batch and its seat capacity</span>
-                  </div>
-                  <label className="flex items-center gap-2 cursor-pointer font-bold text-xs bg-white px-3 py-1.5 rounded-xl border border-purple-200 shadow-2xs">
-                    <input
-                      type="checkbox"
-                      checked={newBatch.isVisibleOnWebsite !== false}
-                      onChange={(e) => setNewBatch({ ...newBatch, isVisibleOnWebsite: e.target.checked })}
-                      className="w-4 h-4 rounded text-[#4A1D96] accent-[#4A1D96] cursor-pointer"
-                    />
-                    <span className={newBatch.isVisibleOnWebsite !== false ? 'text-emerald-700 font-bold' : 'text-slate-500 font-bold'}>
-                      {newBatch.isVisibleOnWebsite !== false ? '🟢 Visible' : '⚪ Hidden'}
-                    </span>
-                  </label>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddBatchModal(false)}
-                    className="px-4 py-2 rounded-xl text-slate-500 font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold"
-                  >
-                    Publish Batch
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* ==================================================================== */}
-        {/* MODAL: EDIT BATCH */}
-        {/* ==================================================================== */}
-        {editingBatch && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overscroll-contain smooth-scroll-viewport">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto overscroll-contain smooth-scroll-viewport">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="font-['Outfit'] font-bold text-lg text-slate-900">
-                  Edit Batch ({editingBatch.name})
-                </h3>
-                <button onClick={() => setEditingBatch(null)} className="text-slate-400 hover:text-slate-600">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveEditBatch} className="space-y-3 text-xs">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Batch Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingBatch.name}
-                    onChange={(e) => setEditingBatch({ ...editingBatch, name: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Schedule Time</label>
-                  <input
-                    type="text"
-                    value={editingBatch.scheduleTime}
-                    onChange={(e) => setEditingBatch({ ...editingBatch, scheduleTime: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Capacity</label>
-                    <input
-                      type="number"
-                      value={editingBatch.maxCapacity || 35}
-                      onChange={(e) => setEditingBatch({ ...editingBatch, maxCapacity: Number(e.target.value) })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Status</label>
-                    <select
-                      value={editingBatch.status}
-                      onChange={(e) => setEditingBatch({ ...editingBatch, status: e.target.value as any })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200"
-                    >
-                      <option value="Upcoming">Upcoming</option>
-                      <option value="Active">Active</option>
-                      <option value="Completed">Completed</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Website Visibility Toggle */}
-                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-purple-50/70 border border-purple-100">
-                  <div>
-                    <span className="font-bold text-slate-800 block text-xs">Show on Public Website</span>
-                    <span className="text-[11px] text-slate-500">Allow website visitors to see this batch and its seat capacity</span>
-                  </div>
-                  <label className="flex items-center gap-2 cursor-pointer font-bold text-xs bg-white px-3 py-1.5 rounded-xl border border-purple-200 shadow-2xs">
-                    <input
-                      type="checkbox"
-                      checked={editingBatch.isVisibleOnWebsite !== false}
-                      onChange={(e) => setEditingBatch({ ...editingBatch, isVisibleOnWebsite: e.target.checked })}
-                      className="w-4 h-4 rounded text-[#4A1D96] accent-[#4A1D96] cursor-pointer"
-                    />
-                    <span className={editingBatch.isVisibleOnWebsite !== false ? 'text-emerald-700 font-bold' : 'text-slate-500 font-bold'}>
-                      {editingBatch.isVisibleOnWebsite !== false ? '🟢 Visible' : '⚪ Hidden'}
-                    </span>
-                  </label>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setEditingBatch(null)}
-                    className="px-4 py-2 rounded-xl text-slate-500 font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold"
-                  >
-                    Save Batch
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* ==================================================================== */}
         {/* MODAL: SCHEDULE LIVE CLASS */}
         {/* ==================================================================== */}
         {showAddClassModal && (
@@ -6656,14 +5921,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               <form onSubmit={handleCreateClass} className="space-y-3 text-xs">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Target Batch</label>
+                  <label className="font-bold text-slate-700 block mb-1">Target Course</label>
                   <select
                     value={newClass.batchId}
                     onChange={(e) => setNewClass({ ...newClass, batchId: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium"
                   >
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -6751,14 +6016,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               <form onSubmit={handleAddRecording} className="space-y-3 text-xs">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Target Batch</label>
+                  <label className="font-bold text-slate-700 block mb-1">Target Course</label>
                   <select
                     value={newRecording.batchId}
                     onChange={(e) => setNewRecording({ ...newRecording, batchId: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200"
                   >
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -6852,15 +6117,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               <form onSubmit={handleAddMaterial} className="space-y-3.5 text-xs">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Target Batch *</label>
+                  <label className="font-bold text-slate-700 block mb-1">Target Course *</label>
                   <select
                     value={newMaterial.batchId}
                     onChange={(e) => setNewMaterial({ ...newMaterial, batchId: e.target.value })}
                     className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] bg-slate-50 text-slate-900 font-medium"
                   >
-                    <option value="all">🌟 All Batches & Public Website (Knowledge Bank)</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                    <option value="all">🌟 All Courses & Public Website (Knowledge Bank)</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -7445,7 +6710,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       Publish Academy Notice / Holiday
                     </h3>
                     <p className="text-[11px] text-slate-500">
-                      Broadcast notices to all students or specific batches
+                      Broadcast notices to all students or specific courses
                     </p>
                   </div>
                 </div>
@@ -7489,16 +6754,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
 
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Target Batch / Audience *</label>
+                    <label className="font-bold text-slate-700 block mb-1">Target Course / Audience *</label>
                     <select
                       value={newAnnouncement.batchId}
                       onChange={(e) => setNewAnnouncement({ ...newAnnouncement, batchId: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] text-slate-900 text-xs font-semibold"
                     >
-                      <option value="all">All Batches (Academy-wide Notice)</option>
-                      {batches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
+                      <option value="all">All Courses (Academy-wide Notice)</option>
+                      {courses.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
                         </option>
                       ))}
                     </select>
@@ -7635,16 +6900,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
 
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Target Batch / Audience *</label>
+                    <label className="font-bold text-slate-700 block mb-1">Target Course / Audience *</label>
                     <select
                       value={editingAnnouncement.batchId}
                       onChange={(e) => setEditingAnnouncement({ ...editingAnnouncement, batchId: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] text-slate-900 text-xs font-semibold"
                     >
-                      <option value="all">All Batches (Academy-wide Notice)</option>
-                      {batches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
+                      <option value="all">All Courses (Academy-wide Notice)</option>
+                      {courses.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
                         </option>
                       ))}
                     </select>
@@ -7936,15 +7201,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <>
                     {/* PDF Edit Form */}
                     <div>
-                      <label className="font-bold text-slate-700 block mb-1">Target Batch *</label>
+                      <label className="font-bold text-slate-700 block mb-1">Target Course *</label>
                       <select
                         value={editingMaterial.batchId}
                         onChange={(e) => setEditingMaterial({ ...editingMaterial, batchId: e.target.value })}
                         className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] bg-slate-50 text-slate-900 font-medium"
                       >
-                        <option value="all">🌟 All Batches & Public Website (Knowledge Bank)</option>
-                        {batches.map(b => (
-                          <option key={b.id} value={b.id}>{b.name}</option>
+                        <option value="all">🌟 All Courses & Public Website (Knowledge Bank)</option>
+                        {courses.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
                     </div>

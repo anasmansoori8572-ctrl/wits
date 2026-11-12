@@ -32,7 +32,7 @@ export const CommunitySection: React.FC<CommunitySectionProps> = ({ onJoinNewJou
             </h2>
 
             <p className="text-sm sm:text-base text-purple-100/90 leading-relaxed max-w-2xl mx-auto">
-              Receive daily English phrases, audio pronunciation snippets, and batch announcements directly on your phone.
+              Receive daily English phrases, audio pronunciation snippets, and course announcements directly on your phone.
             </p>
 
             {/* 3 Prominent Community Social Buttons */}
@@ -85,7 +85,7 @@ export const CommunitySection: React.FC<CommunitySectionProps> = ({ onJoinNewJou
               </button>
 
               <span className="text-xs text-purple-200/80 font-medium">
-                Admissions open for Batch October & November 2026
+                Admissions open for Live Courses 2026
               </span>
             </div>
 

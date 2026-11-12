@@ -161,7 +161,7 @@ export const INITIAL_TESTIMONIALS: TestimonialData[] = [
   {
     id: 'test-1',
     studentName: 'Mohd Farhan',
-    courseBatch: 'Spoken English • Batch October 2026',
+    courseBatch: 'Spoken English',
     testimonial: 'Before joining Wits Lingo, I was terrified of speaking English in public or during college presentations. Zia Sir\'s practical method of speaking from day one completely removed my hesitation. Now I express my ideas freely without mentally translating!',
     city: 'Amroha, UP',
     verified: true
@@ -170,7 +170,7 @@ export const INITIAL_TESTIMONIALS: TestimonialData[] = [
     id: 'test-2',
     studentName: 'Sneha Patel',
     courseBatch: 'Communication Skills & Speaking',
-    testimonial: 'The step-by-step pathway from simple sentences to natural dialogues gave me the exact confidence I needed. The batch environment is so welcoming that you never feel judged for making mistakes.',
+    testimonial: 'The step-by-step pathway from simple sentences to natural dialogues gave me the exact confidence I needed. The learning environment is so welcoming that you never feel judged for making mistakes.',
     city: 'Moradabad, UP',
     verified: true
   },
@@ -224,9 +224,9 @@ export const INITIAL_ANNOUNCEMENTS: import('../types').Announcement[] = [
   {
     id: 'ann-holiday-01',
     batchId: 'all',
-    batchName: 'All Batches (Academy-wide)',
+    batchName: 'All Courses (Academy-wide)',
     title: '🏖️ Academy Holiday Notice: Gandhi Jayanti Observance',
-    message: 'Dear Students & Parents,\n\nPlease note that Wits Lingo Academy and all live online classrooms will remain closed on Friday, 2nd October 2026 on the occasion of Gandhi Jayanti. No live speaking classes or teacher consultations will take place on this day.\n\nKey Guidelines for Students:\n• Self-paced vocabulary audio drills and previous session recordings will remain accessible 24/7 on your student dashboard.\n• Homework submissions for Assignment 03 will have an extended deadline until 4th October 2026.\n• Regular interactive live classes will resume punctually on Saturday, 3rd October as per your regular batch schedule.\n\nWarm regards,\nWits Lingo Administration',
+    message: 'Dear Students & Parents,\n\nPlease note that Wits Lingo Academy and all live online classrooms will remain closed on Friday, 2nd October 2026 on the occasion of Gandhi Jayanti. No live speaking classes or teacher consultations will take place on this day.\n\nKey Guidelines for Students:\n• Self-paced vocabulary audio drills and previous session recordings will remain accessible 24/7 on your student dashboard.\n• Homework submissions for Assignment 03 will have an extended deadline until 4th October 2026.\n• Regular interactive live classes will resume punctually on Saturday, 3rd October as per your regular schedule.\n\nWarm regards,\nWits Lingo Administration',
     date: '28 Sept 2026',
     author: 'Ziyaur Rehman Zia',
     priority: 'Important',
@@ -238,8 +238,8 @@ export const INITIAL_ANNOUNCEMENTS: import('../types').Announcement[] = [
     id: 'ann-cls-02',
     batchId: 'batch-spoken-oct-2026',
     batchName: 'Spoken English & Daily Fluency',
-    title: '📢 Spoken English Batch: 1-on-1 Mock Interview Pairs on Friday',
-    message: 'Attention Batch October 2026 learners:\n\nThis Friday\'s live session (07:30 PM - 08:30 PM IST) will feature mandatory 1-on-1 mock speaking pairs and individual fluency evaluations.\n\nPreparation Checklist:\n1. Please join the live class room 5 minutes early with your video camera turned on and microphone tested.\n2. Review the "100 High-Frequency Daily Dialogue Sheet" available in your study materials section.\n3. Prepare a concise 2-minute introduction covering your background, professional aspirations, and daily routine.\n\nActive participation is compulsory for monthly certificate grading.',
+    title: '📢 Spoken English: 1-on-1 Mock Interview Pairs on Friday',
+    message: 'Attention Spoken English learners:\n\nThis Friday\'s live session (07:30 PM - 08:30 PM IST) will feature mandatory 1-on-1 mock speaking pairs and individual fluency evaluations.\n\nPreparation Checklist:\n1. Please join the live class room 5 minutes early with your video camera turned on and microphone tested.\n2. Review the "100 High-Frequency Daily Dialogue Sheet" available in your study materials section.\n3. Prepare a concise 2-minute introduction covering your background, professional aspirations, and daily routine.\n\nActive participation is compulsory for monthly certificate grading.',
     date: '26 Sept 2026',
     author: 'Ziyaur Rehman Zia',
     priority: 'Urgent',
@@ -252,7 +252,7 @@ export const INITIAL_ANNOUNCEMENTS: import('../types').Announcement[] = [
     batchId: 'batch-found-oct-2026',
     batchName: 'English Foundation (Basics)',
     title: '🕒 English Foundation: Timing Adjusted to 5:00 PM for Revision Week',
-    message: 'Dear Foundation Batch students,\n\nTo allow 15 extra minutes of guided pronunciation drills, our daily evening live class will temporarily commence at 05:00 PM IST instead of 04:30 PM IST during the upcoming Revision Week (28th Sept to 2nd Oct).\n\nPlease verify your class links on the dashboard. Class duration will be 60 minutes of intensive practice.',
+    message: 'Dear Foundation students,\n\nTo allow 15 extra minutes of guided pronunciation drills, our daily evening live class will temporarily commence at 05:00 PM IST instead of 04:30 PM IST during the upcoming Revision Week (28th Sept to 2nd Oct).\n\nPlease verify your class links on the dashboard. Class duration will be 60 minutes of intensive practice.',
     date: '24 Sept 2026',
     author: 'Ziyaur Rehman Zia',
     priority: 'Normal',
@@ -263,7 +263,7 @@ export const INITIAL_ANNOUNCEMENTS: import('../types').Announcement[] = [
   {
     id: 'ann-gen-04',
     batchId: 'all',
-    batchName: 'All Batches (Academy-wide)',
+    batchName: 'All Courses (Academy-wide)',
     title: '🎧 15 New Pronunciation & Tongue-Twister Audio Drills Uploaded',
     message: 'Exciting learning update!\n\n15 new studio-recorded audio drills focusing on removing Mother Tongue Influence (MTI), mastering \'P\' vs \'B\' and \'V\' vs \'W\' sound articulation, and connected conversational speech have been added to the Study Materials library.\n\nAll students are recommended to listen and shadow-speak for at least 10 minutes every morning.',
     date: '22 Sept 2026',

@@ -465,7 +465,7 @@ Verify Online: https://witslingo.com/verify/${data.admissionId}`;
           <div className="space-y-2">
             <h2 className="text-xs font-black font-['Outfit'] tracking-wider uppercase text-purple-950 flex items-center gap-1.5 border-b border-slate-200 pb-1">
               <span className="w-4 h-4 rounded-full bg-purple-900 text-white flex items-center justify-center text-[10px]">2</span>
-              Course & Enrolled Batch Allocation
+              Course Details & Enrollment
             </h2>
 
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -476,13 +476,13 @@ Verify Online: https://witslingo.com/verify/${data.admissionId}`;
               </div>
 
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Allocated Batch</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Allocated Course</span>
                 <span className="font-bold text-slate-900 text-sm block">{data.batchName}</span>
                 <span className="font-mono text-[10px] font-bold text-purple-700">Code: {data.batchCode || 'ACTIVE'}</span>
               </div>
 
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Batch Timing & Schedule</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Course Timing & Schedule</span>
                 <span className="font-semibold text-slate-800 block">
                   {data.batchTiming || 'Mon - Fri • Evening Live Interactive Session'}
                 </span>
@@ -535,7 +535,7 @@ Verify Online: https://witslingo.com/verify/${data.admissionId}`;
               <div className="flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-amber-300" />
                 <span className="font-['Outfit'] font-black text-xs uppercase tracking-wider text-amber-200">
-                  Student Portal Login Credentials (Purchased Batch Access)
+                  Student Portal Login Credentials (Purchased Course Access)
                 </span>
               </div>
               <span className="text-[10px] text-white/70">Keep Confidential</span>
@@ -562,7 +562,7 @@ Verify Online: https://witslingo.com/verify/${data.admissionId}`;
                   <span className="font-bold text-white text-xs block">witslingo.com/login</span>
                 </div>
                 <div className="text-[9px] text-amber-200 font-medium mt-1">
-                  Access live batch, video lessons & materials
+                  Access live classes, video lessons & materials
                 </div>
               </div>
             </div>
@@ -577,7 +577,7 @@ Verify Online: https://witslingo.com/verify/${data.admissionId}`;
             <ul className="list-disc list-inside space-y-0.5 text-[10px] text-slate-600 pl-1">
               <li>Live class links, syllabus, study PDFs, and assignments are unlocked inside your Student Dashboard.</li>
               <li>A minimum of 80% attendance in live sessions is required for Academy Certification.</li>
-              <li>Official batch WhatsApp group link and calendar invites are sent to your registered contact numbers.</li>
+              <li>Official course WhatsApp group link and calendar invites are sent to your registered contact numbers.</li>
               <li>For any academic or technical support, contact helpline <strong>+91 9876543210</strong> or email <strong>hello@witslingo.com</strong>.</li>
             </ul>
           </div>
@@ -660,7 +660,7 @@ Verify Online: https://witslingo.com/verify/${data.admissionId}`;
               onClick={onGoToPortal}
               className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all"
             >
-              <span>Go to My Purchased Batch</span>
+              <span>Go to My Purchased Course</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
           )}

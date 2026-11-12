@@ -340,8 +340,8 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
       }
       setCurrentStep(3);
     } else if (currentStep === 3) {
-      if (!formData.courseId || !formData.batchId) {
-        setErrorMsg('Please select your preferred course and batch.');
+      if (!formData.courseId) {
+        setErrorMsg('Please select your preferred course.');
         return;
       }
       setCurrentStep(4);
@@ -1357,45 +1357,6 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
                         )}
                       </div>
                     )}
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">
-                        Assign Live Batch Timing *
-                      </label>
-                      <div className="space-y-2">
-                        {batches
-                          .filter((b) => b.courseId === formData.courseId || b.courseId === 'course-spoken-english')
-                          .map((b) => (
-                            <label
-                              key={b.id}
-                              className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                                formData.batchId === b.id
-                                  ? 'border-[#4A1D96] bg-purple-50/50 shadow-2xs'
-                                  : 'border-slate-200 hover:border-slate-300'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <input
-                                  type="radio"
-                                  name="batchSelect"
-                                  checked={formData.batchId === b.id}
-                                  onChange={() => setFormData({ ...formData, batchId: b.id })}
-                                  className="w-4 h-4 text-[#4A1D96] accent-[#4A1D96]"
-                                />
-                                <div>
-                                  <h4 className="font-bold text-xs text-slate-900">{b.name}</h4>
-                                  <p className="text-[11px] text-slate-500">
-                                    Time: {b.scheduleTime || '7:00 PM - 8:30 PM Daily'} • Starts {b.startDate}
-                                  </p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-                                {b.currentStudentsCount}/{b.maxStudents} Seats Filled
-                              </span>
-                            </label>
-                          ))}
-                      </div>
-                    </div>
 
                     <div className="p-3 bg-purple-50 rounded-xl border border-purple-100 text-xs text-purple-900 flex items-center justify-between">
                       <span>Total Course Fee Payable:</span>

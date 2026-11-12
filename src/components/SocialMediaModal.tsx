@@ -32,7 +32,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({
     {
       id: 'whatsapp',
       name: 'WhatsApp Channel',
-      tagline: 'Instant audio snippets, daily expressions & batch alerts',
+      tagline: 'Instant audio snippets, daily expressions & course alerts',
       url: whatsappUrl,
       buttonText: 'Join WhatsApp Channel',
       icon: MessageCircle,
@@ -110,7 +110,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({
                 Official Social Media Channels
               </h2>
               <p className="text-xs sm:text-sm text-purple-200 mt-1 max-w-md">
-                Follow our official channels for daily English practice, vocabulary challenges, audio drills, and live batch updates.
+                Follow our official channels for daily English practice, vocabulary challenges, audio drills, and live course updates.
               </p>
             </div>
             
@@ -181,7 +181,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({
               </div>
               <div>
                 <p className="font-bold text-slate-900">Want live speaking feedback from Zia Sir?</p>
-                <p className="text-[11px] text-slate-600">Join our interactive live online batches with daily spoken drills.</p>
+                <p className="text-[11px] text-slate-600">Join our interactive live online courses with daily spoken drills.</p>
               </div>
             </div>
 

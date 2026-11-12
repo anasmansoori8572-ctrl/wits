@@ -184,7 +184,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                 <span>Preamble & Acceptance of Terms</span>
               </h2>
               <p>
-                Welcome to <strong>{academyName}</strong> ("Wits Lingo", "we", "us", or "our"). These Terms and Conditions govern your access to and use of our website (<code>https://www.witslingo.com</code>), mobile-responsive portal, live online classroom batches, interactive audio/video coaching, and proprietary study resources.
+                Welcome to <strong>{academyName}</strong> ("Wits Lingo", "we", "us", or "our"). These Terms and Conditions govern your access to and use of our website (<code>https://www.witslingo.com</code>), mobile-responsive portal, live online classrooms, interactive audio/video coaching, and proprietary study resources.
               </p>
               <p>
                 By enrolling in any course, making an online fee payment, or using our digital services, you agree to comply with and be bound by these Terms. If you do not agree with any portion of these terms, please refrain from accessing the site or enrolling in our programs.
@@ -216,9 +216,9 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
               <ul className="list-disc pl-6 space-y-1.5 text-xs sm:text-sm">
                 <li>Live interactive online group sessions conducted via Google Meet.</li>
                 <li>Digital downloadable study material in PDF and document formats.</li>
-                <li>Batch video lecture replays and audio practice drills available inside the student portal.</li>
+                <li>Course video lecture replays and audio practice drills available inside the student portal.</li>
                 <li>Interactive speaking pairs and evaluation feedback from certified mentors.</li>
-                <li>Official enrollment slips, course fee receipts, and digital certificates of completion upon successful batch evaluation.</li>
+                <li>Official enrollment slips, course fee receipts, and digital certificates of completion upon successful course evaluation.</li>
               </ul>
             </section>
 
@@ -228,7 +228,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                 <span>Course Fees, Taxes & Payment Gateway</span>
               </h2>
               <p>
-                All tuition and course fees are displayed explicitly on our website in <strong>Indian Rupees (INR ₹)</strong>. Pricing includes all standard session access, live classes, and curriculum PDFs for the duration of the enrolled batch.
+                All tuition and course fees are displayed explicitly on our website in <strong>Indian Rupees (INR ₹)</strong>. Pricing includes all standard session access, live classes, and curriculum PDFs for the duration of the enrolled course.
               </p>
               <div className="bg-purple-50/70 p-4 rounded-2xl border border-purple-200/70 space-y-2 text-xs">
                 <div className="flex items-center gap-2 font-bold text-[#4A1D96]">
@@ -268,17 +268,17 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
               <ul className="list-disc pl-6 space-y-1 text-xs sm:text-sm">
                 <li>Students must behave politely, ethically, and constructively during all live interactive Google Meet sessions.</li>
                 <li>Vulgarity, discrimination, political debate, hate speech, or harassment of instructors or fellow classmates will lead to immediate removal and permanent revocation of admission without refund.</li>
-                <li>Sharing your batch Google Meet link or dashboard access credentials with un-enrolled third parties is strictly prohibited.</li>
+                <li>Sharing your class Google Meet link or dashboard access credentials with un-enrolled third parties is strictly prohibited.</li>
               </ul>
             </section>
 
             <section className="space-y-4 text-sm text-slate-700 leading-relaxed">
               <h2 className="font-['Outfit'] text-lg font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-lg bg-purple-100 text-[#4A1D96] flex items-center justify-center text-xs font-bold">7</span>
-                <span>Cancellation, Batch Rescheduling & Refunds</span>
+                <span>Cancellation, Course Rescheduling & Refunds</span>
               </h2>
               <p>
-                All student cancellations, batch switches, and refund requests are governed by our official <button onClick={() => handleTabChange('refund-policy')} className="text-[#4A1D96] font-bold hover:underline cursor-pointer">Refund & Cancellation Policy</button>. We offer a <strong>100% full refund before batch start</strong>, a <strong>7-Day 100% Satisfaction Guarantee</strong>, or a free batch transfer if you encounter scheduling conflicts.
+                All student cancellations, batch switches, and refund requests are governed by our official <button onClick={() => handleTabChange('refund-policy')} className="text-[#4A1D96] font-bold hover:underline cursor-pointer">Refund & Cancellation Policy</button>. We offer a <strong>100% full refund before course start</strong>, a <strong>7-Day 100% Satisfaction Guarantee</strong>, or a free course transfer if you encounter scheduling conflicts.
               </p>
             </section>
 
@@ -336,11 +336,11 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                 <span>Information We Collect</span>
               </h2>
               <p>
-                When you visit our website, register for an admission evaluation, or enroll in a batch, we collect:
+                When you visit our website, register for an admission evaluation, or enroll in a course, we collect:
               </p>
               <ul className="list-disc pl-6 space-y-1.5 text-xs sm:text-sm">
                 <li><strong>Personal Identity Information:</strong> Full Name, Email Address, and Phone/WhatsApp Number.</li>
-                <li><strong>Course & Academic Information:</strong> Selected course (e.g. Spoken English, English Foundation), batch preferences, attendance records, and homework submissions.</li>
+                <li><strong>Course & Academic Information:</strong> Selected course (e.g. Spoken English, English Foundation), course preferences, attendance records, and homework submissions.</li>
                 <li><strong>Transaction Identifiers:</strong> Razorpay Order ID, Payment ID, payment timestamp, and transaction status.</li>
                 <li><strong>Technical Telemetry:</strong> Anonymized browser type, operating system, and IP address for security diagnostics and fraud prevention.</li>
               </ul>
@@ -366,7 +366,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
               <p>We use your information strictly for legitimate academic and administrative purposes:</p>
               <ul className="list-disc pl-6 space-y-1.5 text-xs sm:text-sm">
                 <li>Provisioning your Student Dashboard access and generating course admission slips.</li>
-                <li>Delivering instant transactional payment receipts, batch schedules, and Google Meet class links directly to your registered WhatsApp number via the official Meta WhatsApp Business Cloud API.</li>
+                <li>Delivering instant transactional payment receipts, course schedules, and Google Meet class links directly to your registered WhatsApp number via the official Meta WhatsApp Business Cloud API.</li>
                 <li>Sending academic updates, assignment reviews, and certificate issuance notices.</li>
                 <li>Assisting with customer support queries and payment inquiries.</li>
               </ul>
@@ -390,7 +390,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                 </div>
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
                   <p className="font-bold text-slate-900">Meta WhatsApp Cloud API</p>
-                  <p className="text-slate-600">Enterprise transactional delivery of receipts and batch links.</p>
+                  <p className="text-slate-600">Enterprise transactional delivery of receipts and class links.</p>
                 </div>
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
                   <p className="font-bold text-slate-900">Backblaze B2 / AWS S3</p>
@@ -415,7 +415,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                 <span>Your Rights & Grievance Redressal</span>
               </h2>
               <p>
-                Under applicable Indian laws, you have the right to request access to your recorded data, request corrections, or request complete account erasure once your batch is concluded.
+                Under applicable Indian laws, you have the right to request access to your recorded data, request corrections, or request complete account erasure once your course is concluded.
               </p>
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
                 <p className="font-bold text-slate-900">Designated Grievance Officer:</p>
@@ -441,7 +441,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                 Refund and Cancellation Policy
               </h1>
               <p className="text-xs text-slate-500 mt-2">
-                Transparent cancellation terms, guaranteed refund turnaround, and hassle-free batch transfer options.
+                Transparent cancellation terms, guaranteed refund turnaround, and hassle-free course transfer options.
               </p>
             </header>
 
@@ -452,31 +452,31 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                 <span className="text-base font-['Outfit']">Our 7-Day 100% Satisfaction Guarantee</span>
               </div>
               <p className="text-xs text-slate-700 leading-relaxed">
-                We are fully dedicated to providing the highest quality English speaking mentorship. If you join an enrolled batch and feel within the <strong>first 7 calendar days of batch commencement</strong> that the course does not suit your learning style or requirements, we will issue a <strong>100% full refund</strong> of your course fee—no questions asked.
+                We are fully dedicated to providing the highest quality English speaking mentorship. If you join an enrolled course and feel within the <strong>first 7 calendar days of course commencement</strong> that the course does not suit your learning style or requirements, we will issue a <strong>100% full refund</strong> of your course fee—no questions asked.
               </p>
             </div>
 
             <section className="space-y-4 text-sm text-slate-700 leading-relaxed">
               <h2 className="font-['Outfit'] text-lg font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-xs font-bold">1</span>
-                <span>Cancellation Prior to Batch Commencement</span>
+                <span>Cancellation Prior to Course Commencement</span>
               </h2>
               <p>
-                If you enroll in an upcoming batch and decide to cancel before the first scheduled live Google Meet class takes place, you are entitled to a <strong>100% full refund with zero cancellation charges</strong>. Simply email or WhatsApp us before the batch start date, and your cancellation will be processed immediately.
+                If you enroll in an upcoming course and decide to cancel before the first scheduled live Google Meet class takes place, you are entitled to a <strong>100% full refund with zero cancellation charges</strong>. Simply email or WhatsApp us before the course start date, and your cancellation will be processed immediately.
               </p>
             </section>
 
             <section className="space-y-4 text-sm text-slate-700 leading-relaxed">
               <h2 className="font-['Outfit'] text-lg font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-xs font-bold">2</span>
-                <span>Free Batch Transfer / Rescheduling Option</span>
+                <span>Free Course Transfer / Rescheduling Option</span>
               </h2>
               <p>
-                We understand that unexpected exams, job shifts, or family emergencies happen. If you are unable to attend your assigned batch timings:
+                We understand that unexpected exams, job shifts, or family emergencies happen. If you are unable to attend your assigned course timings:
               </p>
               <ul className="list-disc pl-6 space-y-1.5 text-xs sm:text-sm">
-                <li>You can request a <strong>100% Free Transfer</strong> to any upcoming batch within the next 3 months.</li>
-                <li>You can switch between evening, morning, or weekend batch slots without paying any penalty or fee difference.</li>
+                <li>You can request a <strong>100% Free Transfer</strong> to any upcoming course within the next 3 months.</li>
+                <li>You can switch between evening, morning, or weekend course slots without paying any penalty or fee difference.</li>
                 <li>Your enrolled status and study materials remain fully active during the transition.</li>
               </ul>
             </section>
@@ -542,7 +542,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                 <span>Exceptions & Ineligible Scenarios</span>
               </h2>
               <ul className="list-disc pl-6 space-y-1 text-xs sm:text-sm">
-                <li>Refund requests submitted after 7 calendar days from the official batch start date are generally not eligible for cash refunds, but remain eligible for free batch transfer.</li>
+                <li>Refund requests submitted after 7 calendar days from the official course start date are generally not eligible for cash refunds, but remain eligible for free course transfer.</li>
                 <li>Students terminated from the academy due to misconduct, offensive behavior, or unauthorized re-distribution of copyrighted lecture materials forfeit their eligibility for a refund.</li>
               </ul>
             </section>
@@ -598,7 +598,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                     <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">&lt; 60 Seconds</span>
                   </div>
                   <p className="text-xs text-slate-600">
-                    An official enrollment receipt, batch code, student details, and onboarding checklist are automatically dispatched to your registered WhatsApp mobile number from our verified business account (<strong>{supportPhone2}</strong>) via Meta's Cloud API.
+                    An official enrollment receipt, course details, and onboarding checklist are automatically dispatched to your registered WhatsApp mobile number from our verified business account (<strong>{supportPhone2}</strong>) via Meta's Cloud API.
                   </p>
                 </div>
 
@@ -608,7 +608,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                     <span className="px-2 py-0.5 rounded-full bg-purple-100 text-[#4A1D96] text-[10px] font-bold">1 to 24 Hours</span>
                   </div>
                   <p className="text-xs text-slate-600">
-                    Your student dashboard login is instantly functional. The live interactive Google Meet classroom link and batch WhatsApp community invite are activated within <strong>1 to 24 hours prior to batch commencement</strong>.
+                    Your student dashboard login is instantly functional. The live interactive Google Meet classroom link and course WhatsApp community invite are activated within <strong>1 to 24 hours prior to course commencement</strong>.
                   </p>
                 </div>
 
@@ -786,7 +786,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                 <strong>{academyName}</strong> was founded with a singular purpose: to bridge the gap between theoretical English grammar taught in traditional classrooms and real-world spoken fluency needed in interviews, workplaces, and daily life.
               </p>
               <p>
-                We believe that speaking a language shouldn't feel intimidating. Through a supportive, interactive batch structure and practical conversational simulations, we help students overcome hesitation, build intuitive grammar comprehension, and speak English with genuine poise.
+                We believe that speaking a language shouldn't feel intimidating. Through a supportive, interactive course structure and practical conversational simulations, we help students overcome hesitation, build intuitive grammar comprehension, and speak English with genuine poise.
               </p>
             </section>
 
@@ -827,7 +827,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                   <strong>{founderName} (Zia Sir)</strong> is an experienced English language educator, mentor, and public speaking coach based in Uttar Pradesh, India. Having trained hundreds of school students, college graduates, competitive exam aspirants, and working professionals, Zia Sir is renowned for his friendly, encouraging, and zero-fear teaching style.
                 </p>
                 <p>
-                  Under his leadership, {academyName} has successfully trained <strong>{siteSettings?.batchesCompletedCount || '15+'} batches</strong> and over <strong>{siteSettings?.activeStudentsCount || '100+'} active learners</strong> who now confidently participate in group discussions, job interviews, and international client calls.
+                  Under his leadership, {academyName} has successfully trained <strong>{siteSettings?.batchesCompletedCount || '15+'} courses</strong> and over <strong>{siteSettings?.activeStudentsCount || '100+'} active learners</strong> who now confidently participate in group discussions, job interviews, and international client calls.
                 </p>
               </div>
             </section>
@@ -835,7 +835,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
             <section className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs text-slate-500">Ready to transform your English speaking journey?</p>
-                <p className="text-sm font-bold text-slate-900">Admissions are open for upcoming batches.</p>
+                <p className="text-sm font-bold text-slate-900">Admissions are open for upcoming courses.</p>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -849,7 +849,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({
                     onClick={() => onOpenAdmission()}
                     className="px-5 py-2.5 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
                   >
-                    Register for Next Batch
+                    Enroll in Course
                   </button>
                 )}
               </div>

@@ -49,7 +49,7 @@ export const DigitalLearning: React.FC<DigitalLearningProps> = ({
     {
       id: 'whatsapp',
       title: 'WhatsApp Channel',
-      desc: 'Daily sentences, audio snippets, and batch alerts directly to your phone.',
+      desc: 'Daily sentences, audio snippets, and course alerts directly to your phone.',
       icon: MessageCircle,
       color: 'text-emerald-600 bg-emerald-50 border-emerald-100 group-hover:bg-emerald-600 group-hover:text-white',
       badge: 'Instant Alerts',
@@ -65,7 +65,7 @@ export const DigitalLearning: React.FC<DigitalLearningProps> = ({
       color: 'text-purple-600 bg-purple-50 border-purple-100 group-hover:bg-purple-600 group-hover:text-white',
       badge: 'Live Interactive',
       actionType: 'admission',
-      actionLabel: 'Explore Batches',
+      actionLabel: 'Explore Courses',
     },
     {
       id: 'materials',

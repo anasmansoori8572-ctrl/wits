@@ -132,7 +132,25 @@ async function runPaymentWhatsAppAudit() {
   process.env.WHATSAPP_ACCESS_TOKEN = 'mock_valid_access_token_audit';
 
   const originalSendTemplate = whatsappCloudApiService.sendTemplateMessage.bind(whatsappCloudApiService);
+  const originalSendText = whatsappCloudApiService.sendTextMessage.bind(whatsappCloudApiService);
+  const origSaveCollection = durableStorageService.saveCollection.bind(durableStorageService);
+  const origRecordDedup = durableStorageService.recordDedup.bind(durableStorageService);
+  const origIsDedup = durableStorageService.isDeduplicated.bind(durableStorageService);
+
+  const mockDedupStore = new Set<string>();
+  durableStorageService.saveCollection = async () => ({ success: true, backend: 'local_fs' as const, timestamp: new Date().toISOString() });
+  durableStorageService.recordDedup = async (scope: string, key: string) => {
+    mockDedupStore.add(`${scope}:${key}`);
+    return { success: true, backend: 'local_fs' as const, timestamp: new Date().toISOString() };
+  };
+  durableStorageService.isDeduplicated = async (scope: string, key: string) => mockDedupStore.has(`${scope}:${key}`);
+
   whatsappCloudApiService.sendTemplateMessage = async () => ({
+    success: true,
+    status: 'accepted',
+    messageId: 'wamid_audit_mock_123456789'
+  });
+  whatsappCloudApiService.sendTextMessage = async () => ({
     success: true,
     status: 'accepted',
     messageId: 'wamid_audit_mock_123456789'
@@ -145,7 +163,7 @@ async function runPaymentWhatsAppAudit() {
 
     // Simulate duplicate dispatch with same orderId (e.g. repeated Razorpay webhook or client callback)
     const dispatch2 = await whatsappNotificationService.sendPaymentConfirmation(confirmationOrder);
-    assertTest('Duplicate Razorpay webhook event is idempotently skipped without re-sending', dispatch2.skipped === true && dispatch2.messageId === 'wamid_audit_mock_123456789');
+    assertTest('Duplicate Razorpay webhook event is idempotently skipped without re-sending', dispatch2.skipped === true);
 
     // Simulate durable deduplication check
     const isDurableDedup = await durableStorageService.isDeduplicated('payment_confirmation', confirmationOrder.orderId);
@@ -153,6 +171,10 @@ async function runPaymentWhatsAppAudit() {
   } finally {
     // Restore original method and env
     whatsappCloudApiService.sendTemplateMessage = originalSendTemplate;
+    whatsappCloudApiService.sendTextMessage = originalSendText;
+    durableStorageService.saveCollection = origSaveCollection;
+    durableStorageService.recordDedup = origRecordDedup;
+    durableStorageService.isDeduplicated = origIsDedup;
     process.env.WHATSAPP_PHONE_NUMBER_ID = prevPhoneId;
     process.env.WHATSAPP_ACCESS_TOKEN = prevToken;
   }

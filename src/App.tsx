@@ -18,7 +18,6 @@ import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
 
 // Modals & Portals
-import { AdmissionModal } from './components/AdmissionModal';
 import { AuthModal } from './components/AuthModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { AdminPanel } from './components/AdminPanel';
@@ -30,7 +29,7 @@ import { PaymentStatusModal } from './components/PaymentStatusModal';
 import { PolicyPages, PolicyTab } from './components/PolicyPages';
 import { WITS_LINGO_CONFIG } from './config/witsLingoConfig';
 
-type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings' | 'orders-payments' | 'whatsapp-notifications' | 'support-tickets' | 'knowledge-base';
+import { AdminTabType } from './components/AdminPanel';
 
 function parseAdminSubroute(path: string, hash: string): AdminTabType | undefined {
   const p = path.toLowerCase();
@@ -39,7 +38,7 @@ function parseAdminSubroute(path: string, hash: string): AdminTabType | undefine
   const sub = raw.split('/')[0]?.split('?')[0];
   if (!sub) return undefined;
   if (sub === 'courses') return 'courses';
-  if (sub === 'batches') return 'batches';
+  if (sub === 'batches') return 'courses';
   if (sub === 'students' || sub === 'admissions') return 'students';
   if (sub === 'resources' || sub === 'materials' || sub === 'notes' || sub === 'pdfs') return 'materials';
   if (sub === 'youtube' || sub === 'youtube-lessons' || sub === 'video-lessons' || sub === 'videos') return 'youtube-lessons';
@@ -572,10 +571,9 @@ export default function App() {
   };
 
   // Open Admission Modal
-  const handleOpenAdmission = (courseId?: string, batchId?: string) => {
-    setSelectedCourseForAdmission(courseId || courses[1]?.id || courses[0]?.id);
-    setSelectedBatchForAdmission(batchId || batches[0]?.id);
-    setIsAdmissionOpen(true);
+  // Course Purchase & Enrolment Flow (Directly uses streamlined CheckoutModal with NO batches)
+  const handleOpenAdmission = (courseId?: string) => {
+    handleOpenCheckout(courseId);
   };
 
   // Open Auth Modal
@@ -696,7 +694,7 @@ export default function App() {
             try { window.history.pushState(null, '', '/'); } catch (e) {}
             setCurrentView('home');
           }}
-          onOpenAdmission={(cId, bId) => handleOpenAdmission(cId, bId)}
+          onOpenAdmission={(cId) => handleOpenAdmission(cId)}
           siteSettings={siteSettings}
         />
       ) : currentView === 'policy' ? (
@@ -714,7 +712,7 @@ export default function App() {
         <main>
           {/* 1. Hero Section */}
           <Hero
-            onOpenAdmission={(cId, bId) => handleOpenAdmission(cId, bId)}
+            onOpenAdmission={(cId) => handleOpenAdmission(cId)}
             onExploreCourses={() => {
               const el = document.getElementById('courses');
               if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -790,23 +788,6 @@ export default function App() {
         siteSettings={siteSettings}
       />
 
-      {/* Admission Modal */}
-      <AdmissionModal
-        isOpen={isAdmissionOpen}
-        onClose={() => setIsAdmissionOpen(false)}
-        courses={courses}
-        batches={batches}
-        initialCourseId={selectedCourseForAdmission}
-        initialBatchId={selectedBatchForAdmission}
-        siteSettings={siteSettings}
-        onAdmissionSuccess={(user, token) => {
-          setCurrentUser(user);
-          setAuthToken(token);
-          localStorage.setItem('wits_lingo_user', JSON.stringify(user));
-          localStorage.setItem('wits_lingo_token', token);
-          setCurrentView('student-dashboard');
-        }}
-      />
 
       {/* Express Checkout Modal */}
       <CheckoutModal

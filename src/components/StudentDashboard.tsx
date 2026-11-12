@@ -234,24 +234,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
           {/* Batch Selector & Logout */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-            {batches.length > 0 && (
-              <div className="relative">
-                <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                  Active Batch:
-                </label>
-                <select
-                  value={selectedBatchId}
-                  onChange={(e) => setSelectedBatchId(e.target.value)}
-                  className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-purple-50 text-xs font-bold text-[#4A1D96] border border-purple-200 focus:outline-none"
-                >
-                  {batches.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.courseName})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
 
             {onBackToHome && (
               <button
@@ -291,7 +273,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 mt-0.5">
-                    Course: <strong>{admissionSlip.courseName}</strong> • Enrolled Batch: <strong>{admissionSlip.batchName}</strong> • Timing: <strong>{admissionSlip.batchTiming || 'Daily Live Class'}</strong>
+                    Course: <strong>{admissionSlip.courseName}</strong> • Timing: <strong>{admissionSlip.batchTiming || 'Daily Live Class'}</strong>
                   </p>
                 </div>
               </div>
@@ -336,7 +318,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const txt = `WITS LINGO Official Admission Record\nAdmission Roll ID: ${admissionSlip.admissionId}\nStudent: ${admissionSlip.name}\nBatch: ${admissionSlip.batchName}\nUsername: ${admissionSlip.username || currentUser.email}\nFee Status: ${admissionSlip.paymentStatus}\nTxn Ref: ${admissionSlip.txnId}`;
+                  const txt = `WITS LINGO Official Admission Record\nAdmission Roll ID: ${admissionSlip.admissionId}\nStudent: ${admissionSlip.name}\nCourse: ${admissionSlip.courseName || admissionSlip.batchName}\nUsername: ${admissionSlip.username || currentUser.email}\nFee Status: ${admissionSlip.paymentStatus}\nTxn Ref: ${admissionSlip.txnId}`;
                   navigator.clipboard.writeText(txt);
                   setCopiedSlipText(true);
                   setTimeout(() => setCopiedSlipText(false), 2200);
@@ -355,9 +337,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-emerald-400 flex-shrink-0" />
             <div>
-              <span className="font-bold">Strict Batch-Level Authorization Active:</span>
+              <span className="font-bold">Strict Course-Level Authorization Active:</span>
               <span className="text-purple-200 ml-1">
-                You are securely accessing content for <strong>{currentBatch?.name || 'Your Batch'}</strong> only. Cross-batch access is prevented at the backend server.
+                You are securely accessing content for <strong>{currentBatch?.name || 'Your Course'}</strong> only. Cross-course access is prevented at the backend server.
               </span>
             </div>
           </div>
@@ -389,7 +371,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <div className="space-y-3">
                 {(!classes || classes.length === 0) ? (
                   <p className="text-xs text-slate-400 py-6 text-center">
-                    No scheduled sessions found for this batch.
+                    No scheduled sessions found for this course.
                   </p>
                 ) : (
                   (classes || []).map((cls) => (
@@ -444,7 +426,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 <div className="flex items-center gap-2">
                   <Play className="w-5 h-5 text-[#4A1D96]" />
                   <h2 className="font-['Outfit'] font-bold text-lg text-slate-900">
-                    Protected Batch Recordings
+                    Protected Course Recordings
                   </h2>
                 </div>
                 <span className="text-[11px] text-slate-500">
@@ -499,7 +481,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(!recordings || recordings.length === 0) ? (
                   <p className="text-xs text-slate-400 py-6 col-span-1 sm:col-span-2 text-center">
-                    No class recordings published for this batch yet.
+                    No class recordings published for this course yet.
                   </p>
                 ) : (
                   (recordings || []).map((rec) => (
@@ -542,7 +524,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           {/* Right Sidebar Area (Notices, Materials & Assignments) */}
           <div className="lg:col-span-4 space-y-6">
             
-            {/* Batch & Academy Notices */}
+            {/* Course & Academy Notices */}
             <div className="bg-white rounded-3xl p-6 border border-purple-100 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -566,7 +548,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 if (relevantNotices.length === 0) {
                   return (
                     <p className="text-xs text-slate-400 py-3 text-center">
-                      No active notices for this batch today.
+                      No active notices for this course today.
                     </p>
                   );
                 }
@@ -612,13 +594,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               })()}
             </div>
 
-            {/* Batch PDF Materials */}
+            {/* Course Materials (PDFs) */}
             <div className="bg-white rounded-3xl p-6 border border-purple-100 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-[#4A1D96]" />
                   <h3 className="font-['Outfit'] font-bold text-base text-slate-900">
-                    Batch Materials (PDFs)
+                    Course Materials (PDFs)
                   </h3>
                 </div>
                 <span className="text-[11px] text-slate-400">{(materials || []).length} Files</span>
@@ -627,7 +609,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <div className="space-y-2.5">
                 {(!materials || materials.length === 0) ? (
                   <p className="text-xs text-slate-400 py-3 text-center">
-                    No study materials uploaded for this batch yet.
+                    No study materials uploaded for this course yet.
                   </p>
                 ) : (
                   (materials || []).map((mat) => (
@@ -682,7 +664,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               </div>
             </div>
 
-            {/* Batch Assignments */}
+            {/* Course Assignments */}
             <div className="bg-white rounded-3xl p-6 border border-purple-100 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -715,7 +697,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       {asgn.description}
                     </p>
                     <button
-                      onClick={() => alert('Assignment submission portal: Submit your 2-minute WhatsApp audio recording to the batch instructor.')}
+                      onClick={() => alert('Assignment submission portal: Submit your 2-minute WhatsApp audio recording to the course instructor.')}
                       className="w-full py-1.5 rounded-lg bg-white border border-purple-200 text-[#4A1D96] text-[11px] font-bold hover:bg-purple-50 transition-colors"
                     >
                       Submit Audio Task
@@ -737,7 +719,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 <p className="text-xs text-purple-200">Enrolled Student</p>
                 <h4 className="font-bold text-base">{currentUser.name}</h4>
                 <p className="text-xs text-purple-200 mt-1">
-                  Enrolled in {studentBatchIds.length} Active Batches
+                  Enrolled in Active Course
                 </p>
               </div>
               <div className="pt-2 border-t border-white/10 text-[11px] text-purple-200 space-y-1">
@@ -768,7 +750,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           onClose={() => setViewingMaterial(null)}
           title={viewingMaterial.title}
           pdfUrl={viewingMaterial.pdfUrl || viewingMaterial.downloadUrl}
-          category="Batch Study Material"
+          category="Course Study Material"
           batchName={batches.find(b => b.id === selectedBatchId)?.name || 'Spoken English Batch'}
           studentName={currentUser.name}
           description={viewingMaterial.description}

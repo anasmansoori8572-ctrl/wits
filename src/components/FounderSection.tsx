@@ -67,7 +67,7 @@ export const FounderSection: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <span>Interactive batches with personal attention</span>
+                  <span>Interactive live classes with personal attention</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />

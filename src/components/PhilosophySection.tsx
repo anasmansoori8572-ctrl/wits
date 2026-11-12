@@ -147,7 +147,7 @@ export const PhilosophySection: React.FC<{ onOpenAdmission: () => void }> = ({ o
                 onClick={onOpenAdmission}
                 className="w-full py-2.5 px-3.5 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
-                Join Next Batch
+                Join Live Course
               </button>
             </div>
           </div>

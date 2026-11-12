@@ -120,7 +120,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <p className="text-xs text-slate-500 max-w-xs mx-auto">
             {isAdmin
               ? 'Enter Admin Security Key to open management dashboard'
-              : 'Enter your registered credentials to access your batch classes & recordings'}
+              : 'Enter your registered credentials to access your course classes & recordings'}
           </p>
         </div>
 

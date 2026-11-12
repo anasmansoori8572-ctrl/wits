@@ -3,7 +3,7 @@ import { ArrowRight, BookOpen, MessageSquare, User, Mic, Star, Layers, X } from 
 import { SiteSettings, Announcement } from '../types';
 
 interface HeroProps {
-  onOpenAdmission: (courseId?: string, batchId?: string) => void;
+  onOpenAdmission: (courseId?: string) => void;
   onExploreCourses: () => void;
   onTakeLevelTest?: () => void;
   onWatchVideo?: () => void;

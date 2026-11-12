@@ -7,7 +7,7 @@ import { Menu, X, Search, ChevronRight, BookOpen, LogOut } from 'lucide-react';
 interface NavbarProps {
   currentUser: User | null;
   siteSettings?: SiteSettings;
-  onOpenAdmission: (courseId?: string, batchId?: string) => void;
+  onOpenAdmission: (courseId?: string) => void;
   onOpenAuth: (role?: 'student' | 'admin') => void;
   onOpenDashboard: () => void;
   onOpenAdmin: () => void;
@@ -89,7 +89,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const searchableSections = [
-    { title: 'Spoken English & Daily Fluency', target: 'courses', desc: 'Core spoken English batch for daily fluency and active conversation' },
+    { title: 'Spoken English & Daily Fluency', target: 'courses', desc: 'Core spoken English course for daily fluency and active conversation' },
     { title: 'Foundation English & Grammar', target: 'courses', desc: 'Tenses, sentence formation, vocabulary building, and syntax' },
     { title: 'Executive Communication & Public Speaking', target: 'courses', desc: 'Professional fluency, interviews, corporate communication' },
     { title: 'Student Reviews & Success Stories', target: 'testimonials', desc: 'Verified reviews and feedback from our students' },
@@ -272,7 +272,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search courses, batches, lessons, or grammar notes..."
+                placeholder="Search courses, lessons, or grammar notes..."
                 className="w-full text-sm outline-none text-[#1E123B] placeholder-slate-400"
               />
               <button

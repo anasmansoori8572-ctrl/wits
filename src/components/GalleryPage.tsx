@@ -10,7 +10,7 @@ import {
 
 interface GalleryPageProps {
   onBackToHome: () => void;
-  onOpenAdmission: (courseId?: string, batchId?: string) => void;
+  onOpenAdmission: (courseId?: string) => void;
   siteSettings?: SiteSettings;
 }
 
@@ -340,7 +340,7 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({
                 Start Speaking Fluent English with Confidence
               </h3>
               <p className="text-xs sm:text-sm text-purple-200/90 leading-relaxed">
-                Join live evening batches with dedicated mentor attention, zero hesitation drills, and personalized speaking practice.
+                Join live courses with dedicated mentor attention, zero hesitation drills, and personalized speaking practice.
               </p>
             </div>
 

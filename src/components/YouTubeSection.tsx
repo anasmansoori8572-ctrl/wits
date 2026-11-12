@@ -147,7 +147,7 @@ export const YouTubeSection: React.FC<YouTubeSectionProps> = ({ siteSettings, ma
 
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-500">
-                  Full library accessible on YouTube. For live speaking batches, join Wits Lingo Academy.
+                  Full library accessible on YouTube. For live speaking courses, join Wits Lingo Academy.
                 </span>
                 <button
                   onClick={() => setSelectedVideo(null)}

@@ -116,7 +116,7 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({
   };
 
   const quickOptions = [
-    { label: '📅 When does the next batch start?', msg: "Hello Wits Lingo, when does the next English batch start?" },
+    { label: '📅 When does the next course start?', msg: "Hello Wits Lingo, when does the next English course start?" },
     { label: '💰 What are the course fees?', msg: "Hello Wits Lingo, could you share the course fees and syllabus details?" },
     { label: '🗣️ How do I join a trial session?', msg: "Hello Wits Lingo, I would like to join a trial session for spoken English." },
   ];
@@ -215,7 +215,7 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({
                 </p>
 
                 <p className="text-slate-600 text-[11px] sm:text-xs">
-                  We'll guide you through batch timings, fees, spoken English modules, and demo sessions.
+                  We'll guide you through course timings, fees, spoken English modules, and demo sessions.
                 </p>
 
                 <span className="block text-[9.5px] text-slate-400 text-right pt-0.5 font-medium">

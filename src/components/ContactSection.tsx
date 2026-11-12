@@ -65,7 +65,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ siteSettings }) 
             Contact {academyName}
           </h2>
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto">
-            Have questions about courses, upcoming batch timings, or admissions? Reach out to our team.
+            Have questions about our courses or admissions? Reach out to our team.
           </p>
         </div>
 
@@ -194,7 +194,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ siteSettings }) 
                 Send an Inquiry
               </h3>
               <p className="text-xs sm:text-sm text-slate-500 mb-6">
-                Fill out the form below and our team will get back to you with batch details.
+                Fill out the form below and our team will get back to you with course details.
               </p>
 
               {submitted ? (
@@ -309,7 +309,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ siteSettings }) 
                     <textarea
                       required
                       rows={4}
-                      placeholder="Share your current challenges in English or ask any questions regarding upcoming batches..."
+                      placeholder="Share your current challenges in English or ask any questions regarding our courses..."
                       value={formData.message}
                       onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                       className="w-full px-4 py-3 rounded-xl bg-slate-50/80 border border-slate-200 focus:outline-none focus:border-[#4A1D96] focus:ring-2 focus:ring-purple-500/15 text-xs text-slate-800"

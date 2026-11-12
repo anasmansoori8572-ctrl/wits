@@ -33,7 +33,7 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
       case 'Class Notice':
         return {
           bg: 'bg-indigo-100 text-indigo-900 border-indigo-200',
-          label: '📢 Batch Class Notice',
+          label: '📢 Course Class Notice',
           borderAccent: 'border-indigo-400'
         };
       case 'Schedule Change':

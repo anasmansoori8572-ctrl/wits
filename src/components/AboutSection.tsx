@@ -39,7 +39,7 @@ export const AboutSection: React.FC = () => {
     {
       step: '04',
       title: 'Speak',
-      desc: 'Shed hesitation and articulate thoughts out loud in batch sessions.',
+      desc: 'Shed hesitation and articulate thoughts out loud in interactive live sessions.',
       icon: Smile,
       badgeColor: 'text-emerald-800 bg-emerald-50 border-emerald-200/80',
       iconBg: 'bg-gradient-to-br from-emerald-100 to-emerald-50 text-emerald-700 border-emerald-200/60',

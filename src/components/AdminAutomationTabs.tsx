@@ -1113,7 +1113,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
                     >
                       <option value="course">Course Description</option>
                       <option value="fee">Course Fees & Pricing</option>
-                      <option value="schedule">Batch Schedules & Timings</option>
+                      <option value="schedule">Course Schedules & Timings</option>
                       <option value="joining_link">Google Meet & Joining Link</option>
                       <option value="refund">Refund & Cancellation Rules</option>
                       <option value="certificate">Certificates & Attendance</option>
