@@ -6721,16 +6721,29 @@ app.get(
     "/favicon.ico",
     "/favicon.png",
     "/favicon.jpg",
-    "/favicon-32x32.png",
     "/favicon-16x16.png",
-    "/apple-touch-icon.png"
+    "/favicon-32x32.png",
+    "/favicon-48x48.png",
+    "/favicon-96x96.png",
+    "/favicon-192x192.png",
+    "/favicon-512x512.png",
+    "/apple-touch-icon.png",
+    "/site.webmanifest",
+    "/robots.txt",
+    "/sitemap.xml"
   ],
   (req, res) => {
     const filename = path7.basename(req.path);
     const publicPath = path7.join(process.cwd(), "public", filename);
     if (fs7.existsSync(publicPath)) {
       const ext = path7.extname(filename).toLowerCase();
-      const contentType = ext === ".ico" ? "image/x-icon" : ext === ".png" ? "image/png" : "image/jpeg";
+      let contentType = "application/octet-stream";
+      if (ext === ".ico") contentType = "image/x-icon";
+      else if (ext === ".png") contentType = "image/png";
+      else if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
+      else if (ext === ".webmanifest" || ext === ".json") contentType = "application/manifest+json";
+      else if (ext === ".txt") contentType = "text/plain; charset=utf-8";
+      else if (ext === ".xml") contentType = "application/xml; charset=utf-8";
       res.setHeader("Content-Type", contentType);
       res.setHeader("Cache-Control", "public, max-age=86400");
       return res.sendFile(publicPath);

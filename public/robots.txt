@@ -1,0 +1,11 @@
+# robots.txt for https://www.witslingo.com
+User-agent: *
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+Sitemap: https://www.witslingo.com/sitemap.xml
