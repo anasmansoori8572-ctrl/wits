@@ -3921,60 +3921,245 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {/* ==================================================================== */}
-        {/* TAB 7b: ACADEMY NOTICES, HOLIDAYS & BATCH CIRCULARS */}
+        {/* TAB 7b: ACADEMY NOTICES (TOP BAR & FLOATING NOTICE BOARD)             */}
         {/* ==================================================================== */}
         {activeTab === 'announcements' && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
-                    Academy Notices, Holidays & Batch Circulars
-                  </h2>
-                  <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
-                    {localAnnouncements.length} Total
-                  </span>
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-8">
+            {/* Header intro */}
+            <div className="border-b border-slate-100 pb-5">
+              <div className="flex items-center gap-2">
+                <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
+                  Academy Notice Management
+                </h2>
+                <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
+                  2 Live Channels
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Manage both notice channels on your website: <strong>(1) Top Announcement Bar</strong> above the header, and <strong>(2) Floating Notice Board</strong> above the WhatsApp icon.
+              </p>
+            </div>
+
+            {/* ==================================================================== */}
+            {/* NOTICE OPTION 1: TOP ANNOUNCEMENT BAR (ABOVE HEADER)                 */}
+            {/* ==================================================================== */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-purple-50/70 border-2 border-purple-200/80 space-y-4 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-200/70 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#4A1D96] text-white flex items-center justify-center shadow-xs">
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <span>Notice Option 1: Top Announcement Bar (Above Header)</span>
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-purple-200 text-[#3B0764]">
+                        Single Line Pop Bar
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Displays a sleek announcement bar directly above the header navigation with an animated pulsing dot.
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Manage official academy holiday notices, batch class circulars, and schedule adjustments. Any changes appear instantly on the live website notice board and in the official popup circular.
-                </p>
+
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 bg-white px-3.5 py-1.5 rounded-xl border border-purple-200 shadow-xs">
+                    <input
+                      type="checkbox"
+                      checked={localSettings.showAnnouncement}
+                      onChange={(e) => setLocalSettings({ ...localSettings, showAnnouncement: e.target.checked })}
+                      className="w-4 h-4 rounded text-[#4A1D96] accent-[#4A1D96] cursor-pointer"
+                    />
+                    <span>{localSettings.showAnnouncement ? '🟢 Banner Active' : '⚪ Banner Hidden'}</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleSaveSiteSettings(e as any)}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                  >
+                    Save Top Bar
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  id="admin-add-announcement-btn"
-                  onClick={() => setShowAddAnnouncementModal(true)}
-                  className="px-4 py-2.5 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Publish Notice / Holiday</span>
-                </button>
+              {/* Live Preview */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-slate-600">Live Header Preview:</span>
+                  {!localSettings.showAnnouncement && (
+                    <span className="text-amber-700 font-bold text-[10px] bg-amber-100 px-2 py-0.5 rounded">
+                      Currently hidden on website
+                    </span>
+                  )}
+                </div>
+
+                <div className={`relative overflow-hidden rounded-2xl border ${localSettings.showAnnouncement ? 'border-purple-900 shadow-md' : 'border-slate-300 opacity-60'}`}>
+                  <div className="bg-gradient-to-r from-[#220B3B] via-[#3C166D] to-[#220B3B] text-white text-xs py-2 px-4 text-center font-medium flex items-center justify-center gap-2 flex-wrap sm:flex-nowrap">
+                    <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 shadow-xs shadow-emerald-400/50" />
+                    </span>
+                    <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-white/15 text-emerald-300 border border-emerald-400/30 shrink-0">
+                      Notice
+                    </span>
+                    <span className="font-medium truncate max-w-xl">
+                      {localSettings.announcementText || 'Admissions Open for Live Courses • Master Spoken English with Personal Attention'}
+                    </span>
+                    {localSettings.announcementBtnText ? (
+                      <span className="px-2 py-0.5 rounded-full bg-white text-[#281648] text-[11px] font-bold shadow-xs">
+                        {localSettings.announcementBtnText}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              {/* Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                <div className="md:col-span-2">
+                  <label className="font-bold text-slate-700 block mb-1 text-xs">
+                    One-Line Announcement Text *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={localSettings.announcementText}
+                    onChange={(e) => setLocalSettings({ ...localSettings, announcementText: e.target.value })}
+                    placeholder="e.g. Admissions Open for Live Courses • Master Spoken English with Personal Attention"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-purple-300 bg-white text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#4A1D96] shadow-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1 text-xs">
+                    Action Button Text (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={localSettings.announcementBtnText || ''}
+                    onChange={(e) => setLocalSettings({ ...localSettings, announcementBtnText: e.target.value })}
+                    placeholder="e.g. Buy Course or View Details"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-purple-300 bg-white text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#4A1D96] shadow-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Quick 1-Click Preset Templates */}
+              <div className="pt-2 border-t border-purple-200/60">
+                <span className="text-[11px] font-bold text-slate-600 block mb-1.5">
+                  💡 Quick Presets:
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLocalSettings({
+                      ...localSettings,
+                      announcementText: 'Admissions Open for Live Courses • Master Spoken English with Personal Attention',
+                      announcementBtnText: 'Explore Courses →',
+                      showAnnouncement: true
+                    })}
+                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-purple-100/80 text-purple-900 border border-purple-200 text-[11px] font-semibold transition-colors cursor-pointer"
+                  >
+                    📅 Admissions Open (Standard)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLocalSettings({
+                      ...localSettings,
+                      announcementText: '⚡ Limited Seats Available for Next Batch — Only 5 Seats Left for Personal Attention!',
+                      announcementBtnText: 'Claim Your Seat →',
+                      showAnnouncement: true
+                    })}
+                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-purple-100/80 text-purple-900 border border-purple-200 text-[11px] font-semibold transition-colors cursor-pointer"
+                  >
+                    🚨 Limited Seats Alert
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLocalSettings({
+                      ...localSettings,
+                      announcementText: '🏖️ Academy Holiday Notice: Classes Closed for Holiday Observance • Online Drills Active 24/7',
+                      announcementBtnText: '',
+                      showAnnouncement: true
+                    })}
+                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-purple-100/80 text-purple-900 border border-purple-200 text-[11px] font-semibold transition-colors cursor-pointer"
+                  >
+                    🏖️ Holiday Notice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLocalSettings({
+                      ...localSettings,
+                      announcementText: '🎉 Free Live Spoken English Trial Class This Weekend • Limited Free Registrations Open!',
+                      announcementBtnText: 'Join Trial →',
+                      showAnnouncement: true
+                    })}
+                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-purple-100/80 text-purple-900 border border-purple-200 text-[11px] font-semibold transition-colors cursor-pointer"
+                  >
+                    🎉 Free Demo Weekend
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Category Filter Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
-              {[
-                { id: 'all', label: 'All Notices' },
-                { id: 'Holiday', label: '🏖️ Holidays' },
-                { id: 'Class Notice', label: '📢 Class Notices' },
-                { id: 'Schedule Change', label: '🕒 Schedule Changes' },
-                { id: 'Urgent Alert', label: '🚨 Urgent Alerts' },
-                { id: 'General', label: '📌 General Updates' }
-              ].map(filter => (
-                <button
-                  key={filter.id}
-                  onClick={() => setAnnouncementFilter(filter.id)}
-                  className={`px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    announcementFilter === filter.id
-                      ? 'bg-[#4A1D96] text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              ))}
+            {/* ==================================================================== */}
+            {/* NOTICE OPTION 2: FLOATING NOTICE BOARD & CIRCULARS (ABOVE WHATSAPP) */}
+            {/* ==================================================================== */}
+            <div className="space-y-4 pt-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-['Outfit'] font-bold text-lg text-slate-900 flex items-center gap-2">
+                      <span>Notice Option 2: Floating Notice Board & Circulars</span>
+                      <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                        {localAnnouncements.length} Total
+                      </span>
+                    </h3>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    These notices appear when visitors click the floating notice icon directly above the WhatsApp button (Holidays, Course announcements, Batch timings, Urgent alerts, etc.).
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    id="admin-add-announcement-btn"
+                    onClick={() => setShowAddAnnouncementModal(true)}
+                    className="px-4 py-2.5 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Publish Notice / Holiday</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
+                {[
+                  { id: 'all', label: 'All Notices' },
+                  { id: 'Holiday', label: '🏖️ Holidays' },
+                  { id: 'Course Update', label: '📚 Course Updates' },
+                  { id: 'Batch Timing', label: '🕒 Batch Timings' },
+                  { id: 'Class Notice', label: '📢 Class Notices' },
+                  { id: 'Schedule Change', label: '🕒 Schedule Changes' },
+                  { id: 'Urgent Alert', label: '🚨 Urgent Alerts' },
+                  { id: 'General', label: '📌 General Updates' }
+                ].map(filter => (
+                  <button
+                    key={filter.id}
+                    onClick={() => setAnnouncementFilter(filter.id)}
+                    className={`px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      announcementFilter === filter.id
+                        ? 'bg-[#4A1D96] text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Announcements List */}
@@ -6783,8 +6968,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] text-slate-900 text-xs font-semibold"
                     >
                       <option value="Holiday">🏖️ Holiday Notice (Class closed)</option>
+                      <option value="Course Update">📚 Course Update (New course / admissions)</option>
+                      <option value="Batch Timing">🕒 Batch Timing / Schedule Change</option>
                       <option value="Class Notice">📢 Class Notice (Mock test, speaking pairs)</option>
-                      <option value="Schedule Change">🕒 Schedule / Timing Change</option>
+                      <option value="Schedule Change">🕒 Schedule Adjustment</option>
                       <option value="Urgent Alert">🚨 Urgent Alert</option>
                       <option value="Exam / Test">📝 Exam / Assessment Notice</option>
                       <option value="General">📌 General Academy Circular</option>
@@ -6929,8 +7116,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] text-slate-900 text-xs font-semibold"
                     >
                       <option value="Holiday">🏖️ Holiday Notice (Class closed)</option>
+                      <option value="Course Update">📚 Course Update (New course / admissions)</option>
+                      <option value="Batch Timing">🕒 Batch Timing / Schedule Change</option>
                       <option value="Class Notice">📢 Class Notice (Mock test, speaking pairs)</option>
-                      <option value="Schedule Change">🕒 Schedule / Timing Change</option>
+                      <option value="Schedule Change">🕒 Schedule Adjustment</option>
                       <option value="Urgent Alert">🚨 Urgent Alert</option>
                       <option value="Exam / Test">📝 Exam / Assessment Notice</option>
                       <option value="General">📌 General Academy Circular</option>

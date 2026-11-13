@@ -24,6 +24,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { AdminLoginPage } from './components/AdminLoginPage';
 import { GalleryPage } from './components/GalleryPage';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
+import { FloatingNoticeWidget } from './components/FloatingNoticeWidget';
 import { CheckoutModal } from './components/CheckoutModal';
 import { PaymentStatusModal } from './components/PaymentStatusModal';
 import { PolicyPages, PolicyTab } from './components/PolicyPages';
@@ -389,6 +390,17 @@ export default function App() {
         }
       })
       .catch(err => console.warn('Could not load materials in App:', err));
+
+    // Fetch official academy notices & holidays
+    fetch('/api/announcements')
+      .then(res => res.json())
+      .then(data => {
+        if (data && Array.isArray(data.announcements) && data.announcements.length > 0) {
+          setAnnouncements(data.announcements);
+          localStorage.setItem('wits_lingo_announcements', JSON.stringify(data.announcements));
+        }
+      })
+      .catch(err => console.warn('Could not load announcements in App:', err));
 
     // Fetch CMS settings (including active central logo)
     fetch('/api/cms/content')
@@ -832,6 +844,14 @@ export default function App() {
         initialRole={authRole}
         siteSettings={siteSettings}
       />
+
+      {/* Floating Notice Widget (Directly above WhatsApp button) */}
+      {currentView !== 'admin-panel' && (
+        <FloatingNoticeWidget
+          announcements={announcements}
+          onOpenCheckout={(courseId) => handleOpenCheckout(courseId)}
+        />
+      )}
 
       {/* Floating Corner WhatsApp Visitor Widget */}
       {currentView !== 'admin-panel' && (

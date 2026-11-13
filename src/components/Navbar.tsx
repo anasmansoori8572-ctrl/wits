@@ -34,10 +34,45 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem('wits_top_announcement_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const headerRef = useRef<HTMLElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useScrollLock(mobileMenuOpen);
+
+  // If announcement text updates from admin panel CMS, reset dismissal so fresh notices show
+  const currentAnnouncementText = siteSettings?.announcementText;
+  useEffect(() => {
+    if (currentAnnouncementText) {
+      try {
+        const lastSeen = sessionStorage.getItem('wits_last_seen_announcement');
+        if (lastSeen !== currentAnnouncementText) {
+          sessionStorage.setItem('wits_last_seen_announcement', currentAnnouncementText);
+          sessionStorage.removeItem('wits_top_announcement_dismissed');
+          setBannerDismissed(false);
+        }
+      } catch {}
+    }
+  }, [currentAnnouncementText]);
+
+  const showTopAnnouncement =
+    siteSettings?.showAnnouncement !== false &&
+    Boolean(siteSettings?.announcementText && siteSettings.announcementText.trim()) &&
+    !bannerDismissed;
+
+  const handleDismissBanner = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setBannerDismissed(true);
+    try {
+      sessionStorage.setItem('wits_top_announcement_dismissed', 'true');
+    } catch {}
+  };
 
   useEffect(() => {
     const updateHeaderHeight = () => {
@@ -108,8 +143,65 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-40 bg-white/95 backdrop-blur-md transition-all select-none w-full"
+      className="sticky top-0 z-40 bg-white/95 backdrop-blur-md transition-all select-none w-full shadow-xs"
     >
+      {/* 0. Top Announcement Notification Bar (Managed via Admin Dashboard) */}
+      {showTopAnnouncement && (
+        <div
+          role="region"
+          aria-label="Academy Notice"
+          className="w-full bg-gradient-to-r from-[#220B3B] via-[#3C166D] to-[#220B3B] text-white py-2 px-3 sm:px-6 relative border-b border-purple-800/40 shadow-xs z-50 transition-all duration-200"
+        >
+          <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto flex items-center justify-between gap-2.5 sm:gap-4 text-xs sm:text-[13px]">
+            {/* Centered Message + Animated Pulsing Dot ("little pop") */}
+            <div className="flex-1 flex items-center justify-center gap-2 sm:gap-2.5 min-w-0">
+              <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 shadow-xs shadow-emerald-400/50" />
+              </span>
+
+              <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-white/15 text-emerald-300 border border-emerald-400/30 shrink-0">
+                Notice
+              </span>
+
+              <span className="truncate max-w-[72vw] sm:max-w-2xl font-medium tracking-wide text-white/95 text-center">
+                {siteSettings?.announcementText}
+              </span>
+
+              {siteSettings?.announcementBtnText && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onBuyCourse) {
+                      onBuyCourse();
+                    } else {
+                      const el = document.getElementById('courses');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  className="ml-1 sm:ml-2 px-2.5 py-0.5 rounded-full bg-white text-[#281648] hover:bg-purple-100 text-[11px] font-bold shadow-xs transition-transform active:scale-95 inline-flex items-center gap-1 cursor-pointer shrink-0"
+                >
+                  <span>{siteSettings.announcementBtnText}</span>
+                  <ChevronRight className="w-3 h-3 stroke-[2.5]" />
+                </button>
+              )}
+            </div>
+
+            {/* Session Dismiss Button (×) */}
+            <button
+              type="button"
+              onClick={handleDismissBanner}
+              aria-label="Dismiss notice"
+              title="Dismiss announcement for this session"
+              className="p-1 -mr-1 text-purple-200/70 hover:text-white hover:bg-white/10 rounded-md transition-colors shrink-0 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto px-6 sm:px-10 lg:px-16 w-full">
         <div className="flex items-center justify-between h-20 sm:h-22">
           {/* Left: Mascot Logo + Wits Lingo Brand Name */}

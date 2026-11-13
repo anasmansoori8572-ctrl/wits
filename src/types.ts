@@ -184,7 +184,7 @@ export interface Announcement {
   date: string;
   author: string;
   priority: 'Normal' | 'Important' | 'Urgent';
-  category?: 'Holiday' | 'Class Notice' | 'Schedule Change' | 'Urgent Alert' | 'Exam / Test' | 'General';
+  category?: 'Holiday' | 'Class Notice' | 'Schedule Change' | 'Urgent Alert' | 'Exam / Test' | 'Course Update' | 'Batch Timing' | 'General';
   effectiveDate?: string;
   isPinned?: boolean;
 }
