@@ -330,6 +330,11 @@ export interface SiteSettings {
   b2LogoId?: string;
   b2LogoName?: string;
 
+  // Central Website Favicon Management (Backblaze B2)
+  faviconUrl?: string;
+  b2FaviconId?: string;
+  b2FaviconName?: string;
+
   // Razorpay Public Configuration
   razorpayKeyId?: string;
 }

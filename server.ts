@@ -4961,6 +4961,35 @@ www.witslingo.com`;
     return res.redirect("/logo.svg");
   });
 
+  // Favicon direct route handlers (Backed by Backblaze B2 & Local Static Assets)
+  app.get(
+    [
+      "/favicon.ico",
+      "/favicon.png",
+      "/favicon.jpg",
+      "/favicon-32x32.png",
+      "/favicon-16x16.png",
+      "/apple-touch-icon.png",
+    ],
+    (req, res) => {
+      const filename = path.basename(req.path);
+      const publicPath = path.join(process.cwd(), "public", filename);
+      if (fs.existsSync(publicPath)) {
+        const ext = path.extname(filename).toLowerCase();
+        const contentType =
+          ext === ".ico"
+            ? "image/x-icon"
+            : ext === ".png"
+            ? "image/png"
+            : "image/jpeg";
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.sendFile(publicPath);
+      }
+      res.status(404).end();
+    }
+  );
+
   // =========================================================================
   // GALLERY MANAGEMENT & BACKBLAZE B2 PHOTO STORAGE
   // =========================================================================

@@ -6716,6 +6716,28 @@ app.get("/api/files/logo/:filename?", (req, res) => {
   }
   return res.redirect("/logo.svg");
 });
+app.get(
+  [
+    "/favicon.ico",
+    "/favicon.png",
+    "/favicon.jpg",
+    "/favicon-32x32.png",
+    "/favicon-16x16.png",
+    "/apple-touch-icon.png"
+  ],
+  (req, res) => {
+    const filename = path7.basename(req.path);
+    const publicPath = path7.join(process.cwd(), "public", filename);
+    if (fs7.existsSync(publicPath)) {
+      const ext = path7.extname(filename).toLowerCase();
+      const contentType = ext === ".ico" ? "image/x-icon" : ext === ".png" ? "image/png" : "image/jpeg";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.sendFile(publicPath);
+    }
+    res.status(404).end();
+  }
+);
 app.get("/api/gallery", (req, res) => {
   try {
     const categoryFilter = typeof req.query.category === "string" ? req.query.category.trim() : "";
