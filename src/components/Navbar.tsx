@@ -34,45 +34,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [bannerDismissed, setBannerDismissed] = useState(() => {
-    try {
-      return sessionStorage.getItem('wits_top_announcement_dismissed') === 'true';
-    } catch {
-      return false;
-    }
-  });
   const headerRef = useRef<HTMLElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useScrollLock(mobileMenuOpen);
 
-  // If announcement text updates from admin panel CMS, reset dismissal so fresh notices show
-  const currentAnnouncementText = siteSettings?.announcementText;
-  useEffect(() => {
-    if (currentAnnouncementText) {
-      try {
-        const lastSeen = sessionStorage.getItem('wits_last_seen_announcement');
-        if (lastSeen !== currentAnnouncementText) {
-          sessionStorage.setItem('wits_last_seen_announcement', currentAnnouncementText);
-          sessionStorage.removeItem('wits_top_announcement_dismissed');
-          setBannerDismissed(false);
-        }
-      } catch {}
-    }
-  }, [currentAnnouncementText]);
-
+  // Notice bar is permanently stuck with the header when active (no user dismiss option)
   const showTopAnnouncement =
     siteSettings?.showAnnouncement !== false &&
-    Boolean(siteSettings?.announcementText && siteSettings.announcementText.trim()) &&
-    !bannerDismissed;
-
-  const handleDismissBanner = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setBannerDismissed(true);
-    try {
-      sessionStorage.setItem('wits_top_announcement_dismissed', 'true');
-    } catch {}
-  };
+    Boolean(siteSettings?.announcementText && siteSettings.announcementText.trim());
 
   useEffect(() => {
     const updateHeaderHeight = () => {
@@ -95,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       if (observer) observer.disconnect();
       window.removeEventListener('resize', updateHeaderHeight);
     };
-  }, []);
+  }, [showTopAnnouncement, siteSettings?.announcementText]);
 
   useEffect(() => {
     if (searchOpen && searchInputRef.current) {
@@ -143,28 +113,28 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-40 bg-white/95 backdrop-blur-md transition-all select-none w-full shadow-xs"
+      className="sticky top-0 z-50 bg-white/95 backdrop-blur-md transition-all select-none w-full border-b border-purple-100/70 shadow-xs"
     >
-      {/* 0. Top Announcement Notification Bar (Managed via Admin Dashboard) */}
+      {/* 0. Top Announcement Notification Bar (Permanently Sticky with Header, Managed via Admin) */}
       {showTopAnnouncement && (
         <div
           role="region"
           aria-label="Academy Notice"
-          className="w-full bg-gradient-to-r from-[#220B3B] via-[#3C166D] to-[#220B3B] text-white py-2 px-3 sm:px-6 relative border-b border-purple-800/40 shadow-xs z-50 transition-all duration-200"
+          className="w-full bg-gradient-to-r from-[#220B3B] via-[#3C166D] to-[#220B3B] text-white py-1.5 px-3 sm:px-6 relative border-b border-purple-800/40 shadow-xs z-50 transition-all duration-200"
         >
-          <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto flex items-center justify-between gap-2.5 sm:gap-4 text-xs sm:text-[13px]">
+          <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto flex items-center justify-center text-xs sm:text-[12.5px]">
             {/* Centered Message + Animated Pulsing Dot ("little pop") */}
-            <div className="flex-1 flex items-center justify-center gap-2 sm:gap-2.5 min-w-0">
-              <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
+            <div className="flex items-center justify-center gap-2 sm:gap-2.5 min-w-0 max-w-full">
+              <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 shadow-xs shadow-emerald-400/50" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-xs shadow-emerald-400/50" />
               </span>
 
-              <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-white/15 text-emerald-300 border border-emerald-400/30 shrink-0">
+              <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded text-[9.5px] font-extrabold uppercase tracking-wider bg-white/15 text-emerald-300 border border-emerald-400/30 shrink-0">
                 Notice
               </span>
 
-              <span className="truncate max-w-[72vw] sm:max-w-2xl font-medium tracking-wide text-white/95 text-center">
+              <span className="truncate max-w-[80vw] sm:max-w-3xl font-medium tracking-wide text-white/95 text-center">
                 {siteSettings?.announcementText}
               </span>
 
@@ -187,23 +157,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
             </div>
-
-            {/* Session Dismiss Button (×) */}
-            <button
-              type="button"
-              onClick={handleDismissBanner}
-              aria-label="Dismiss notice"
-              title="Dismiss announcement for this session"
-              className="p-1 -mr-1 text-purple-200/70 hover:text-white hover:bg-white/10 rounded-md transition-colors shrink-0 cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
           </div>
         </div>
       )}
 
-      <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto px-6 sm:px-10 lg:px-16 w-full">
-        <div className="flex items-center justify-between h-20 sm:h-22">
+      <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-12 w-full">
+        <div className="flex items-center justify-between h-14 sm:h-16 lg:h-[4.25rem]">
           {/* Left: Mascot Logo + Wits Lingo Brand Name */}
           <div className="flex items-center">
             <a
@@ -216,104 +175,118 @@ export const Navbar: React.FC<NavbarProps> = ({
                   handleNavClick(e, 'home');
                 }
               }}
-              className="flex items-center gap-3 cursor-pointer py-1 group"
+              className="flex items-center gap-2.5 cursor-pointer py-1 group"
             >
               <Logo size="md" variant="serif" />
             </a>
           </div>
 
-          {/* Center: Desktop Navigation Links (Home, Courses, About, Blog, Contact) */}
-          <nav className="hidden lg:flex items-center space-x-8 xl:space-x-10 text-[16px] font-medium">
-            {/* 1. Home (Active state with purple pill underline) */}
+          {/* Center: Desktop Navigation Links (Home, Courses, Reviews, About, Gallery, Contact) */}
+          <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-[14.5px] font-semibold">
+            {/* 1. Home */}
             <a
               href="#home"
               onClick={(e) => handleNavClick(e, 'home')}
-              className={`relative py-2 transition-colors cursor-pointer ${
-                activeSection === 'home' ? 'text-[#1E123B] font-semibold' : 'text-[#5A526E] hover:text-[#1E123B]'
+              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                activeSection === 'home'
+                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
               }`}
             >
-              <span>Home</span>
-              {activeSection === 'home' && (
-                <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-9 h-[3px] bg-[#281648] rounded-full" />
-              )}
+              Home
             </a>
 
             {/* 2. Courses */}
             <a
               href="#courses"
               onClick={(e) => handleNavClick(e, 'courses')}
-              className="relative py-2 text-[#5A526E] hover:text-[#1E123B] transition-colors cursor-pointer"
+              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                activeSection === 'courses'
+                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+              }`}
             >
-              <span>Courses</span>
+              Courses
             </a>
 
-            {/* 2b. Reviews */}
+            {/* 3. Reviews */}
             <a
               href="#testimonials"
               onClick={(e) => handleNavClick(e, 'testimonials')}
-              className="relative py-2 text-[#5A526E] hover:text-[#1E123B] transition-colors cursor-pointer"
+              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                activeSection === 'testimonials'
+                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+              }`}
             >
-              <span>Reviews</span>
+              Reviews
             </a>
 
-            {/* 3. About */}
+            {/* 4. About */}
             <a
               href="#about"
               onClick={(e) => handleNavClick(e, 'about')}
-              className="relative py-2 text-[#5A526E] hover:text-[#1E123B] transition-colors cursor-pointer"
+              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                activeSection === 'about'
+                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+              }`}
             >
-              <span>About</span>
+              About
             </a>
 
-            {/* 4. Gallery */}
+            {/* 5. Gallery */}
             <a
               href="/gallery"
               onClick={(e) => {
                 e.preventDefault();
                 if (onNavigateGallery) onNavigateGallery();
               }}
-              className={`relative py-2 transition-colors cursor-pointer ${
-                activeSection === 'gallery' ? 'text-[#1E123B] font-semibold' : 'text-[#5A526E] hover:text-[#1E123B]'
+              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                activeSection === 'gallery'
+                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
               }`}
             >
-              <span>Gallery</span>
-              {activeSection === 'gallery' && (
-                <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-9 h-[3px] bg-[#281648] rounded-full" />
-              )}
+              Gallery
             </a>
 
-            {/* 5. Contact */}
+            {/* 6. Contact */}
             <a
               href="#contact"
               onClick={(e) => handleNavClick(e, 'contact')}
-              className="relative py-2 text-[#5A526E] hover:text-[#1E123B] transition-colors cursor-pointer"
+              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                activeSection === 'contact'
+                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+              }`}
             >
-              <span>Contact</span>
+              Contact
             </a>
           </nav>
 
-          {/* Right: Search icon, Login link, Get Started button (Desktop layout only) */}
-          <div className="hidden lg:flex items-center space-x-6 xl:space-x-7">
-            {/* Search Icon */}
+          {/* Right: Quick Search, Admin, Buy Course */}
+          <div className="hidden lg:flex items-center gap-3">
+            {/* Search Icon Button */}
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="p-1.5 text-[#281648] hover:text-[#6D28D9] hover:bg-purple-50/70 rounded-full transition-all cursor-pointer"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-[#281648] hover:text-[#6D28D9] hover:bg-purple-50/80 border border-transparent hover:border-purple-200/50 transition-all cursor-pointer"
               aria-label="Search courses and resources"
               title="Search"
             >
-              <Search className="w-5 h-5 text-[#281648] stroke-[2.2]" />
+              <Search className="w-4.5 h-4.5 stroke-[2.2]" />
             </button>
 
             {/* Admin Link (Only for logged-in admin) */}
             {currentUser && currentUser.role === 'admin' && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={onOpenAdmin}
-                  className="flex items-center gap-1.5 text-[15px] font-semibold text-[#281648] hover:text-[#6D28D9] transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-50 hover:bg-purple-100 text-xs font-bold text-[#281648] border border-purple-200 transition-colors cursor-pointer"
                 >
-                  <BookOpen className="w-4 h-4 text-[#6D28D9]" />
+                  <BookOpen className="w-3.5 h-3.5 text-[#6D28D9]" />
                   <span>Admin</span>
                 </button>
                 <button
@@ -322,32 +295,40 @@ export const Navbar: React.FC<NavbarProps> = ({
                   title="Logout"
                   className="text-slate-400 hover:text-rose-600 transition-colors p-1"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
 
-            {/* Buy Course Button (Directly reaches courses section) */}
+            {/* Buy Course CTA Button */}
             <button
               type="button"
               onClick={(e) => handleNavClick(e, 'courses')}
               id="nav-buy-course-btn"
-              style={{ backgroundColor: '#281648', color: '#ffffff' }}
-              className="px-6 py-2.5 rounded-full font-bold text-[14px] shadow-sm hover:bg-[#1E0F38] hover:shadow-md transition-all active:scale-[0.98] cursor-pointer text-white flex items-center gap-1.5"
+              className="px-5 py-2 rounded-full font-bold text-[13px] text-white bg-gradient-to-r from-[#281648] via-[#3B1A6E] to-[#281648] hover:from-[#1E0F38] hover:to-[#220B3B] shadow-sm hover:shadow-md hover:shadow-purple-950/20 transition-all active:scale-[0.98] cursor-pointer flex items-center gap-1.5 border border-purple-900/30"
             >
               <span>Buy Course</span>
+              <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
             </button>
           </div>
 
-          {/* Mobile Header: Large Hamburger Menu on right (ONLY shown below lg breakpoint) */}
-          <div className="lg:hidden flex items-center">
+          {/* Mobile Header Toggle */}
+          <div className="lg:hidden flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="p-2 text-[#1E123B] hover:bg-purple-50 rounded-xl transition-colors cursor-pointer"
+              aria-label="Search"
+            >
+              <Search className="w-5 h-5 text-[#281648]" />
+            </button>
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-1.5 -mr-1 text-[#1E123B] hover:text-[#6D28D9] hover:bg-purple-50 rounded-xl transition-colors cursor-pointer"
+              className="p-2 text-[#1E123B] hover:text-[#6D28D9] hover:bg-purple-50 rounded-xl transition-colors cursor-pointer"
               aria-label="Toggle navigation menu"
             >
-              {mobileMenuOpen ? <X className="w-7 h-7 stroke-[2.3]" /> : <Menu className="w-7 h-7 stroke-[2.3]" />}
+              {mobileMenuOpen ? <X className="w-6 h-6 stroke-[2.3]" /> : <Menu className="w-6 h-6 stroke-[2.3]" />}
             </button>
           </div>
         </div>

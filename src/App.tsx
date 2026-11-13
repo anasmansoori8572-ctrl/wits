@@ -629,7 +629,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden relative bg-white text-slate-900 font-['Plus_Jakarta_Sans'] selection:bg-purple-100 selection:text-purple-900">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip relative bg-white text-slate-900 font-['Plus_Jakarta_Sans'] selection:bg-purple-100 selection:text-purple-900">
       
       {/* Universal Top Navigation Bar */}
       <Navbar
