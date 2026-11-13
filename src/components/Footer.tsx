@@ -168,11 +168,11 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a 
-                  href="#philosophy" 
-                  onClick={(e) => handleSectionClick(e, 'philosophy')}
+                  href="#testimonials" 
+                  onClick={(e) => handleSectionClick(e, 'testimonials')}
                   className="hover:text-white transition-colors py-1 block cursor-pointer"
                 >
-                  Learning Philosophy
+                  Student Reviews
                 </a>
               </li>
               <li>

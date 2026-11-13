@@ -8,7 +8,6 @@ import { Hero } from './components/Hero';
 import { AboutSection } from './components/AboutSection';
 import { StatsSection } from './components/StatsSection';
 import { WhatWeTeach } from './components/WhatWeTeach';
-import { PhilosophySection } from './components/PhilosophySection';
 import { CoursesSection } from './components/CoursesSection';
 import { TestimonialsSection } from './components/TestimonialsSection';
 import { LearningResources } from './components/LearningResources';
@@ -750,10 +749,7 @@ export default function App() {
           {/* 5. What We Teach: 6 Curriculum Cards (Informational Only) */}
           <WhatWeTeach />
 
-          {/* 6. Learning Philosophy: 5 Steps Progression */}
-          <PhilosophySection onOpenAdmission={() => handleOpenAdmission()} />
-
-          {/* 7. Learning Resources (Combined Learn & Resources Hub in an Optimized Layout) */}
+          {/* 6. Learning Resources (Combined Learn & Resources Hub in an Optimized Layout) */}
           <LearningResources
             siteSettings={siteSettings}
             onOpenAdmission={(courseId) => handleOpenAdmission(courseId)}
