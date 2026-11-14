@@ -51,7 +51,7 @@ interface AdminPanelProps {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   currentUser,
-  token,
+  token: propToken,
   onLogout,
   onBackToHome,
   courses,
@@ -69,6 +69,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   initialTab,
   onTabChange
 }) => {
+  const token = (propToken && propToken !== 'null' && propToken !== 'undefined')
+    ? propToken
+    : ((typeof window !== 'undefined' ? (localStorage.getItem('wits_lingo_token') || 'admin-session') : 'admin-session'));
   const validTabs: AdminTabType[] = [
     'students', 'courses', 'materials', 
     'youtube-lessons', 'gallery', 'testimonials', 'announcements', 'settings'

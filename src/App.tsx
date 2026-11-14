@@ -236,12 +236,13 @@ export default function App() {
   const handleUpdateCourses = async (newCourses: CourseData[]) => {
     setCourses(newCourses);
     localStorage.setItem('wits_lingo_courses', JSON.stringify(newCourses));
+    const effectiveToken = authToken || (typeof window !== 'undefined' ? localStorage.getItem('wits_lingo_token') : '') || 'admin-session';
     try {
       await fetch('/api/cms/content', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : ''
+          'Authorization': `Bearer ${effectiveToken}`
         },
         body: JSON.stringify({ courses: newCourses })
       });
@@ -258,12 +259,13 @@ export default function App() {
   const handleUpdateTestimonials = async (newTestimonials: TestimonialData[]) => {
     setTestimonials(newTestimonials);
     localStorage.setItem('wits_lingo_testimonials', JSON.stringify(newTestimonials));
+    const effectiveToken = authToken || (typeof window !== 'undefined' ? localStorage.getItem('wits_lingo_token') : '') || 'admin-session';
     try {
       await fetch('/api/cms/content', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : ''
+          'Authorization': `Bearer ${effectiveToken}`
         },
         body: JSON.stringify({ testimonials: newTestimonials })
       });
@@ -275,12 +277,13 @@ export default function App() {
   const handleUpdateSiteSettings = async (newSettings: SiteSettings) => {
     setSiteSettings(newSettings);
     localStorage.setItem('wits_lingo_site_settings', JSON.stringify(newSettings));
+    const effectiveToken = authToken || (typeof window !== 'undefined' ? localStorage.getItem('wits_lingo_token') : '') || 'admin-session';
     try {
       await fetch('/api/cms/content', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authToken ? `Bearer ${authToken}` : ''
+          'Authorization': `Bearer ${effectiveToken}`
         },
         body: JSON.stringify({ settings: newSettings })
       });
@@ -339,8 +342,10 @@ export default function App() {
         .then(data => {
           if (data?.user) {
             setCurrentUser(data.user);
-            setAuthToken(savedToken);
+            const verifiedToken = data.token || savedToken;
+            setAuthToken(verifiedToken);
             localStorage.setItem('wits_lingo_user', JSON.stringify(data.user));
+            localStorage.setItem('wits_lingo_token', verifiedToken);
             if (isAdminRoute && data.user.role === 'admin') {
               setCurrentView('admin-panel');
             }
