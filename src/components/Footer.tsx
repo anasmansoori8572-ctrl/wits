@@ -188,18 +188,11 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a 
-                  href="/resources" 
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (onNavigateResources) {
-                      onNavigateResources();
-                    } else {
-                      handleSectionClick(e, 'learning-resources');
-                    }
-                  }}
+                  href="#youtube-videos" 
+                  onClick={(e) => handleSectionClick(e, 'youtube-videos')}
                   className="hover:text-white transition-colors py-1 block cursor-pointer"
                 >
-                  Learning Resources
+                  Video Lessons
                 </a>
               </li>
               <li>

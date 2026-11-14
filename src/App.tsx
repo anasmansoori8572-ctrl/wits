@@ -9,7 +9,7 @@ import { StatsSection } from './components/StatsSection';
 import { WhatWeTeach } from './components/WhatWeTeach';
 import { CoursesSection } from './components/CoursesSection';
 import { TestimonialsSection } from './components/TestimonialsSection';
-import { LearningResources } from './components/LearningResources';
+import { YouTubeVideoSection } from './components/YouTubeVideoSection';
 import { CommunitySection } from './components/CommunitySection';
 import { FounderSection } from './components/FounderSection';
 import { ContactSection } from './components/ContactSection';
@@ -795,20 +795,10 @@ export default function App() {
           {/* 5. What We Teach: 6 Curriculum Cards (Informational Only) */}
           <WhatWeTeach />
 
-          {/* 6. Learning Resources (Combined Learn & Resources Hub in an Optimized Layout) */}
-          <LearningResources
-            siteSettings={siteSettings}
-            onOpenAdmission={(courseId) => handleOpenAdmission(courseId)}
-            onFollow={() => {
-              const el = document.getElementById('community');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }}
+          {/* 6. YouTube Video Lessons Carousel (Clean Marquee Layout) */}
+          <YouTubeVideoSection
             materials={materials}
-            onViewAllResources={() => {
-              try { window.history.pushState(null, '', '/resources'); } catch (e) {}
-              setCurrentView('resources');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+            siteSettings={siteSettings}
           />
 
           {/* 8. Community: Learn English Every Day */}
