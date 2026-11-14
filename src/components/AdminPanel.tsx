@@ -24,7 +24,7 @@ export type AdminTabType = 'students' | 'courses' | 'materials' | 'youtube-lesso
 
 function extractYouTubeVideoId(url?: string): string {
   if (!url) return '';
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+  const match = url.trim().match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/|live\/)|youtu\.be\/)([^"&?\/\s]{11})/i);
   return (match && match[1]) ? match[1] : '';
 }
 
@@ -1544,9 +1544,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         if (data.materials && Array.isArray(data.materials)) {
           updatedList = data.materials;
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setPdfUploadError(errData.error || 'Failed to save material to server database.');
+        return;
       }
     } catch (e) {
       console.warn('Failed to upload material to backend:', e);
+      setPdfUploadError('Network error while saving material to database.');
+      return;
     }
 
     setMaterials(updatedList);
@@ -1629,9 +1635,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         if (data.materials && Array.isArray(data.materials)) {
           updatedList = data.materials;
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Failed to save video lesson to server database. Please check connection and login.');
+        return;
       }
     } catch (e) {
       console.warn('Failed to add YouTube resource to backend:', e);
+      alert('Network error while saving video lesson to database.');
+      return;
     }
 
     setMaterials(updatedList);

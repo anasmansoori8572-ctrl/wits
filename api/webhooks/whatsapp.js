@@ -1100,10 +1100,10 @@ var DurableStorageService = class _DurableStorageService {
   /**
    * Retrieve a collection from durable cloud storage or memory cache
    */
-  async getCollection(collectionName, defaultValue = []) {
-    if (this.memoryCache.has(collectionName)) {
+  async getCollection(collectionName, defaultValue = [], forceCloud = false) {
+    if (!forceCloud && this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
-      if (Array.isArray(cached)) {
+      if (Array.isArray(cached) && cached.length > 0) {
         return [...cached];
       }
     }

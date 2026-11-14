@@ -1121,10 +1121,10 @@ var DurableStorageService = class _DurableStorageService {
   /**
    * Retrieve a collection from durable cloud storage or memory cache
    */
-  async getCollection(collectionName, defaultValue = []) {
-    if (this.memoryCache.has(collectionName)) {
+  async getCollection(collectionName, defaultValue = [], forceCloud = false) {
+    if (!forceCloud && this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
-      if (Array.isArray(cached)) {
+      if (Array.isArray(cached) && cached.length > 0) {
         return [...cached];
       }
     }
@@ -4308,7 +4308,7 @@ function loadAllPersistedData() {
     if (fs7.existsSync(MATERIALS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs7.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           for (const m of data) {
             if (m.resourceType === "youtube" || m.fileType === "youtube") {
               if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
@@ -4325,7 +4325,33 @@ function loadAllPersistedData() {
         console.warn("[Persistence] Could not parse materials.json:", e);
       }
     }
-    if (!materialsLoaded) {
+    try {
+      durableStorageService.getCollection("materials", []).then((durableMaterials) => {
+        if (Array.isArray(durableMaterials) && durableMaterials.length > 0) {
+          for (const m of durableMaterials) {
+            if (m.resourceType === "youtube" || m.fileType === "youtube") {
+              if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
+            } else if (!m.downloadUrl || m.downloadUrl === "#") {
+              m.downloadUrl = `/api/files/download/${m.id}`;
+            }
+          }
+          if (studyMaterials.length === 0) {
+            studyMaterials.push(...durableMaterials);
+          } else {
+            const existingIds = new Set(studyMaterials.map((m) => m.id));
+            for (const m of durableMaterials) {
+              if (!existingIds.has(m.id)) {
+                studyMaterials.push(m);
+              }
+            }
+          }
+          console.log(`[Persistence] Hydrated ${studyMaterials.length} study materials from cloud durable storage.`);
+        }
+      }).catch(() => {
+      });
+    } catch (e) {
+    }
+    if (!materialsLoaded && studyMaterials.length > 0) {
       savePersistedMaterials();
     }
     let galleryLoaded = false;
@@ -4520,14 +4546,18 @@ function saveAnnouncements() {
     }
   }
 }
-function savePersistedMaterials() {
-  durableStorageService.saveCollectionBackground("materials", studyMaterials);
+async function savePersistedMaterials() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save materials:", e);
     }
+  }
+  try {
+    await durableStorageService.saveCollection("materials", studyMaterials);
+  } catch (err) {
+    console.warn("[Persistence] Durable cloud save error for materials:", err);
   }
 }
 function saveOrders() {
@@ -7749,17 +7779,37 @@ function sortLearningMaterials(items) {
     return (b.id || "").localeCompare(a.id || "");
   });
 }
-app.get(["/api/materials", "/api/learning-resources"], (req, res) => {
+app.get(["/api/materials", "/api/learning-resources"], async (req, res) => {
+  if (studyMaterials.length === 0) {
+    try {
+      const durableMaterials = await durableStorageService.getCollection("materials", []);
+      if (Array.isArray(durableMaterials) && durableMaterials.length > 0) {
+        studyMaterials.length = 0;
+        studyMaterials.push(...durableMaterials);
+      }
+    } catch (e) {
+    }
+  }
   const publicMaterials = sortLearningMaterials(studyMaterials).filter((m) => m.isVisibleOnWebsite !== false && m.isPublished !== false).map((m) => ({
     ...m,
     downloadUrl: !m.downloadUrl || m.downloadUrl === "#" ? `/api/files/download/${m.id}` : m.downloadUrl
   }));
   res.json({ materials: publicMaterials, resources: publicMaterials });
 });
-app.get(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) => {
+app.get(["/api/admin/materials", "/api/admin/learning-resources"], async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
+  }
+  if (studyMaterials.length === 0) {
+    try {
+      const durableMaterials = await durableStorageService.getCollection("materials", []);
+      if (Array.isArray(durableMaterials) && durableMaterials.length > 0) {
+        studyMaterials.length = 0;
+        studyMaterials.push(...durableMaterials);
+      }
+    } catch (e) {
+    }
   }
   const allMaterials = sortLearningMaterials(studyMaterials).map((m) => ({
     ...m,
@@ -7767,7 +7817,7 @@ app.get(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) =>
   }));
   res.json({ materials: allMaterials, resources: allMaterials });
 });
-app.post(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) => {
+app.post(["/api/admin/materials", "/api/admin/learning-resources"], async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -7852,7 +7902,7 @@ app.post(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) =
     const cls = classes.find((c) => c.id === classId);
     if (cls) cls.hasStudyMaterial = true;
   }
-  savePersistedMaterials();
+  await savePersistedMaterials();
   const sorted = sortLearningMaterials(studyMaterials);
   res.json({ success: true, material: newMat, materials: sorted, resources: sorted });
 });
@@ -7936,7 +7986,7 @@ app.put(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async
   if (duration !== void 0) mat.duration = duration;
   if (views !== void 0) mat.views = views;
   mat.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  savePersistedMaterials();
+  await savePersistedMaterials();
   const sorted = sortLearningMaterials(studyMaterials);
   res.json({ success: true, material: mat, materials: sorted, resources: sorted });
 });
@@ -7969,7 +8019,7 @@ app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], as
   } catch (e) {
   }
   studyMaterials.splice(idx, 1);
-  savePersistedMaterials();
+  await savePersistedMaterials();
   const sorted = sortLearningMaterials(studyMaterials);
   res.json({ success: true, message: "Resource deleted.", materials: sorted, resources: sorted });
 });

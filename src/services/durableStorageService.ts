@@ -436,11 +436,11 @@ export class DurableStorageService {
   /**
    * Retrieve a collection from durable cloud storage or memory cache
    */
-  public async getCollection<T>(collectionName: string, defaultValue: T[] = []): Promise<T[]> {
-    // 1. Return from in-memory cache if available
-    if (this.memoryCache.has(collectionName)) {
+  public async getCollection<T>(collectionName: string, defaultValue: T[] = [], forceCloud: boolean = false): Promise<T[]> {
+    // 1. Return from in-memory cache if available, non-empty, and forceCloud is not requested
+    if (!forceCloud && this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
-      if (Array.isArray(cached)) {
+      if (Array.isArray(cached) && cached.length > 0) {
         return [...cached];
       }
     }
