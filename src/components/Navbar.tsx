@@ -120,6 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { title: 'Spoken English & Daily Fluency', target: 'courses', desc: 'Core spoken English course for daily fluency and active conversation' },
     { title: 'Foundation English & Grammar', target: 'courses', desc: 'Tenses, sentence formation, vocabulary building, and syntax' },
     { title: 'Executive Communication & Public Speaking', target: 'courses', desc: 'Professional fluency, interviews, corporate communication' },
+    { title: 'Learning Resources & PDF Notes', target: 'resources', desc: 'Read uploaded PDF study guides, daily sentences, grammar handbooks, and worksheets' },
     { title: 'Video Lessons: Learn English With Wits Lingo', target: 'youtube-videos', desc: 'Watch spoken English video lessons, pronunciation guides, and tips' },
     { title: 'About Wits Lingo Academy', target: 'about', desc: 'Our methodology, learning framework, and academy details' },
     { title: 'Contact & Support', target: 'contact', desc: 'WhatsApp support, call assistance, admissions helpline' },
@@ -233,7 +234,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Courses
               </a>
 
-              {/* 3. About */}
+              {/* 3. Learning Resources */}
+              <a
+                href="/resources"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (onNavigateResources) {
+                    onNavigateResources();
+                  } else {
+                    handleNavClick(e, 'resources');
+                  }
+                }}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  activeSection === 'resources'
+                    ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                    : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+                }`}
+              >
+                Learning Resources
+              </a>
+
+              {/* 4. About */}
               <a
                 href="/about"
                 onClick={(e) => {
@@ -375,6 +396,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
               >
                 Courses
+              </a>
+              <a
+                href="/resources"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setMobileMenuOpen(false);
+                  if (onNavigateResources) {
+                    onNavigateResources();
+                  } else {
+                    handleNavClick(e, 'resources');
+                  }
+                }}
+                className={`block px-3 py-2.5 rounded-xl ${
+                  activeSection === 'resources'
+                    ? 'bg-purple-100 text-[#281648] font-bold'
+                    : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+                }`}
+              >
+                Learning Resources
               </a>
               <a
                 href="/about"

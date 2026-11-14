@@ -804,6 +804,11 @@ export default function App() {
               const el = document.getElementById('courses');
               if (el) el.scrollIntoView({ behavior: 'smooth' });
             }}
+            onNavigateAbout={() => {
+              try { window.history.pushState(null, '', '/about'); } catch (e) {}
+              setCurrentView('about');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
             siteSettings={siteSettings}
             announcements={announcements}
           />

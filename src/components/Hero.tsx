@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { ArrowRight, BookOpen, MessageSquare, User, Mic, Star, Layers, X } from 'lucide-react';
+import React from 'react';
+import { ArrowRight, BookOpen, MessageSquare, User, Mic, Star, Layers } from 'lucide-react';
 import { SiteSettings, Announcement } from '../types';
 
 interface HeroProps {
   onOpenAdmission: (courseId?: string) => void;
   onExploreCourses: () => void;
-  onTakeLevelTest?: () => void;
+  onNavigateAbout?: () => void;
   onWatchVideo?: () => void;
   siteSettings?: SiteSettings;
   announcements?: Announcement[];
@@ -15,21 +15,19 @@ interface HeroProps {
 export const Hero: React.FC<HeroProps> = ({ 
   onOpenAdmission, 
   onExploreCourses, 
-  onTakeLevelTest,
+  onNavigateAbout,
   siteSettings,
 }) => {
-  const [isLevelTestModalOpen, setIsLevelTestModalOpen] = useState(false);
-
-  const handleTakeLevelTest = () => {
-    if (onTakeLevelTest) {
-      onTakeLevelTest();
-      return;
-    }
-    const el = document.getElementById('learning-resources');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
+  const handleAboutUs = () => {
+    if (onNavigateAbout) {
+      onNavigateAbout();
     } else {
-      setIsLevelTestModalOpen(true);
+      const el = document.getElementById('about');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        window.location.href = '/about';
+      }
     }
   };
 
@@ -105,15 +103,15 @@ export const Hero: React.FC<HeroProps> = ({
                 <ArrowRight className="w-5 h-5 text-white stroke-[2.2] transition-transform group-hover:translate-x-1 shrink-0" />
               </button>
 
-              {/* BUTTON 2: Take a Level Test (White background, purple border, purple text, pill shape) */}
+              {/* BUTTON 2: About Us (White background, purple border, purple text, pill shape) */}
               <button
                 type="button"
-                onClick={handleTakeLevelTest}
-                id="hero-level-test-btn"
+                onClick={handleAboutUs}
+                id="hero-about-us-btn"
                 style={{ backgroundColor: '#ffffff', color: '#281648', borderColor: '#281648' }}
                 className="px-8 py-4 sm:px-9 sm:py-4.5 rounded-full font-semibold text-[16px] lg:text-[17px] inline-flex items-center justify-center border-2 border-[#281648] hover:bg-purple-50/70 transition-all active:scale-[0.98] cursor-pointer text-[#281648]"
               >
-                <span className="text-[#281648] font-semibold">Take a Level Test</span>
+                <span className="text-[#281648] font-semibold">About Us</span>
               </button>
             </div>
 
@@ -348,14 +346,15 @@ export const Hero: React.FC<HeroProps> = ({
             <ArrowRight className="w-5 h-5 text-white stroke-[2.2] shrink-0" />
           </button>
 
-          {/* Button 2: Take a Level Test */}
+          {/* Button 2: About Us */}
           <button
             type="button"
-            onClick={handleTakeLevelTest}
+            onClick={handleAboutUs}
+            id="hero-mobile-about-us-btn"
             style={{ backgroundColor: '#ffffff', color: '#281648', borderColor: '#281648' }}
             className="w-full py-4 sm:py-4.5 rounded-full font-semibold text-[16px] sm:text-[17px] inline-flex items-center justify-center border-2 border-[#281648] bg-white text-[#281648] active:scale-[0.98] cursor-pointer"
           >
-            <span>Take a Level Test</span>
+            <span>About Us</span>
           </button>
         </div>
 
@@ -522,47 +521,6 @@ export const Hero: React.FC<HeroProps> = ({
         </div>
 
       </div>
-
-      {/* Modal for Level Test info if diagnostic resource isn't found */}
-      {isLevelTestModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-purple-100 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-[#1E123B]">English Level Diagnostic Test</h3>
-              <button 
-                onClick={() => setIsLevelTestModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-sm text-slate-600 mb-4 leading-relaxed">
-              Our 50-Question Spoken English Diagnostic Assessment evaluates your current proficiency (Beginner, Intermediate, or Advanced) and provides personalized course recommendations.
-            </p>
-            <div className="bg-purple-50 rounded-xl p-3.5 mb-5 text-xs text-purple-900 border border-purple-100">
-              <span className="font-bold block mb-1">Status:</span>
-              Interactive automated level quiz engine is under active implementation. In the meantime, you can explore courses or download the diagnostic worksheet from the learning hub.
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setIsLevelTestModalOpen(false);
-                  onOpenAdmission();
-                }}
-                className="flex-1 py-2.5 rounded-full bg-[#281648] text-white text-xs font-bold hover:bg-[#1E0F38] transition-colors cursor-pointer"
-              >
-                Register with Academy
-              </button>
-              <button
-                onClick={() => setIsLevelTestModalOpen(false)}
-                className="px-4 py-2.5 rounded-full border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 };
