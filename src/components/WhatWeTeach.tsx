@@ -374,7 +374,7 @@ export const WhatWeTeach: React.FC<WhatWeTeachProps> = ({ onSelectSubject }) => 
   ];
 
   return (
-    <section id="what-we-teach" className="py-20 sm:py-28 bg-[#FAF9FD] relative overflow-hidden border-b border-purple-100/80">
+    <section id="what-we-teach" className="py-14 sm:py-16 lg:py-20 bg-[#FAF9FD] relative overflow-hidden border-b border-purple-100/80">
       
       {/* Background ambient royal purple glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-purple-200/30 rounded-full blur-[140px] pointer-events-none -z-10" />
@@ -382,14 +382,14 @@ export const WhatWeTeach: React.FC<WhatWeTeachProps> = ({ onSelectSubject }) => 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Centered Heading Only (All extra tags and side text removed as requested) */}
-        <div className="text-center mb-14 sm:mb-18">
+        <div className="text-center mb-10 sm:mb-12">
           <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#1E1B26] tracking-tight">
             What we teach <span className="text-[#4A1D96]">for real fluency.</span>
           </h2>
         </div>
 
         {/* 6 Cards hanging in a 3-column grid (with suspended wire, clips, and 3D flip) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-16 gap-x-8 sm:gap-x-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-10 sm:gap-y-12 gap-x-6 sm:gap-x-8">
           {learningPillars.map((pillar, idx) => {
             const isFlipped = !!flippedCards[idx];
 

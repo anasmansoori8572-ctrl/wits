@@ -1045,6 +1045,12 @@ var DurableStorageService = class _DurableStorageService {
    */
   loadInitialData() {
     const seedCollections = [
+      "courses",
+      "batches",
+      "cmsContent",
+      "announcements",
+      "gallery",
+      "testimonials",
       "conversations",
       "messages",
       "support-tickets",
@@ -1056,11 +1062,18 @@ var DurableStorageService = class _DurableStorageService {
     ];
     for (const coll of seedCollections) {
       try {
-        const localPath = path.join(process.cwd(), "uploads", "data", `${coll}.json`);
+        let localPath = path.join(process.cwd(), "uploads", "data", `${coll}.json`);
+        if (!fs.existsSync(localPath) && coll === "cmsContent") {
+          const altPath = path.join(process.cwd(), "uploads", "data", "cms-content.json");
+          if (fs.existsSync(altPath)) localPath = altPath;
+        }
         if (fs.existsSync(localPath)) {
           const raw = fs.readFileSync(localPath, "utf-8");
           const parsed = JSON.parse(raw);
           this.memoryCache.set(coll, parsed);
+          if (coll === "cmsContent") {
+            this.memoryCache.set("cms-content", parsed);
+          }
           if (coll === "webhook-dedup" && Array.isArray(parsed)) {
             const now = Date.now();
             for (const item of parsed) {
@@ -4049,8 +4062,12 @@ try {
 var REGISTRATIONS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "registrations.json");
 var USERS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "users.json");
 var BATCHES_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "batches.json");
+var CLASSES_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "classes.json");
+var RECORDINGS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "recordings.json");
+var COURSES_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "courses.json");
 var PAYMENTS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "payments.json");
 var CMS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "cms-content.json");
+var CMS_ALT_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "cmsContent.json");
 var ANNOUNCEMENTS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "announcements.json");
 var MATERIALS_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "materials.json");
 var GALLERY_STORAGE_FILE = path7.join(DATA_STORAGE_DIR, "gallery.json");
@@ -4135,47 +4152,77 @@ var galleryItems = [
 ];
 function loadAllPersistedData() {
   try {
+    if (!fs7.existsSync(DATA_STORAGE_DIR)) {
+      fs7.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
+    }
+    if (fs7.existsSync(COURSES_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs7.readFileSync(COURSES_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          cmsContent.courses = data;
+          console.log(`[Persistence] Loaded ${data.length} courses from courses.json.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse courses.json:", e);
+      }
+    }
     if (fs7.existsSync(REGISTRATIONS_STORAGE_FILE)) {
       const data = JSON.parse(fs7.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
-        const existingIds = new Set(data.map((r) => r.id || r.admissionId));
-        for (const r of registrations) {
-          if (!existingIds.has(r.id) && !existingIds.has(r.admissionId)) {
-            data.push(r);
-          }
-        }
         registrations.length = 0;
         registrations.push(...data);
         console.log(`[Persistence] Loaded ${registrations.length} student registrations.`);
       }
+    } else {
+      saveRegistrations();
     }
     if (fs7.existsSync(USERS_STORAGE_FILE)) {
       const data = JSON.parse(fs7.readFileSync(USERS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
-        const existingEmails = new Set(data.map((u) => u.email?.toLowerCase()));
-        for (const u of users) {
-          if (!existingEmails.has(u.email.toLowerCase())) {
-            data.push(u);
-          }
-        }
         users.length = 0;
         users.push(...data);
         console.log(`[Persistence] Loaded ${users.length} users.`);
       }
+    } else {
+      saveUsers();
     }
     if (fs7.existsSync(BATCHES_STORAGE_FILE)) {
       const data = JSON.parse(fs7.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
-        const existingIds = new Set(data.map((b) => b.id));
-        for (const b of batches) {
-          if (!existingIds.has(b.id)) {
-            data.push(b);
-          }
-        }
         batches.length = 0;
         batches.push(...data);
         console.log(`[Persistence] Loaded ${batches.length} batches.`);
       }
+    } else {
+      saveBatches();
+    }
+    if (fs7.existsSync(CLASSES_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs7.readFileSync(CLASSES_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          classes.length = 0;
+          classes.push(...data);
+          console.log(`[Persistence] Loaded ${classes.length} classes.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse classes.json:", e);
+      }
+    } else {
+      saveClasses();
+    }
+    if (fs7.existsSync(RECORDINGS_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs7.readFileSync(RECORDINGS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          recordings.length = 0;
+          recordings.push(...data);
+          console.log(`[Persistence] Loaded ${recordings.length} recordings.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse recordings.json:", e);
+      }
+    } else {
+      saveRecordings();
     }
     if (fs7.existsSync(PAYMENTS_STORAGE_FILE)) {
       const data = JSON.parse(fs7.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
@@ -4184,13 +4231,17 @@ function loadAllPersistedData() {
         payments.push(...data);
         console.log(`[Persistence] Loaded ${payments.length} verified payment transactions.`);
       }
+    } else {
+      savePayments();
     }
-    if (fs7.existsSync(CMS_STORAGE_FILE)) {
-      const data = JSON.parse(fs7.readFileSync(CMS_STORAGE_FILE, "utf-8"));
+    const cmsFileToRead = fs7.existsSync(CMS_STORAGE_FILE) ? CMS_STORAGE_FILE : fs7.existsSync(CMS_ALT_STORAGE_FILE) ? CMS_ALT_STORAGE_FILE : null;
+    if (cmsFileToRead) {
+      const data = JSON.parse(fs7.readFileSync(cmsFileToRead, "utf-8"));
       if (data && typeof data === "object") {
         cmsContent = {
           ...cmsContent,
           ...data,
+          courses: Array.isArray(cmsContent.courses) && cmsContent.courses.length > 0 ? cmsContent.courses : data.courses || cmsContent.courses,
           settings: {
             ...cmsContent.settings,
             ...data.settings || {}
@@ -4201,6 +4252,8 @@ function loadAllPersistedData() {
         }
         console.log(`[Persistence] Loaded custom CMS content & settings.`);
       }
+    } else {
+      saveCmsContent();
     }
     try {
       durableStorageService.getCollection("cmsContent", []).then((durableData) => {
@@ -4210,6 +4263,7 @@ function loadAllPersistedData() {
             cmsContent = {
               ...cmsContent,
               ...remote,
+              courses: Array.isArray(remote.courses) && remote.courses.length > 0 ? remote.courses : cmsContent.courses,
               settings: {
                 ...cmsContent.settings,
                 ...remote.settings || {}
@@ -4229,12 +4283,14 @@ function loadAllPersistedData() {
         announcements.push(...data);
         console.log(`[Persistence] Loaded ${announcements.length} announcements.`);
       }
+    } else {
+      saveAnnouncements();
     }
     let materialsLoaded = false;
     if (fs7.existsSync(MATERIALS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs7.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           for (const m of data) {
             if (m.resourceType === "youtube" || m.fileType === "youtube") {
               if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
@@ -4250,6 +4306,9 @@ function loadAllPersistedData() {
       } catch (e) {
         console.warn("[Persistence] Could not parse materials.json:", e);
       }
+    }
+    if (!materialsLoaded) {
+      savePersistedMaterials();
     }
     let galleryLoaded = false;
     if (fs7.existsSync(GALLERY_STORAGE_FILE)) {
@@ -4382,6 +4441,26 @@ function saveBatches() {
     }
   }
 }
+function saveClasses() {
+  durableStorageService.saveCollectionBackground("classes", classes);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs7.writeFileSync(CLASSES_STORAGE_FILE, JSON.stringify(classes, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save classes:", e);
+    }
+  }
+}
+function saveRecordings() {
+  durableStorageService.saveCollectionBackground("recordings", recordings);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs7.writeFileSync(RECORDINGS_STORAGE_FILE, JSON.stringify(recordings, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save recordings:", e);
+    }
+  }
+}
 function savePayments() {
   durableStorageService.saveCollectionBackground("payments", payments);
   if (process.env.VERCEL !== "1") {
@@ -4396,12 +4475,30 @@ function saveCmsContent() {
   durableStorageService.saveCollectionBackground("cmsContent", [cmsContent]);
   if (Array.isArray(cmsContent.courses)) {
     durableStorageService.saveCollectionBackground("courses", cmsContent.courses);
+    if (process.env.VERCEL !== "1") {
+      try {
+        fs7.writeFileSync(COURSES_STORAGE_FILE, JSON.stringify(cmsContent.courses, null, 2), "utf-8");
+      } catch (e) {
+        console.warn("[Persistence] Could not save courses.json:", e);
+      }
+    }
   }
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
+      fs7.writeFileSync(CMS_ALT_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save cmsContent:", e);
+    }
+  }
+}
+function saveAnnouncements() {
+  durableStorageService.saveCollectionBackground("announcements", announcements);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs7.writeFileSync(ANNOUNCEMENTS_STORAGE_FILE, JSON.stringify(announcements, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save announcements:", e);
     }
   }
 }
@@ -7452,7 +7549,7 @@ app.post("/api/admin/batches", (req, res) => {
   };
   batches.unshift(newBatch);
   saveBatches();
-  res.json({ success: true, batch: newBatch });
+  res.json({ success: true, batch: newBatch, batches });
 });
 app.post("/api/admin/schedule-class", (req, res) => {
   const auth = verifyAuthToken(req.headers.authorization);
@@ -7491,7 +7588,9 @@ app.post("/api/admin/schedule-class", (req, res) => {
       author: newClass.teacherName,
       priority: "Urgent"
     });
+    saveAnnouncements();
   }
+  saveClasses();
   res.json({ success: true, class: newClass });
 });
 app.post("/api/admin/classes/:classId/status", (req, res) => {
@@ -7536,7 +7635,10 @@ app.post("/api/admin/classes/:classId/status", (req, res) => {
       author: "Wits Lingo Academy",
       priority: "Normal"
     });
+    saveAnnouncements();
   }
+  saveClasses();
+  saveRecordings();
   res.json({ success: true, class: cls });
 });
 app.post("/api/admin/recordings", (req, res) => {
@@ -7564,6 +7666,8 @@ app.post("/api/admin/recordings", (req, res) => {
   recordings.unshift(newRec);
   cls.recordingId = newRec.id;
   cls.status = "Completed";
+  saveRecordings();
+  saveClasses();
   res.json({ success: true, recording: newRec });
 });
 function extractYouTubeVideoId(url) {
@@ -8200,7 +8304,8 @@ app.post("/api/admin/announcements", (req, res) => {
     isPinned: Boolean(isPinned)
   };
   announcements.unshift(newAnn);
-  res.json({ success: true, announcement: newAnn });
+  saveAnnouncements();
+  res.json({ success: true, announcement: newAnn, announcements });
 });
 app.get("/api/announcements", (req, res) => {
   res.json({ announcements });
@@ -8228,7 +8333,8 @@ app.put("/api/admin/announcements/:id", (req, res) => {
     batchId: batchId !== void 0 ? batchId === "all" ? "all" : batch ? batch.id : batchId : announcements[annIndex].batchId,
     batchName: batchId === "all" ? "All Batches (Academy-wide)" : batch ? batch.name : announcements[annIndex].batchName
   };
-  res.json({ success: true, announcement: announcements[annIndex] });
+  saveAnnouncements();
+  res.json({ success: true, announcement: announcements[annIndex], announcements });
 });
 app.delete("/api/admin/announcements/:id", (req, res) => {
   const auth = verifyAuthToken(req.headers.authorization);
@@ -8239,8 +8345,9 @@ app.delete("/api/admin/announcements/:id", (req, res) => {
   const idx = announcements.findIndex((a) => a.id === id);
   if (idx !== -1) {
     announcements.splice(idx, 1);
+    saveAnnouncements();
   }
-  res.json({ success: true });
+  res.json({ success: true, announcements });
 });
 app.get("/api/admin/attendance", (req, res) => {
   const auth = verifyAuthToken(req.headers.authorization);
@@ -8299,7 +8406,7 @@ app.put("/api/admin/batches/:id", (req, res) => {
   if (!batch) return res.status(404).json({ error: "Batch not found." });
   Object.assign(batch, req.body);
   saveBatches();
-  res.json({ success: true, batch });
+  res.json({ success: true, batch, batches });
 });
 app.delete("/api/admin/batches/:id", (req, res) => {
   const auth = verifyAuthToken(req.headers.authorization);
@@ -8311,7 +8418,7 @@ app.delete("/api/admin/batches/:id", (req, res) => {
   if (idx !== -1) {
     batches.splice(idx, 1);
     saveBatches();
-    return res.json({ success: true, message: "Batch deleted successfully." });
+    return res.json({ success: true, message: "Batch deleted successfully.", batches });
   }
   res.status(404).json({ error: "Batch not found." });
 });
@@ -8324,7 +8431,8 @@ app.put("/api/admin/classes/:id", (req, res) => {
   const cls = classes.find((c) => c.id === id);
   if (!cls) return res.status(404).json({ error: "Class not found." });
   Object.assign(cls, req.body);
-  res.json({ success: true, class: cls });
+  saveClasses();
+  res.json({ success: true, class: cls, classes });
 });
 app.delete("/api/admin/classes/:id", (req, res) => {
   const auth = verifyAuthToken(req.headers.authorization);
@@ -8335,7 +8443,8 @@ app.delete("/api/admin/classes/:id", (req, res) => {
   const idx = classes.findIndex((c) => c.id === id);
   if (idx !== -1) {
     classes.splice(idx, 1);
-    return res.json({ success: true, message: "Class deleted successfully." });
+    saveClasses();
+    return res.json({ success: true, message: "Class deleted successfully.", classes });
   }
   res.status(404).json({ error: "Class not found." });
 });
@@ -8348,7 +8457,8 @@ app.put("/api/admin/recordings/:id", (req, res) => {
   const rec = recordings.find((r) => r.id === id);
   if (!rec) return res.status(404).json({ error: "Recording not found." });
   Object.assign(rec, req.body);
-  res.json({ success: true, recording: rec });
+  saveRecordings();
+  res.json({ success: true, recording: rec, recordings });
 });
 app.delete("/api/admin/recordings/:id", (req, res) => {
   const auth = verifyAuthToken(req.headers.authorization);
@@ -8359,7 +8469,8 @@ app.delete("/api/admin/recordings/:id", (req, res) => {
   const idx = recordings.findIndex((r) => r.id === id);
   if (idx !== -1) {
     recordings.splice(idx, 1);
-    return res.json({ success: true, message: "Recording deleted successfully." });
+    saveRecordings();
+    return res.json({ success: true, message: "Recording deleted successfully.", recordings });
   }
   res.status(404).json({ error: "Recording not found." });
 });

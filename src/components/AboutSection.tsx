@@ -65,7 +65,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onNavigateAbout }) =
   return (
     <section 
       id="about" 
-      className="relative py-20 sm:py-24 lg:py-28 bg-[#FCFAFF] border-b border-slate-200/70 overflow-hidden"
+      className="relative py-14 sm:py-16 lg:py-20 bg-[#FCFAFF] border-b border-slate-200/70 overflow-hidden"
     >
       {/* Subtle Background Visual Depth */}
       <div 

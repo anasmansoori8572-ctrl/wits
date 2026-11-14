@@ -1,9 +1,23 @@
 # robots.txt for https://www.witslingo.com
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /admin-panel
+Disallow: /admin-login
+Disallow: /api/
+Disallow: /classroom/
+Disallow: /student-dashboard
 
 User-agent: Googlebot
 Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /admin-panel
+Disallow: /admin-login
+Disallow: /api/
+Disallow: /classroom/
+Disallow: /student-dashboard
 
 User-agent: Googlebot-Image
 Allow: /

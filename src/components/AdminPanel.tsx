@@ -737,18 +737,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       badge: newCourse.badge || '',
       isPublished: newCourse.isPublished !== false
     };
+
+    const prevCourses = [...courses];
     const updated = [...courses, courseToAdd];
     onUpdateCourses(updated);
-    try {
-      fetch('/api/courses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify(courseToAdd)
-      }).catch(err => console.warn('Could not sync course addition to backend:', err));
-    } catch (e) {}
     setShowAddCourseModal(false);
     setNewBulletPointForAdd('');
     setNewFacilityForAdd('');
@@ -757,50 +749,93 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         ? `New course "${courseToAdd.name}" published live to website!`
         : `New course "${courseToAdd.name}" saved as draft (unpublished).`
     );
+
+    try {
+      const res = await fetch('/api/courses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(courseToAdd)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.courses)) {
+        onUpdateCourses(data.courses);
+      }
+    } catch (e) {
+      console.error('Failed to sync course addition to backend:', e);
+      onUpdateCourses(prevCourses);
+      triggerFeedback(`Failed to save course "${courseToAdd.name}". Reverting changes.`);
+    }
   };
 
   const handleSaveEditCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCourse) return;
-    const updated = courses.map(c => c.id === editingCourse.id ? editingCourse : c);
+    const prevCourses = [...courses];
+    const targetCourse = { ...editingCourse };
+    const updated = courses.map(c => c.id === targetCourse.id ? targetCourse : c);
     onUpdateCourses(updated);
+    setEditingCourse(null);
+    setNewBulletPointForEdit('');
+    setNewFacilityForEdit('');
+    triggerFeedback(`Course "${targetCourse.name}" changes saved successfully! (Status: ${targetCourse.isPublished !== false ? 'Live Published' : 'Draft / Unpublished'})`);
+
     try {
-      fetch(`/api/courses/${editingCourse.id}`, {
+      const res = await fetch(`/api/courses/${targetCourse.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': token ? `Bearer ${token}` : ''
         },
-        body: JSON.stringify(editingCourse)
-      }).catch(err => console.warn('Could not sync course edit to backend:', err));
-    } catch (e) {}
-    setEditingCourse(null);
-    setNewBulletPointForEdit('');
-    setNewFacilityForEdit('');
-    triggerFeedback(`Course "${editingCourse.name}" changes saved successfully! (Status: ${editingCourse.isPublished !== false ? 'Live Published' : 'Draft / Unpublished'})`);
+        body: JSON.stringify(targetCourse)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.courses)) {
+        onUpdateCourses(data.courses);
+      }
+    } catch (e) {
+      console.error('Failed to sync course edit to backend:', e);
+      onUpdateCourses(prevCourses);
+      triggerFeedback(`Failed to update course "${targetCourse.name}". Reverting changes.`);
+    }
   };
 
-  const handleTogglePublishCourse = (courseId: string) => {
+  const handleTogglePublishCourse = async (courseId: string) => {
     const course = courses.find(c => c.id === courseId);
     if (!course) return;
     const nextStatus = !(course.isPublished !== false);
+    const prevCourses = [...courses];
     const updated = courses.map(c => c.id === courseId ? { ...c, isPublished: nextStatus } : c);
     onUpdateCourses(updated);
+    triggerFeedback(
+      nextStatus
+        ? `Course "${course.name}" is now LIVE on website (Published)!`
+        : `Course "${course.name}" is now UNPUBLISHED (Saved as Draft, hidden from public visitors).`
+    );
+
     try {
-      fetch(`/api/courses/${courseId}/publish`, {
+      const res = await fetch(`/api/courses/${courseId}/publish`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': token ? `Bearer ${token}` : ''
         },
         body: JSON.stringify({ isPublished: nextStatus })
-      }).catch(err => console.warn('Could not sync course toggle to backend:', err));
-    } catch (e) {}
-    triggerFeedback(
-      nextStatus
-        ? `Course "${course.name}" is now LIVE on website (Published)!`
-        : `Course "${course.name}" is now UNPUBLISHED (Saved as Draft, hidden from public visitors).`
-    );
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.courses)) {
+        onUpdateCourses(data.courses);
+      }
+    } catch (e) {
+      console.error('Failed to sync course toggle to backend:', e);
+      onUpdateCourses(prevCourses);
+      triggerFeedback(`Failed to update publication status. Reverting changes.`);
+    }
   };
 
   const handleDeleteCourse = (courseId: string, name: string) => {
@@ -810,18 +845,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       itemName: name,
       itemType: 'course',
       description: `Are you sure you want to permanently delete course "${name}" from the academy catalog? This action cannot be undone.`,
-      onConfirm: () => {
+      onConfirm: async () => {
+        const prevCourses = [...courses];
         const updated = courses.filter(c => c.id !== courseId);
         onUpdateCourses(updated);
+        triggerFeedback(`Course "${name}" deleted.`);
+
         try {
-          fetch(`/api/courses/${courseId}`, {
+          const res = await fetch(`/api/courses/${courseId}`, {
             method: 'DELETE',
             headers: {
               'Authorization': token ? `Bearer ${token}` : ''
             }
-          }).catch(err => console.warn('Could not sync course deletion to backend:', err));
-        } catch (e) {}
-        triggerFeedback(`Course "${name}" deleted.`);
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (data && Array.isArray(data.courses)) {
+            onUpdateCourses(data.courses);
+          }
+        } catch (e) {
+          console.error('Failed to sync course deletion to backend:', e);
+          onUpdateCourses(prevCourses);
+          triggerFeedback(`Failed to delete course "${name}". Reverting changes.`);
+        }
       }
     });
   };
@@ -851,14 +897,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       googleMeetLink: newBatch.googleMeetLink || ''
     };
 
-    try {
-      await fetch('/api/admin/batches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(batchToAdd)
-      });
-    } catch (e) {}
-
+    const prevBatches = [...batches];
     const updated = [batchToAdd, ...batches];
     onUpdateBatches(updated);
     setShowAddBatchModal(false);
@@ -880,6 +919,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       googleMeetLink: ''
     });
     triggerFeedback(`Batch "${batchToAdd.name}" created.`);
+
+    try {
+      const res = await fetch('/api/admin/batches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(batchToAdd)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.batches)) {
+        onUpdateBatches(data.batches);
+      }
+    } catch (e) {
+      console.error('Failed to create batch on backend:', e);
+      onUpdateBatches(prevBatches);
+      triggerFeedback(`Failed to save batch "${batchToAdd.name}". Reverting changes.`);
+    }
   };
 
   const handleToggleBatchVisibility = async (batchId: string) => {
@@ -890,13 +946,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       ...target,
       isVisibleOnWebsite: nextState
     };
-    try {
-      await fetch(`/api/admin/batches/${batchId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(updatedBatch)
-      });
-    } catch (e) {}
+    const prevBatches = [...batches];
     const updated = batches.map(b => b.id === batchId ? updatedBatch : b);
     onUpdateBatches(updated);
     triggerFeedback(
@@ -904,6 +954,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         ? `Batch "${target.name}" is now VISIBLE on website.`
         : `Batch "${target.name}" is now HIDDEN from website.`
     );
+
+    try {
+      const res = await fetch(`/api/admin/batches/${batchId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(updatedBatch)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.batches)) {
+        onUpdateBatches(data.batches);
+      }
+    } catch (e) {
+      console.error('Failed to update batch visibility:', e);
+      onUpdateBatches(prevBatches);
+      triggerFeedback(`Failed to update batch visibility. Reverting changes.`);
+    }
   };
 
   const handleToggleShowBatchesSection = async () => {
@@ -914,6 +981,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
     setLocalSettings(updatedSettings);
     onUpdateSiteSettings(updatedSettings);
+    triggerFeedback(
+      nextState
+        ? 'Batches & Seat Capacity section is now VISIBLE on public website!'
+        : 'Batches & Seat Capacity section is now HIDDEN from public website.'
+    );
     try {
       await fetch('/api/cms/content', {
         method: 'POST',
@@ -923,28 +995,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           settings: updatedSettings
         })
       });
-    } catch (e) {}
-    triggerFeedback(
-      nextState
-        ? 'Batches & Seat Capacity section is now VISIBLE on public website!'
-        : 'Batches & Seat Capacity section is now HIDDEN from public website.'
-    );
+    } catch (e) {
+      console.warn('Could not sync batches section toggle:', e);
+    }
   };
 
   const handleSaveEditBatch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBatch) return;
-    try {
-      await fetch(`/api/admin/batches/${editingBatch.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(editingBatch)
-      });
-    } catch (e) {}
-    const updated = batches.map(b => b.id === editingBatch.id ? editingBatch : b);
+    const targetBatch = { ...editingBatch };
+    const prevBatches = [...batches];
+    const updated = batches.map(b => b.id === targetBatch.id ? targetBatch : b);
     onUpdateBatches(updated);
     setEditingBatch(null);
-    triggerFeedback(`Batch "${editingBatch.name}" updated.`);
+    triggerFeedback(`Batch "${targetBatch.name}" updated.`);
+
+    try {
+      const res = await fetch(`/api/admin/batches/${targetBatch.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(targetBatch)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.batches)) {
+        onUpdateBatches(data.batches);
+      }
+    } catch (e) {
+      console.error('Failed to update batch on backend:', e);
+      onUpdateBatches(prevBatches);
+      triggerFeedback(`Failed to save batch "${targetBatch.name}". Reverting changes.`);
+    }
   };
 
   const handleDeleteBatch = (batchId: string, name: string) => {
@@ -955,15 +1036,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       itemType: 'batch',
       description: `Are you sure you want to delete batch "${name}"? Active schedules and class rosters associated with this batch will be impacted.`,
       onConfirm: async () => {
-        try {
-          await fetch(`/api/admin/batches/${batchId}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-        } catch (e) {}
+        const prevBatches = [...batches];
         const updated = batches.filter(b => b.id !== batchId);
         onUpdateBatches(updated);
         triggerFeedback(`Batch "${name}" deleted.`);
+
+        try {
+          const res = await fetch(`/api/admin/batches/${batchId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (data && Array.isArray(data.batches)) {
+            onUpdateBatches(data.batches);
+          }
+        } catch (e) {
+          console.error('Failed to delete batch on backend:', e);
+          onUpdateBatches(prevBatches);
+          triggerFeedback(`Failed to delete batch "${name}". Reverting changes.`);
+        }
       }
     });
   };
@@ -1660,14 +1752,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       author: siteSettings?.founderName || 'Ziyaur Rehman Zia'
     };
 
-    try {
-      await fetch('/api/admin/announcements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(createdAnn)
-      });
-    } catch (err) {}
-
+    const prevAnnouncements = [...localAnnouncements];
     const updated = [createdAnn, ...localAnnouncements];
     updateAllAnnouncements(updated);
     setShowAddAnnouncementModal(false);
@@ -1681,6 +1766,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       isPinned: false
     });
     triggerFeedback(`Notice "${createdAnn.title}" published successfully!`);
+
+    try {
+      const res = await fetch('/api/admin/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(createdAnn)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.announcements)) {
+        updateAllAnnouncements(data.announcements);
+      }
+    } catch (err) {
+      console.error('Failed to create announcement on backend:', err);
+      updateAllAnnouncements(prevAnnouncements);
+      triggerFeedback(`Failed to publish notice. Reverting changes.`);
+    }
   };
 
   const handleUpdateAnnouncement = async (e: React.FormEvent) => {
@@ -1694,18 +1796,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         : (targetBatch?.name || editingAnnouncement.batchName)
     };
 
-    try {
-      await fetch(`/api/admin/announcements/${updatedRecord.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(updatedRecord)
-      });
-    } catch (err) {}
-
+    const prevAnnouncements = [...localAnnouncements];
     const updated = localAnnouncements.map(a => a.id === updatedRecord.id ? updatedRecord : a);
     updateAllAnnouncements(updated);
     setEditingAnnouncement(null);
     triggerFeedback(`Notice "${updatedRecord.title}" updated.`);
+
+    try {
+      const res = await fetch(`/api/admin/announcements/${updatedRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(updatedRecord)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.announcements)) {
+        updateAllAnnouncements(data.announcements);
+      }
+    } catch (err) {
+      console.error('Failed to update announcement on backend:', err);
+      updateAllAnnouncements(prevAnnouncements);
+      triggerFeedback(`Failed to update notice. Reverting changes.`);
+    }
   };
 
   const handleDeleteAnnouncement = (id: string, title: string) => {
@@ -1716,16 +1828,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       itemType: 'academy circular',
       description: `Are you sure you want to remove the notice "${title}"? It will no longer be visible on student notices or homepage boards.`,
       onConfirm: async () => {
-        try {
-          await fetch(`/api/admin/announcements/${id}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-        } catch (err) {}
-
+        const prevAnnouncements = [...localAnnouncements];
         const updated = localAnnouncements.filter(a => a.id !== id);
         updateAllAnnouncements(updated);
         triggerFeedback(`Notice removed.`);
+
+        try {
+          const res = await fetch(`/api/admin/announcements/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (data && Array.isArray(data.announcements)) {
+            updateAllAnnouncements(data.announcements);
+          }
+        } catch (err) {
+          console.error('Failed to delete announcement on backend:', err);
+          updateAllAnnouncements(prevAnnouncements);
+          triggerFeedback(`Failed to delete notice. Reverting changes.`);
+        }
       }
     });
   };
@@ -1734,17 +1856,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const target = localAnnouncements.find(a => a.id === id);
     if (!target) return;
     const updatedTarget = { ...target, isPinned: !target.isPinned };
+    const prevAnnouncements = [...localAnnouncements];
+    const updated = localAnnouncements.map(a => a.id === id ? updatedTarget : a);
+    updateAllAnnouncements(updated);
+    triggerFeedback(updatedTarget.isPinned ? `Notice pinned to top.` : `Notice unpinned.`);
+
     try {
-      await fetch(`/api/admin/announcements/${id}`, {
+      const res = await fetch(`/api/admin/announcements/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ isPinned: updatedTarget.isPinned })
       });
-    } catch (err) {}
-
-    const updated = localAnnouncements.map(a => a.id === id ? updatedTarget : a);
-    updateAllAnnouncements(updated);
-    triggerFeedback(updatedTarget.isPinned ? `Notice pinned to top.` : `Notice unpinned.`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && Array.isArray(data.announcements)) {
+        updateAllAnnouncements(data.announcements);
+      }
+    } catch (err) {
+      console.error('Failed to update announcement pin status on backend:', err);
+      updateAllAnnouncements(prevAnnouncements);
+      triggerFeedback(`Failed to update pin status. Reverting.`);
+    }
   };
 
   // ----------------------------------------------------------------------

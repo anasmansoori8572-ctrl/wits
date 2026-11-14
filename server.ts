@@ -1727,8 +1727,12 @@ try {
 const REGISTRATIONS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "registrations.json");
 const USERS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "users.json");
 const BATCHES_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "batches.json");
+const CLASSES_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "classes.json");
+const RECORDINGS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "recordings.json");
+const COURSES_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "courses.json");
 const PAYMENTS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "payments.json");
 const CMS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "cms-content.json");
+const CMS_ALT_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "cmsContent.json");
 const ANNOUNCEMENTS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "announcements.json");
 const MATERIALS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "materials.json");
 const GALLERY_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "gallery.json");
@@ -1815,52 +1819,89 @@ const galleryItems: DBGalleryItem[] = [
 
 function loadAllPersistedData(): void {
   try {
+    if (!fs.existsSync(DATA_STORAGE_DIR)) {
+      fs.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
+    }
+
+    // 0. Dedicated Courses Storage
+    if (fs.existsSync(COURSES_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(COURSES_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          cmsContent.courses = data;
+          console.log(`[Persistence] Loaded ${data.length} courses from courses.json.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse courses.json:", e);
+      }
+    }
+
     // 1. Registrations
     if (fs.existsSync(REGISTRATIONS_STORAGE_FILE)) {
       const data = JSON.parse(fs.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
-        const existingIds = new Set(data.map((r: any) => r.id || r.admissionId));
-        for (const r of registrations) {
-          if (!existingIds.has(r.id) && !existingIds.has(r.admissionId)) {
-            data.push(r);
-          }
-        }
         registrations.length = 0;
         registrations.push(...data);
         console.log(`[Persistence] Loaded ${registrations.length} student registrations.`);
       }
+    } else {
+      saveRegistrations();
     }
 
     // 2. Users
     if (fs.existsSync(USERS_STORAGE_FILE)) {
       const data = JSON.parse(fs.readFileSync(USERS_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
-        const existingEmails = new Set(data.map((u: any) => u.email?.toLowerCase()));
-        for (const u of users) {
-          if (!existingEmails.has(u.email.toLowerCase())) {
-            data.push(u);
-          }
-        }
         users.length = 0;
         users.push(...data);
         console.log(`[Persistence] Loaded ${users.length} users.`);
       }
+    } else {
+      saveUsers();
     }
 
     // 3. Batches
     if (fs.existsSync(BATCHES_STORAGE_FILE)) {
       const data = JSON.parse(fs.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
       if (Array.isArray(data) && data.length > 0) {
-        const existingIds = new Set(data.map((b: any) => b.id));
-        for (const b of batches) {
-          if (!existingIds.has(b.id)) {
-            data.push(b);
-          }
-        }
         batches.length = 0;
         batches.push(...data);
         console.log(`[Persistence] Loaded ${batches.length} batches.`);
       }
+    } else {
+      saveBatches();
+    }
+
+    // 3b. Classes (Interactive Classroom Schedule)
+    if (fs.existsSync(CLASSES_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(CLASSES_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          classes.length = 0;
+          classes.push(...data);
+          console.log(`[Persistence] Loaded ${classes.length} classes.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse classes.json:", e);
+      }
+    } else {
+      saveClasses();
+    }
+
+    // 3c. Recordings (Classroom Replay Archives)
+    if (fs.existsSync(RECORDINGS_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(RECORDINGS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          recordings.length = 0;
+          recordings.push(...data);
+          console.log(`[Persistence] Loaded ${recordings.length} recordings.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse recordings.json:", e);
+      }
+    } else {
+      saveRecordings();
     }
 
     // 4. Payments
@@ -1871,15 +1912,24 @@ function loadAllPersistedData(): void {
         payments.push(...data);
         console.log(`[Persistence] Loaded ${payments.length} verified payment transactions.`);
       }
+    } else {
+      savePayments();
     }
 
     // 5. CMS Content
-    if (fs.existsSync(CMS_STORAGE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(CMS_STORAGE_FILE, "utf-8"));
+    const cmsFileToRead = fs.existsSync(CMS_STORAGE_FILE)
+      ? CMS_STORAGE_FILE
+      : (fs.existsSync(CMS_ALT_STORAGE_FILE) ? CMS_ALT_STORAGE_FILE : null);
+
+    if (cmsFileToRead) {
+      const data = JSON.parse(fs.readFileSync(cmsFileToRead, "utf-8"));
       if (data && typeof data === "object") {
         cmsContent = {
           ...cmsContent,
           ...data,
+          courses: (Array.isArray(cmsContent.courses) && cmsContent.courses.length > 0)
+            ? cmsContent.courses
+            : (data.courses || cmsContent.courses),
           settings: {
             ...cmsContent.settings,
             ...(data.settings || {})
@@ -1890,6 +1940,8 @@ function loadAllPersistedData(): void {
         }
         console.log(`[Persistence] Loaded custom CMS content & settings.`);
       }
+    } else {
+      saveCmsContent();
     }
 
     // Cloud Durable Storage Hydration for CMS Content & Courses
@@ -1901,6 +1953,9 @@ function loadAllPersistedData(): void {
             cmsContent = {
               ...cmsContent,
               ...remote,
+              courses: (Array.isArray(remote.courses) && remote.courses.length > 0)
+                ? remote.courses
+                : cmsContent.courses,
               settings: {
                 ...cmsContent.settings,
                 ...(remote.settings || {})
@@ -1920,6 +1975,8 @@ function loadAllPersistedData(): void {
         announcements.push(...data);
         console.log(`[Persistence] Loaded ${announcements.length} announcements.`);
       }
+    } else {
+      saveAnnouncements();
     }
 
     // 7. Study Materials
@@ -1927,7 +1984,7 @@ function loadAllPersistedData(): void {
     if (fs.existsSync(MATERIALS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           for (const m of data) {
             if (m.resourceType === "youtube" || m.fileType === "youtube") {
               if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
@@ -1943,6 +2000,9 @@ function loadAllPersistedData(): void {
       } catch (e) {
         console.warn("[Persistence] Could not parse materials.json:", e);
       }
+    }
+    if (!materialsLoaded) {
+      savePersistedMaterials();
     }
 
     // 8. Gallery Items
@@ -2089,6 +2149,28 @@ function saveBatches(): void {
   }
 }
 
+function saveClasses(): void {
+  durableStorageService.saveCollectionBackground("classes", classes);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(CLASSES_STORAGE_FILE, JSON.stringify(classes, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save classes:", e);
+    }
+  }
+}
+
+function saveRecordings(): void {
+  durableStorageService.saveCollectionBackground("recordings", recordings);
+  if (process.env.VERCEL !== "1") {
+    try {
+      fs.writeFileSync(RECORDINGS_STORAGE_FILE, JSON.stringify(recordings, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[Persistence] Could not save recordings:", e);
+    }
+  }
+}
+
 function savePayments(): void {
   durableStorageService.saveCollectionBackground("payments", payments);
   if (process.env.VERCEL !== "1") {
@@ -2104,10 +2186,18 @@ function saveCmsContent(): void {
   durableStorageService.saveCollectionBackground("cmsContent", [cmsContent]);
   if (Array.isArray(cmsContent.courses)) {
     durableStorageService.saveCollectionBackground("courses", cmsContent.courses);
+    if (process.env.VERCEL !== "1") {
+      try {
+        fs.writeFileSync(COURSES_STORAGE_FILE, JSON.stringify(cmsContent.courses, null, 2), "utf-8");
+      } catch (e) {
+        console.warn("[Persistence] Could not save courses.json:", e);
+      }
+    }
   }
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
+      fs.writeFileSync(CMS_ALT_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
     } catch (e) {
       console.warn("[Persistence] Could not save cmsContent:", e);
     }
@@ -5835,7 +5925,7 @@ www.witslingo.com`
 
     batches.unshift(newBatch);
     saveBatches();
-    res.json({ success: true, batch: newBatch });
+    res.json({ success: true, batch: newBatch, batches });
   });
 
   // 17. ADMIN: Schedule New Class or Toggle Live
@@ -5881,8 +5971,10 @@ www.witslingo.com`
         author: newClass.teacherName,
         priority: "Urgent"
       });
+      saveAnnouncements();
     }
 
+    saveClasses();
     res.json({ success: true, class: newClass });
   });
 
@@ -5936,8 +6028,11 @@ www.witslingo.com`
         author: "Wits Lingo Academy",
         priority: "Normal"
       });
+      saveAnnouncements();
     }
 
+    saveClasses();
+    saveRecordings();
     res.json({ success: true, class: cls });
   });
 
@@ -5970,6 +6065,9 @@ www.witslingo.com`
     recordings.unshift(newRec);
     cls.recordingId = newRec.id;
     cls.status = "Completed";
+
+    saveRecordings();
+    saveClasses();
 
     res.json({ success: true, recording: newRec });
   });
@@ -6688,7 +6786,8 @@ www.witslingo.com`
     };
 
     announcements.unshift(newAnn);
-    res.json({ success: true, announcement: newAnn });
+    saveAnnouncements();
+    res.json({ success: true, announcement: newAnn, announcements });
   });
 
   // 21b. PUBLIC: Get All Active Announcements & Notices
@@ -6724,7 +6823,8 @@ www.witslingo.com`
       batchName: batchId === 'all' ? "All Batches (Academy-wide)" : (batch ? batch.name : announcements[annIndex].batchName)
     };
 
-    res.json({ success: true, announcement: announcements[annIndex] });
+    saveAnnouncements();
+    res.json({ success: true, announcement: announcements[annIndex], announcements });
   });
 
   // 21d. ADMIN: Delete Announcement
@@ -6738,8 +6838,9 @@ www.witslingo.com`
     const idx = announcements.findIndex(a => a.id === id);
     if (idx !== -1) {
       announcements.splice(idx, 1);
+      saveAnnouncements();
     }
-    res.json({ success: true });
+    res.json({ success: true, announcements });
   });
 
   // 22. ADMIN: View Attendance Logs (Batch-wise)
@@ -6811,7 +6912,7 @@ www.witslingo.com`
 
     Object.assign(batch, req.body);
     saveBatches();
-    res.json({ success: true, batch });
+    res.json({ success: true, batch, batches });
   });
 
   // DELETE Batch
@@ -6825,7 +6926,7 @@ www.witslingo.com`
     if (idx !== -1) {
       batches.splice(idx, 1);
       saveBatches();
-      return res.json({ success: true, message: "Batch deleted successfully." });
+      return res.json({ success: true, message: "Batch deleted successfully.", batches });
     }
     res.status(404).json({ error: "Batch not found." });
   });
@@ -6841,7 +6942,8 @@ www.witslingo.com`
     if (!cls) return res.status(404).json({ error: "Class not found." });
 
     Object.assign(cls, req.body);
-    res.json({ success: true, class: cls });
+    saveClasses();
+    res.json({ success: true, class: cls, classes });
   });
 
   // DELETE Class
@@ -6854,7 +6956,8 @@ www.witslingo.com`
     const idx = classes.findIndex(c => c.id === id);
     if (idx !== -1) {
       classes.splice(idx, 1);
-      return res.json({ success: true, message: "Class deleted successfully." });
+      saveClasses();
+      return res.json({ success: true, message: "Class deleted successfully.", classes });
     }
     res.status(404).json({ error: "Class not found." });
   });
@@ -6870,7 +6973,8 @@ www.witslingo.com`
     if (!rec) return res.status(404).json({ error: "Recording not found." });
 
     Object.assign(rec, req.body);
-    res.json({ success: true, recording: rec });
+    saveRecordings();
+    res.json({ success: true, recording: rec, recordings });
   });
 
   // DELETE Recording
@@ -6883,7 +6987,8 @@ www.witslingo.com`
     const idx = recordings.findIndex(r => r.id === id);
     if (idx !== -1) {
       recordings.splice(idx, 1);
-      return res.json({ success: true, message: "Recording deleted successfully." });
+      saveRecordings();
+      return res.json({ success: true, message: "Recording deleted successfully.", recordings });
     }
     res.status(404).json({ error: "Recording not found." });
   });

@@ -353,6 +353,12 @@ export class DurableStorageService {
    */
   private loadInitialData(): void {
     const seedCollections = [
+      'courses',
+      'batches',
+      'cmsContent',
+      'announcements',
+      'gallery',
+      'testimonials',
       'conversations',
       'messages',
       'support-tickets',
@@ -365,11 +371,19 @@ export class DurableStorageService {
 
     for (const coll of seedCollections) {
       try {
-        const localPath = path.join(process.cwd(), 'uploads', 'data', `${coll}.json`);
+        let localPath = path.join(process.cwd(), 'uploads', 'data', `${coll}.json`);
+        if (!fs.existsSync(localPath) && coll === 'cmsContent') {
+          const altPath = path.join(process.cwd(), 'uploads', 'data', 'cms-content.json');
+          if (fs.existsSync(altPath)) localPath = altPath;
+        }
+
         if (fs.existsSync(localPath)) {
           const raw = fs.readFileSync(localPath, 'utf-8');
           const parsed = JSON.parse(raw);
           this.memoryCache.set(coll, parsed);
+          if (coll === 'cmsContent') {
+            this.memoryCache.set('cms-content', parsed);
+          }
 
           if (coll === 'webhook-dedup' && Array.isArray(parsed)) {
             const now = Date.now();

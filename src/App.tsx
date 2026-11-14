@@ -272,9 +272,21 @@ export default function App() {
     }
   };
 
-  const handleUpdateSiteSettings = (newSettings: SiteSettings) => {
+  const handleUpdateSiteSettings = async (newSettings: SiteSettings) => {
     setSiteSettings(newSettings);
     localStorage.setItem('wits_lingo_site_settings', JSON.stringify(newSettings));
+    try {
+      await fetch('/api/cms/content', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
+        },
+        body: JSON.stringify({ settings: newSettings })
+      });
+    } catch (e) {
+      console.warn('Could not sync site settings to backend:', e);
+    }
   };
 
   const handleUpdateAnnouncements = (newAnnouncements: Announcement[]) => {
@@ -381,6 +393,17 @@ export default function App() {
         }
       })
       .catch(err => console.warn('Could not load courses from backend:', err));
+
+    // Fetch live batches from backend (source of truth)
+    fetch('/api/batches')
+      .then(res => res.json())
+      .then(data => {
+        if (data && Array.isArray(data.batches) && data.batches.length > 0) {
+          setBatches(data.batches);
+          localStorage.setItem('wits_lingo_batches', JSON.stringify(data.batches));
+        }
+      })
+      .catch(err => console.warn('Could not load batches from backend:', err));
 
     // Fetch live study materials
     fetch('/api/materials')

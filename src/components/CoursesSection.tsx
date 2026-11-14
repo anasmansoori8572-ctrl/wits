@@ -54,7 +54,7 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
   };
 
   return (
-    <section id="courses" className="py-20 sm:py-24 bg-[#FAF9FC] border-b border-purple-100/60 relative">
+    <section id="courses" className="py-14 sm:py-16 lg:py-20 bg-[#FAF9FC] border-b border-purple-100/60 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* =========================================================================

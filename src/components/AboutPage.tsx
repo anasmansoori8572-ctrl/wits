@@ -140,7 +140,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
           aria-hidden="true"
         />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-24 lg:py-28 text-center">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-16 lg:py-20 text-center">
           {/* Breadcrumb Navigation */}
           <div className="inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-medium text-purple-200/90 mb-4 bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full border border-purple-400/20">
             <button 
@@ -167,7 +167,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
       {/* =========================================================================
           SECTION 1: COMPANY ABOUT (Dual-Image Composition + 5+ Years Badge + Details)
           ========================================================================= */}
-      <section className="py-20 sm:py-24 lg:py-28 bg-[#FAF9FC] border-b border-purple-100/60 relative overflow-hidden">
+      <section className="py-14 sm:py-16 lg:py-20 bg-[#FAF9FC] border-b border-purple-100/60 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
             
@@ -349,7 +349,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
       {/* =========================================================================
           SECTION 3: MISSION / VISION / GOAL WITH INTERACTIVE TABS (Matches Image)
           ========================================================================= */}
-      <section className="py-20 sm:py-24 lg:py-28 bg-white border-b border-purple-100/60 relative">
+      <section className="py-14 sm:py-16 lg:py-20 bg-white border-b border-purple-100/60 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
             
@@ -480,7 +480,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
       {/* =========================================================================
           SECTION 4: TESTIMONIALS / EXPERIENCES ("Trusted By Global Learners & Students")
           ========================================================================= */}
-      <section id="about-reviews" className="py-20 sm:py-24 lg:py-28 bg-[#FAF9FC] border-b border-purple-100/60 relative overflow-hidden scroll-mt-16">
+      <section id="about-reviews" className="py-14 sm:py-16 lg:py-20 bg-[#FAF9FC] border-b border-purple-100/60 relative overflow-hidden scroll-mt-16">
         <div id="reviews" className="absolute -top-20" />
         <div id="testimonials" className="absolute -top-20" />
 
