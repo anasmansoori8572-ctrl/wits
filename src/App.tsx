@@ -22,6 +22,7 @@ import { StudentDashboard } from './components/StudentDashboard';
 import { AdminPanel } from './components/AdminPanel';
 import { AdminLoginPage } from './components/AdminLoginPage';
 import { GalleryPage } from './components/GalleryPage';
+import { AboutPage } from './components/AboutPage';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { FloatingNoticeWidget } from './components/FloatingNoticeWidget';
 import { CheckoutModal } from './components/CheckoutModal';
@@ -60,7 +61,6 @@ function parsePolicySubroute(path: string, hash: string): PolicyTab | undefined 
     if (str === 'refund-policy' || str === 'refund' || str === 'refunds' || str === 'cancellation-refund' || str === 'cancellation') return 'refund-policy';
     if (str === 'shipping-policy' || str === 'shipping' || str === 'shipping-and-delivery' || str === 'delivery') return 'shipping-policy';
     if (str === 'contact-us' || str === 'contact' || str === 'support' || str === 'grievance') return 'contact';
-    if (str === 'about-us' || str === 'about') return 'about';
     return undefined;
   };
 
@@ -68,8 +68,8 @@ function parsePolicySubroute(path: string, hash: string): PolicyTab | undefined 
 }
 
 export default function App() {
-  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'admin-login' | 'policy'
-  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'admin-login' | 'policy'>(() => {
+  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'about' | 'admin-login' | 'policy'
+  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'about' | 'admin-login' | 'policy'>(() => {
     if (typeof window !== 'undefined') {
       const path = (window.location.pathname || '').toLowerCase();
       const hash = (window.location.hash || '').toLowerCase();
@@ -86,6 +86,9 @@ export default function App() {
       }
       if (path === '/gallery' || path.startsWith('/gallery') || hash === '#gallery') {
         return 'gallery';
+      }
+      if (path === '/about' || path === '/about-us' || hash === '#about' || hash === '#about-us' || hash === '#about-page') {
+        return 'about';
       }
       if (parsePolicySubroute(path, hash)) {
         return 'policy';
@@ -466,8 +469,10 @@ export default function App() {
         }
       } else if (hash === '#gallery' || path === '/gallery' || path.startsWith('/gallery')) {
         setCurrentView('gallery');
+      } else if (hash === '#about' || hash === '#about-us' || path === '/about' || path === '/about-us') {
+        setCurrentView('about');
       } else if (hash === '#home' || path === '/') {
-        setCurrentView(prev => (prev === 'gallery' || prev === 'admin-login' || prev === 'policy' ? 'home' : prev));
+        setCurrentView(prev => (prev === 'gallery' || prev === 'about' || prev === 'admin-login' || prev === 'policy' ? 'home' : prev));
       }
 
       // Check URL query parameters for instant checkout and payment confirmation
@@ -657,6 +662,11 @@ export default function App() {
           try { window.history.pushState(null, '', '/gallery'); } catch (e) {}
           setCurrentView('gallery');
         }}
+        onNavigateAbout={() => {
+          try { window.history.pushState(null, '', '/about'); } catch (e) {}
+          setCurrentView('about');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         onNavigateHome={() => {
           try { window.history.pushState(null, '', '/'); } catch (e) {}
           setCurrentView('home');
@@ -708,6 +718,25 @@ export default function App() {
           onOpenAdmission={(cId) => handleOpenAdmission(cId)}
           siteSettings={siteSettings}
         />
+      ) : currentView === 'about' ? (
+        <AboutPage
+          onBackToHome={() => {
+            try { window.history.pushState(null, '', '/'); } catch (e) {}
+            setCurrentView('home');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateCourses={() => {
+            try { window.history.pushState(null, '', '/#courses'); } catch (e) {}
+            setCurrentView('home');
+            setTimeout(() => {
+              const el = document.getElementById('courses');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+          }}
+          onOpenAdmission={(cId) => handleOpenAdmission(cId)}
+          siteSettings={siteSettings}
+          testimonials={testimonials}
+        />
       ) : currentView === 'policy' ? (
         <PolicyPages
           initialTab={policyTab}
@@ -741,7 +770,13 @@ export default function App() {
 
 
           {/* 3. About Section: Learn → Understand → Practise → Speak → Grow */}
-          <AboutSection />
+          <AboutSection
+            onNavigateAbout={() => {
+              try { window.history.pushState(null, '', '/about'); } catch (e) {}
+              setCurrentView('about');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
 
           {/* 4. Our Journey / Accomplishments: 15+ Batches, 100+ Students */}
           <StatsSection siteSettings={siteSettings} />
@@ -786,6 +821,11 @@ export default function App() {
         onNavigateGallery={() => {
           try { window.history.pushState(null, '', '/gallery'); } catch (e) {}
           setCurrentView('gallery');
+        }}
+        onNavigateAbout={() => {
+          try { window.history.pushState(null, '', '/about'); } catch (e) {}
+          setCurrentView('about');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onNavigatePolicy={handleNavigatePolicy}
         onNavigateSection={handleNavigateSection}

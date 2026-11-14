@@ -8,6 +8,7 @@ import { PolicyTab } from './PolicyPages';
 
 interface FooterProps {
   onNavigateGallery?: () => void;
+  onNavigateAbout?: () => void;
   onNavigatePolicy?: (tab: PolicyTab) => void;
   onNavigateSection?: (sectionId: string) => void;
   onNavigateHome?: () => void;
@@ -16,6 +17,7 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ 
   onNavigateGallery, 
+  onNavigateAbout,
   onNavigatePolicy, 
   onNavigateSection,
   onNavigateHome,
@@ -159,8 +161,15 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a 
-                  href="#about" 
-                  onClick={(e) => handleSectionClick(e, 'about')}
+                  href="/about" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onNavigateAbout) {
+                      onNavigateAbout();
+                    } else {
+                      handleSectionClick(e, 'about');
+                    }
+                  }}
                   className="hover:text-white transition-colors py-1 block cursor-pointer"
                 >
                   About Us

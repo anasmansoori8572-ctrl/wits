@@ -13,6 +13,7 @@ interface NavbarProps {
   onOpenAdmin: () => void;
   onLogout: () => void;
   onNavigateGallery?: () => void;
+  onNavigateAbout?: () => void;
   onNavigateHome?: () => void;
   activeSection: string;
   onBuyCourse?: () => void;
@@ -27,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAdmin,
   onLogout,
   onNavigateGallery,
+  onNavigateAbout,
   onNavigateHome,
   activeSection,
   onBuyCourse,
@@ -74,7 +76,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, [searchOpen]);
 
   const handleNavClick = (e: React.MouseEvent, targetId: string) => {
-    if ((activeSection === 'gallery' || activeSection === 'policy') && onNavigateHome) {
+    if (targetId === 'about' && onNavigateAbout) {
+      e.preventDefault();
+      onNavigateAbout();
+      return;
+    }
+    if ((activeSection === 'gallery' || activeSection === 'about' || activeSection === 'policy') && onNavigateHome) {
       e.preventDefault();
       onNavigateHome();
       setTimeout(() => {
@@ -224,8 +231,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* 4. About */}
             <a
-              href="#about"
-              onClick={(e) => handleNavClick(e, 'about')}
+              href="/about"
+              onClick={(e) => {
+                e.preventDefault();
+                if (onNavigateAbout) {
+                  onNavigateAbout();
+                } else {
+                  handleNavClick(e, 'about');
+                }
+              }}
               className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
                 activeSection === 'about'
                   ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
@@ -416,12 +430,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               Courses
             </a>
             <a
-              href="#about"
+              href="/about"
               onClick={(e) => {
+                e.preventDefault();
                 setMobileMenuOpen(false);
-                handleNavClick(e, 'about');
+                if (onNavigateAbout) {
+                  onNavigateAbout();
+                } else {
+                  handleNavClick(e, 'about');
+                }
               }}
-              className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
+              className={`block px-3 py-2.5 rounded-xl ${
+                activeSection === 'about'
+                  ? 'bg-purple-100 text-[#281648] font-bold'
+                  : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+              }`}
             >
               About
             </a>

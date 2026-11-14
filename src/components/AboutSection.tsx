@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { BookOpen, Brain, Compass, Smile, Sparkles, ChevronRight, ArrowUpRight } from 'lucide-react';
 
-export const AboutSection: React.FC = () => {
+interface AboutSectionProps {
+  onNavigateAbout?: () => void;
+}
+
+export const AboutSection: React.FC<AboutSectionProps> = ({ onNavigateAbout }) => {
   const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
 
   const learningSteps = [
@@ -222,6 +226,19 @@ export const AboutSection: React.FC = () => {
               );
             })}
           </div>
+
+          {onNavigateAbout && (
+            <div className="mt-12 text-center">
+              <button
+                type="button"
+                onClick={onNavigateAbout}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#281648] hover:bg-[#3C166D] text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-950/20 transition-all active:scale-95 cursor-pointer group"
+              >
+                <span>Read Full About Us Story &amp; Mission</span>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+          )}
         </div>
 
       </div>
