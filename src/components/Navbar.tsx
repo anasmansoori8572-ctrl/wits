@@ -120,7 +120,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     { title: 'Spoken English & Daily Fluency', target: 'courses', desc: 'Core spoken English course for daily fluency and active conversation' },
     { title: 'Foundation English & Grammar', target: 'courses', desc: 'Tenses, sentence formation, vocabulary building, and syntax' },
     { title: 'Executive Communication & Public Speaking', target: 'courses', desc: 'Professional fluency, interviews, corporate communication' },
-    { title: 'Student Reviews & Success Stories', target: 'testimonials', desc: 'Verified reviews and feedback from our students' },
     { title: 'Video Lessons: Learn English With Wits Lingo', target: 'youtube-videos', desc: 'Watch spoken English video lessons, pronunciation guides, and tips' },
     { title: 'About Wits Lingo Academy', target: 'about', desc: 'Our methodology, learning framework, and academy details' },
     { title: 'Contact & Support', target: 'contact', desc: 'WhatsApp support, call assistance, admissions helpline' },
@@ -136,14 +135,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-50 bg-white/95 backdrop-blur-md transition-all select-none w-full border-b border-purple-100/70 shadow-xs"
+      className="sticky top-0 z-50 w-full transition-all select-none pointer-events-none"
     >
       {/* 0. Top Announcement Notification Bar (Permanently Sticky with Header, Managed via Admin) */}
       {showTopAnnouncement && (
         <div
           role="region"
           aria-label="Academy Notice"
-          className="w-full bg-gradient-to-r from-[#220B3B] via-[#3C166D] to-[#220B3B] text-white py-1.5 px-3 sm:px-6 relative border-b border-purple-800/40 shadow-xs z-50 transition-all duration-200"
+          className="w-full pointer-events-auto bg-gradient-to-r from-[#220B3B] via-[#3C166D] to-[#220B3B] text-white py-1.5 px-3 sm:px-6 relative border-b border-purple-800/40 shadow-xs z-50 transition-all duration-200"
         >
           <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto flex items-center justify-center text-xs sm:text-[12.5px]">
             {/* Centered Message + Animated Pulsing Dot ("little pop") */}
@@ -184,125 +183,107 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
-      <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-12 w-full">
-        <div className="flex items-center justify-between h-14 sm:h-16 lg:h-[4.25rem]">
-          {/* Left: Mascot Logo + Wits Lingo Brand Name */}
-          <div className="flex items-center">
-            <a
-              href="#home"
-              onClick={(e) => {
-                if ((activeSection === 'gallery' || activeSection === 'about' || activeSection === 'resources' || activeSection === 'policy') && onNavigateHome) {
+      {/* Floating Header Container */}
+      <div className="max-w-[1440px] 2xl:max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 pt-2 sm:pt-3 pointer-events-auto">
+        <div className="bg-white/92 backdrop-blur-md rounded-2xl sm:rounded-full border border-purple-100/90 shadow-lg shadow-purple-950/5 px-4 sm:px-6 lg:px-8 py-2 transition-all">
+          <div className="flex items-center justify-between h-13 sm:h-14 lg:h-[3.75rem]">
+            {/* Left: Mascot Logo + Wits Lingo Brand Name */}
+            <div className="flex items-center">
+              <a
+                href="#home"
+                onClick={(e) => {
+                  if ((activeSection === 'gallery' || activeSection === 'about' || activeSection === 'resources' || activeSection === 'policy') && onNavigateHome) {
+                    e.preventDefault();
+                    onNavigateHome();
+                  } else {
+                    handleNavClick(e, 'home');
+                  }
+                }}
+                className="flex items-center gap-2.5 cursor-pointer py-1 group"
+              >
+                <Logo size="md" variant="serif" />
+              </a>
+            </div>
+
+            {/* Center: Desktop Navigation Links (Home, Courses, About, Gallery, Contact) */}
+            <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-[14.5px] font-semibold">
+              {/* 1. Home */}
+              <a
+                href="#home"
+                onClick={(e) => handleNavClick(e, 'home')}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  activeSection === 'home'
+                    ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                    : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+                }`}
+              >
+                Home
+              </a>
+
+              {/* 2. Courses */}
+              <a
+                href="#courses"
+                onClick={(e) => handleNavClick(e, 'courses')}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  activeSection === 'courses'
+                    ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                    : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+                }`}
+              >
+                Courses
+              </a>
+
+              {/* 3. About */}
+              <a
+                href="/about"
+                onClick={(e) => {
                   e.preventDefault();
-                  onNavigateHome();
-                } else {
-                  handleNavClick(e, 'home');
-                }
-              }}
-              className="flex items-center gap-2.5 cursor-pointer py-1 group"
-            >
-              <Logo size="md" variant="serif" />
-            </a>
-          </div>
+                  if (onNavigateAbout) {
+                    onNavigateAbout();
+                  } else {
+                    handleNavClick(e, 'about');
+                  }
+                }}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  activeSection === 'about'
+                    ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                    : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+                }`}
+              >
+                About
+              </a>
 
-          {/* Center: Desktop Navigation Links (Home, Courses, Resources, Reviews, About, Gallery, Contact) */}
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-[14.5px] font-semibold">
-            {/* 1. Home */}
-            <a
-              href="#home"
-              onClick={(e) => handleNavClick(e, 'home')}
-              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                activeSection === 'home'
-                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
-                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
-              }`}
-            >
-              Home
-            </a>
+              {/* 4. Gallery */}
+              <a
+                href="/gallery"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (onNavigateGallery) onNavigateGallery();
+                }}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  activeSection === 'gallery'
+                    ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                    : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+                }`}
+              >
+                Gallery
+              </a>
 
-            {/* 2. Courses */}
-            <a
-              href="#courses"
-              onClick={(e) => handleNavClick(e, 'courses')}
-              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                activeSection === 'courses'
-                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
-                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
-              }`}
-            >
-              Courses
-            </a>
+              {/* 5. Contact */}
+              <a
+                href="#contact"
+                onClick={(e) => handleNavClick(e, 'contact')}
+                className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  activeSection === 'contact'
+                    ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                    : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+                }`}
+              >
+                Contact
+              </a>
+            </nav>
 
-            {/* 3. Reviews */}
-            <a
-              href="/about#reviews"
-              onClick={(e) => {
-                e.preventDefault();
-                if (onNavigateAbout) {
-                  onNavigateAbout();
-                  setTimeout(() => {
-                    const el = document.getElementById('about-reviews');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  }, 150);
-                } else {
-                  handleNavClick(e, 'about-reviews');
-                }
-              }}
-              className="px-3.5 py-1.5 rounded-full transition-all cursor-pointer text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70"
-            >
-              Reviews
-            </a>
-
-            {/* 4. About */}
-            <a
-              href="/about"
-              onClick={(e) => {
-                e.preventDefault();
-                if (onNavigateAbout) {
-                  onNavigateAbout();
-                } else {
-                  handleNavClick(e, 'about');
-                }
-              }}
-              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                activeSection === 'about'
-                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
-                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
-              }`}
-            >
-              About
-            </a>
-
-            {/* 5. Gallery */}
-            <a
-              href="/gallery"
-              onClick={(e) => {
-                e.preventDefault();
-                if (onNavigateGallery) onNavigateGallery();
-              }}
-              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                activeSection === 'gallery'
-                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
-                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
-              }`}
-            >
-              Gallery
-            </a>
-
-            {/* 6. Contact */}
-            <a
-              href="#contact"
-              onClick={(e) => handleNavClick(e, 'contact')}
-              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                activeSection === 'contact'
-                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
-                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
-              }`}
-            >
-              Contact
-            </a>
-          </nav>
-
-          {/* Right: Quick Search, Admin, Buy Course */}
+            {/* Right: Quick Search, Admin, Buy Course */}
           <div className="hidden lg:flex items-center gap-3">
             {/* Search Icon Button */}
             <button
@@ -371,9 +352,108 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
+        {/* Mobile Drawer Menu (Floating Rounded Card below the floating header) */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden mt-2 rounded-2xl border border-purple-100/90 bg-white/98 backdrop-blur-xl px-5 pt-3 pb-6 shadow-2xl animate-in slide-in-from-top-2 duration-200 max-h-[calc(100vh-6rem)] overflow-y-auto overscroll-contain pointer-events-auto">
+            <div className="space-y-1 pb-4 border-b border-slate-100 text-sm font-semibold">
+              <a
+                href="#home"
+                onClick={(e) => {
+                  setMobileMenuOpen(false);
+                  handleNavClick(e, 'home');
+                }}
+                className="block px-3 py-2.5 rounded-xl text-[#1E123B] hover:bg-purple-50"
+              >
+                Home
+              </a>
+              <a
+                href="#courses"
+                onClick={(e) => {
+                  setMobileMenuOpen(false);
+                  handleNavClick(e, 'courses');
+                }}
+                className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
+              >
+                Courses
+              </a>
+              <a
+                href="/about"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setMobileMenuOpen(false);
+                  if (onNavigateAbout) {
+                    onNavigateAbout();
+                  } else {
+                    handleNavClick(e, 'about');
+                  }
+                }}
+                className={`block px-3 py-2.5 rounded-xl ${
+                  activeSection === 'about'
+                    ? 'bg-purple-100 text-[#281648] font-bold'
+                    : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+                }`}
+              >
+                About
+              </a>
+              <a
+                href="/gallery"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setMobileMenuOpen(false);
+                  if (onNavigateGallery) onNavigateGallery();
+                }}
+                className={`block px-3 py-2.5 rounded-xl ${
+                  activeSection === 'gallery' ? 'text-[#1E123B] font-semibold bg-purple-50' : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+                }`}
+              >
+                Gallery
+              </a>
+              <a
+                href="#contact"
+                onClick={(e) => {
+                  setMobileMenuOpen(false);
+                  handleNavClick(e, 'contact');
+                }}
+                className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
+              >
+                Contact
+              </a>
+            </div>
+
+            <div className="pt-4 space-y-3">
+              {currentUser && currentUser.role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenAdmin();
+                  }}
+                  className="w-full py-2.5 rounded-full bg-purple-50 text-[#281648] font-bold text-sm border border-purple-200 cursor-pointer"
+                >
+                  Go to Admin Panel
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  setMobileMenuOpen(false);
+                  handleNavClick(e, 'courses');
+                }}
+                style={{ backgroundColor: '#281648', color: '#ffffff' }}
+                className="w-full py-3 rounded-full text-white text-sm font-bold shadow-md shadow-purple-950/20 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Buy Course</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Interactive Quick Search Overlay */}
       {searchOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-start justify-center pt-20 px-4">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-start justify-center pt-20 px-4 pointer-events-auto">
           <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-purple-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center px-4 py-3.5 border-b border-slate-100 gap-3">
               <Search className="w-5 h-5 text-[#6D28D9] shrink-0" />
@@ -424,121 +504,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ))}
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden border-b border-purple-100 bg-white px-5 pt-3 pb-6 shadow-xl animate-in slide-in-from-top-2 duration-200 max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain">
-          <div className="space-y-1 pb-4 border-b border-slate-100 text-sm font-semibold">
-            <a
-              href="#home"
-              onClick={(e) => {
-                setMobileMenuOpen(false);
-                handleNavClick(e, 'home');
-              }}
-              className="block px-3 py-2.5 rounded-xl text-[#1E123B] hover:bg-purple-50"
-            >
-              Home
-            </a>
-            <a
-              href="#courses"
-              onClick={(e) => {
-                setMobileMenuOpen(false);
-                handleNavClick(e, 'courses');
-              }}
-              className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
-            >
-              Courses
-            </a>
-            <a
-              href="/about#reviews"
-              onClick={(e) => {
-                e.preventDefault();
-                setMobileMenuOpen(false);
-                if (onNavigateAbout) {
-                  onNavigateAbout();
-                  setTimeout(() => {
-                    const el = document.getElementById('about-reviews');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                  }, 150);
-                }
-              }}
-              className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
-            >
-              Reviews
-            </a>
-            <a
-              href="/about"
-              onClick={(e) => {
-                e.preventDefault();
-                setMobileMenuOpen(false);
-                if (onNavigateAbout) {
-                  onNavigateAbout();
-                } else {
-                  handleNavClick(e, 'about');
-                }
-              }}
-              className={`block px-3 py-2.5 rounded-xl ${
-                activeSection === 'about'
-                  ? 'bg-purple-100 text-[#281648] font-bold'
-                  : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
-              }`}
-            >
-              About
-            </a>
-            <a
-              href="/gallery"
-              onClick={(e) => {
-                e.preventDefault();
-                setMobileMenuOpen(false);
-                if (onNavigateGallery) onNavigateGallery();
-              }}
-              className={`block px-3 py-2.5 rounded-xl ${
-                activeSection === 'gallery' ? 'text-[#1E123B] font-semibold bg-purple-50' : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
-              }`}
-            >
-              Gallery
-            </a>
-            <a
-              href="#contact"
-              onClick={(e) => {
-                setMobileMenuOpen(false);
-                handleNavClick(e, 'contact');
-              }}
-              className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
-            >
-              Contact
-            </a>
-          </div>
-
-          <div className="pt-4 space-y-3">
-            {currentUser && currentUser.role === 'admin' && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenAdmin();
-                }}
-                className="w-full py-2.5 rounded-full bg-purple-50 text-[#281648] font-bold text-sm border border-purple-200 cursor-pointer"
-              >
-                Go to Admin Panel
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={(e) => {
-                setMobileMenuOpen(false);
-                handleNavClick(e, 'courses');
-              }}
-              style={{ backgroundColor: '#281648', color: '#ffffff' }}
-              className="w-full py-3 rounded-full text-white text-sm font-bold shadow-md shadow-purple-950/20 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span>Buy Course</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
           </div>
         </div>
       )}

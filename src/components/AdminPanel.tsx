@@ -161,6 +161,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<StudyMaterial | null>(null);
   const [previewingPdfMaterial, setPreviewingPdfMaterial] = useState<{ title: string; pdfUrl?: string; description?: string; category?: string; batchName?: string } | null>(null);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [pdfUploadError, setPdfUploadError] = useState<string | null>(null);
   const [materialFilterBatch, setMaterialFilterBatch] = useState<string>('all');
   const [materialSubTab, setMaterialSubTab] = useState<'pdf' | 'youtube'>('pdf');
   const [materialSearchQuery, setMaterialSearchQuery] = useState<string>('');
@@ -1427,32 +1429,107 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const handleDirectPdfUpload = async (file: File) => {
+    if (!file) return;
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      setPdfUploadError('Please select a valid PDF file (.pdf).');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setPdfUploadError('PDF file size is too large (max 50 MB).');
+      return;
+    }
+
+    setPdfUploadError(null);
+    setIsUploadingPdf(true);
+
+    const cleanBaseTitle = file.name.replace(/\.pdf$/i, '').replace(/[-_]/g, ' ').trim();
+    if (!newMaterial.title || newMaterial.title.trim() === '') {
+      setNewMaterial(prev => ({ ...prev, title: cleanBaseTitle }));
+    }
+
+    try {
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch('/api/admin/upload-file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          dataBase64: dataUrl,
+          mimeType: file.type || 'application/pdf'
+        })
+      });
+
+      const resData = await res.json().catch(() => ({}));
+      if (res.ok && resData.success) {
+        const formattedSize = file.size > 1024 * 1024
+          ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+          : `${Math.round(file.size / 1024)} KB`;
+
+        setNewMaterial(prev => ({
+          ...prev,
+          pdfUrl: resData.url || dataUrl,
+          downloadUrl: resData.downloadUrl || `/api/files/download/${resData.fileId || 'doc'}`,
+          b2FileId: resData.b2FileId,
+          b2FileName: resData.b2FileName,
+          fileSize: formattedSize,
+          fileType: 'pdf',
+          mimeType: resData.mimeType || 'application/pdf'
+        }));
+      } else {
+        setPdfUploadError(resData.error || 'Failed to upload to Backblaze B2. Please try again.');
+      }
+    } catch (err: any) {
+      setPdfUploadError('Network error uploading PDF to Backblaze B2.');
+    } finally {
+      setIsUploadingPdf(false);
+    }
+  };
+
   const handleAddMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newMaterial.title || !newMaterial.title.trim()) {
+      setPdfUploadError('Please enter a title for the PDF document.');
+      return;
+    }
+    if (!newMaterial.pdfUrl) {
+      setPdfUploadError('Please select and upload a PDF file.');
+      return;
+    }
     const opt = optimizePdfUrl(newMaterial.pdfUrl);
     const newId = `mat-${Date.now()}`;
     const mat: StudyMaterial = {
       id: newId,
       resourceType: 'pdf',
-      batchId: newMaterial.batchId || 'all',
-      title: newMaterial.title,
-      description: newMaterial.description,
-      fileType: (newMaterial.fileType as 'pdf' | 'doc' | 'notes') || 'pdf',
-      fileSize: newMaterial.fileSize || '2.1 MB',
+      batchId: 'all',
+      title: newMaterial.title.trim(),
+      description: 'Study guide and curriculum practice notes for students.',
+      fileType: 'pdf',
+      fileSize: newMaterial.fileSize || '1.8 MB',
       downloadUrl: (newMaterial.downloadUrl && newMaterial.downloadUrl !== '#') ? newMaterial.downloadUrl : `/api/files/download/${newId}`,
       pdfUrl: opt.embedUrl || newMaterial.pdfUrl,
       b2FileId: newMaterial.b2FileId || undefined,
       b2FileName: newMaterial.b2FileName || undefined,
       mimeType: newMaterial.mimeType || 'application/pdf',
-      isViewOnly: newMaterial.isViewOnly !== false,
-      allowDownload: Boolean(newMaterial.allowDownload),
+      isViewOnly: true,
+      allowDownload: true,
       uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
       uploadedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      category: newMaterial.category || 'Worksheets',
-      level: newMaterial.level || 'All Levels',
-      isVisibleOnWebsite: newMaterial.isVisibleOnWebsite !== false,
-      isPublished: newMaterial.isPublished !== false,
-      displayOrder: newMaterial.displayOrder || (materials.length + 1)
+      category: 'Worksheets',
+      level: 'All Levels',
+      isVisibleOnWebsite: true,
+      isPublished: true,
+      displayOrder: materials.length + 1
     };
 
     let updatedList = [mat, ...materials];
@@ -1481,10 +1558,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } catch (e) {}
 
     setShowAddMaterialModal(false);
+    setPdfUploadError(null);
     setNewMaterial({
       batchId: 'all',
       title: '',
-      description: 'Practical PDF notes & daily vocabulary drill sheet.',
+      description: 'Study guide and curriculum practice notes for students.',
       fileType: 'pdf',
       fileSize: '1.8 MB',
       downloadUrl: '',
@@ -1493,14 +1571,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       b2FileName: '',
       mimeType: 'application/pdf',
       isViewOnly: true,
-      allowDownload: false,
+      allowDownload: true,
       category: 'Worksheets',
       level: 'All Levels',
       isVisibleOnWebsite: true,
       isPublished: true,
       displayOrder: materials.length + 2
     });
-    triggerFeedback(`Study material "${mat.title}" published & visible on website!`);
+    triggerFeedback(`PDF "${mat.title}" published successfully!`);
   };
 
   const handleAddYouTubeResource = async (e: React.FormEvent) => {
@@ -2992,7 +3070,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     className="px-4 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Upload PDF Guide</span>
+                    <span>Add PDF</span>
                   </button>
 
                   <button
@@ -6666,212 +6744,168 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {/* ==================================================================== */}
-        {/* MODAL: ADD PDF STUDY GUIDE RESOURCE */}
+        {/* MODAL: ADD PDF (SIMPLE 3-STEP: TITLE -> UPLOAD PDF -> PUBLISH) */}
         {/* ==================================================================== */}
         {showAddMaterialModal && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overscroll-contain smooth-scroll-viewport">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[92vh] overflow-y-auto overscroll-contain smooth-scroll-viewport">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#4A1D96] flex items-center justify-center">
-                    <FileText className="w-4 h-4" />
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-purple-100 text-[#4A1D96] flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="font-['Outfit'] font-bold text-lg text-slate-900">
-                      Upload PDF Study Guide
+                      Add PDF
                     </h3>
-                    <p className="text-[11px] text-slate-500">Upload PDF to Backblaze B2 or provide a cloud document link</p>
+                    <p className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <Cloud className="w-2.5 h-2.5 text-emerald-600" />
+                        <span>Backblaze B2 Active</span>
+                      </span>
+                    </p>
                   </div>
                 </div>
-                <button onClick={() => setShowAddMaterialModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => setShowAddMaterialModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleAddMaterial} className="space-y-3.5 text-xs">
+              <form onSubmit={handleAddMaterial} className="space-y-4">
+                {pdfUploadError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{pdfUploadError}</span>
+                  </div>
+                )}
+
+                {/* 1. TITLE */}
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Target Course *</label>
-                  <select
-                    value={newMaterial.batchId}
-                    onChange={(e) => setNewMaterial({ ...newMaterial, batchId: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] bg-slate-50 text-slate-900 font-medium"
-                  >
-                    <option value="all">🌟 All Courses & Public Website (Knowledge Bank)</option>
-                    {courses.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Knowledge Bank Category *</label>
-                    <select
-                      value={newMaterial.category}
-                      onChange={(e) => setNewMaterial({ ...newMaterial, category: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                    >
-                      <option value="Worksheets">Worksheets</option>
-                      <option value="English Vocabulary">English Vocabulary</option>
-                      <option value="Daily Sentences">Daily Sentences</option>
-                      <option value="Grammar Guides">Grammar Guides</option>
-                      <option value="Speaking Practice">Speaking Practice</option>
-                      <option value="E-books">E-books</option>
-                      <option value="Learning Tips">Learning Tips</option>
-                      <option value="Practice Tests">Practice Tests</option>
-                      <option value="Study Notes">Study Notes</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Proficiency Level</label>
-                    <select
-                      value={newMaterial.level}
-                      onChange={(e) => setNewMaterial({ ...newMaterial, level: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                    >
-                      <option value="All Levels">All Levels</option>
-                      <option value="Beginner">Beginner</option>
-                      <option value="Intermediate">Intermediate</option>
-                      <option value="Advanced">Advanced</option>
-                      <option value="Foundation">Foundation</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
-                    <label className="font-bold text-slate-700 block mb-1">Document Title *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 50 High-Frequency Daily Words.pdf"
-                      value={newMaterial.title}
-                      onChange={(e) => setNewMaterial({ ...newMaterial, title: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] text-slate-900 font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Order #</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={newMaterial.displayOrder}
-                      onChange={(e) => setNewMaterial({ ...newMaterial, displayOrder: parseInt(e.target.value) || 1 })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 font-medium"
-                    />
-                  </div>
-                </div>
-
-                {/* Public Website Visibility */}
-                <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-purple-950 block text-xs">
-                      Publish on Website (Learning Resources Section)
-                    </span>
-                    <span className="text-[11px] text-purple-700">
-                      Visible in the website's PDF Study Guides & Knowledge Bank
-                    </span>
-                  </div>
+                  <label className="font-bold text-slate-800 block text-xs mb-1.5">
+                    Title <span className="text-rose-500">*</span>
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={newMaterial.isVisibleOnWebsite}
-                    onChange={(e) => setNewMaterial({ ...newMaterial, isVisibleOnWebsite: e.target.checked, isPublished: e.target.checked })}
-                    className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
+                    type="text"
+                    required
+                    placeholder="Enter PDF title..."
+                    value={newMaterial.title}
+                    onChange={(e) => setNewMaterial({ ...newMaterial, title: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] focus:ring-2 focus:ring-purple-100 text-slate-900 font-medium text-sm placeholder-slate-400"
                   />
                 </div>
 
-                {/* PDF Upload / Cloud Link Engine */}
-                <PdfUploadInput
-                  pdfUrl={newMaterial.pdfUrl}
-                  onPdfUrlChange={(url) => setNewMaterial({ ...newMaterial, pdfUrl: url })}
-                  token={token}
-                  titleValue={newMaterial.title}
-                  onTitleSuggest={(suggestedTitle) => {
-                    if (!newMaterial.title || newMaterial.title.trim() === '') {
-                      setNewMaterial(prev => ({ ...prev, title: suggestedTitle }));
-                    }
-                  }}
-                  onFileUploaded={({ fileSize, downloadUrl, b2FileId, b2FileName, mimeType }) => {
-                    setNewMaterial(prev => ({
-                      ...prev,
-                      fileSize: fileSize || prev.fileSize,
-                      downloadUrl: downloadUrl || prev.downloadUrl,
-                      b2FileId: b2FileId || prev.b2FileId,
-                      b2FileName: b2FileName || prev.b2FileName,
-                      mimeType: mimeType || prev.mimeType,
-                      fileType: 'pdf'
-                    }));
-                  }}
-                  onPreviewTest={(url) => setPreviewingPdfMaterial({
-                    title: newMaterial.title || 'PDF Preview',
-                    pdfUrl: url,
-                    description: newMaterial.description,
-                    category: 'Study Resource Preview'
-                  })}
-                />
-
-                {/* View-Only Protection Setting */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-slate-800 block text-xs flex items-center gap-1">
-                      <Lock className="w-3 h-3 text-[#4A1D96]" />
-                      <span>View-Only Protection (Strict Anti-Download)</span>
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      Blocks Ctrl+S save, Ctrl+P print, right-click menu, and native toolbar saving
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={newMaterial.isViewOnly}
-                    onChange={(e) => setNewMaterial({ ...newMaterial, isViewOnly: e.target.checked })}
-                    className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
-                  />
-                </div>
-
-                {/* Allow Download Setting */}
-                <div className="p-3 bg-purple-50/50 border border-purple-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-slate-800 block text-xs flex items-center gap-1">
-                      <Download className="w-3 h-3 text-[#4A1D96]" />
-                      <span>Allow Student File Download</span>
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      Enable a direct download button for students and website visitors
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={newMaterial.allowDownload}
-                    onChange={(e) => setNewMaterial({ ...newMaterial, allowDownload: e.target.checked })}
-                    className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
-                  />
-                </div>
-
+                {/* 2. UPLOAD PDF OPTION */}
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Description / Summary</label>
-                  <textarea
-                    rows={2}
-                    value={newMaterial.description}
-                    onChange={(e) => setNewMaterial({ ...newMaterial, description: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:border-[#4A1D96]"
-                    placeholder="Brief summary of the document for students..."
+                  <label className="font-bold text-slate-800 block text-xs mb-1.5 flex items-center justify-between">
+                    <span>Upload PDF <span className="text-rose-500">*</span></span>
+                    <span className="text-[10.5px] font-semibold text-purple-700">Stores in Backblaze B2</span>
+                  </label>
+
+                  <input
+                    type="file"
+                    id="admin-pdf-upload-input"
+                    accept="application/pdf,.pdf"
+                    disabled={isUploadingPdf}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleDirectPdfUpload(file);
+                    }}
+                    className="hidden"
                   />
+
+                  {newMaterial.pdfUrl && newMaterial.pdfUrl.trim() ? (
+                    <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <Check className="w-5 h-5 stroke-[2.5]" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-xs text-slate-900 truncate">
+                            {newMaterial.b2FileName || newMaterial.title || 'PDF Document Ready'}
+                          </p>
+                          <p className="text-[11px] text-emerald-700 font-medium flex items-center gap-1.5">
+                            <span>{newMaterial.fileSize || 'PDF File'}</span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Cloud className="w-3 h-3 text-emerald-600" />
+                              <span>Stored in Backblaze B2</span>
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const inputEl = document.getElementById('admin-pdf-upload-input') as HTMLInputElement;
+                          if (inputEl) inputEl.click();
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold shrink-0 transition-colors cursor-pointer"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="admin-pdf-upload-input"
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) handleDirectPdfUpload(file);
+                      }}
+                      className={`block p-6 rounded-2xl border-2 border-dashed transition-all cursor-pointer text-center ${
+                        isUploadingPdf
+                          ? 'bg-purple-50/50 border-purple-300 pointer-events-none'
+                          : 'bg-purple-50/30 hover:bg-purple-50 border-purple-200 hover:border-[#4A1D96]'
+                      }`}
+                    >
+                      {isUploadingPdf ? (
+                        <div className="flex flex-col items-center justify-center gap-2 py-2">
+                          <RefreshCw className="w-6 h-6 text-[#4A1D96] animate-spin" />
+                          <p className="font-bold text-xs text-[#4A1D96]">Uploading to Backblaze B2...</p>
+                          <p className="text-[10.5px] text-slate-400">Please wait a moment</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-2 py-2">
+                          <div className="w-10 h-10 rounded-2xl bg-purple-100 text-[#4A1D96] flex items-center justify-center">
+                            <UploadCloud className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-xs text-slate-800">
+                              Click to choose PDF or drag & drop here
+                            </p>
+                            <p className="text-[10.5px] text-slate-500 mt-0.5">
+                              Supported format: .pdf (up to 50 MB)
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </label>
+                  )}
                 </div>
 
-                <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                {/* 3. PUBLISH BUTTON */}
+                <div className="pt-2 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setShowAddMaterialModal(false)}
-                    className="px-4 py-2 rounded-xl text-slate-500 font-bold hover:bg-slate-100 cursor-pointer"
+                    className="flex-1 py-2.5 rounded-xl text-slate-500 font-bold hover:bg-slate-100 transition-colors cursor-pointer text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold cursor-pointer shadow-xs"
+                    disabled={isUploadingPdf || !newMaterial.pdfUrl}
+                    className="flex-2 py-2.5 rounded-xl bg-gradient-to-r from-[#281648] via-[#4A1D96] to-[#281648] hover:opacity-95 text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-950/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Upload Resource
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>Publish</span>
                   </button>
                 </div>
               </form>
