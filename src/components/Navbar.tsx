@@ -83,6 +83,15 @@ export const Navbar: React.FC<NavbarProps> = ({
       onNavigateAbout();
       return;
     }
+    if ((targetId === 'testimonials' || targetId === 'reviews' || targetId === 'about-reviews') && onNavigateAbout) {
+      e.preventDefault();
+      onNavigateAbout();
+      setTimeout(() => {
+        const el = document.getElementById('about-reviews');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 150);
+      return;
+    }
     if ((targetId === 'learning-resources' || targetId === 'resources') && onNavigateResources) {
       e.preventDefault();
       onNavigateResources();
@@ -225,13 +234,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* 3. Reviews */}
             <a
-              href="#testimonials"
-              onClick={(e) => handleNavClick(e, 'testimonials')}
-              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                activeSection === 'testimonials'
-                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
-                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
-              }`}
+              href="/about#reviews"
+              onClick={(e) => {
+                e.preventDefault();
+                if (onNavigateAbout) {
+                  onNavigateAbout();
+                  setTimeout(() => {
+                    const el = document.getElementById('about-reviews');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 150);
+                } else {
+                  handleNavClick(e, 'about-reviews');
+                }
+              }}
+              className="px-3.5 py-1.5 rounded-full transition-all cursor-pointer text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70"
             >
               Reviews
             </a>
@@ -435,6 +451,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
             >
               Courses
+            </a>
+            <a
+              href="/about#reviews"
+              onClick={(e) => {
+                e.preventDefault();
+                setMobileMenuOpen(false);
+                if (onNavigateAbout) {
+                  onNavigateAbout();
+                  setTimeout(() => {
+                    const el = document.getElementById('about-reviews');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 150);
+                }
+              }}
+              className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
+            >
+              Reviews
             </a>
             <a
               href="/about"

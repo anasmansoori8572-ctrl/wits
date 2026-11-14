@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ArrowLeft, ChevronRight, CheckCircle2, 
   Award, Users, GraduationCap, Sparkles, 
@@ -12,37 +12,108 @@ interface AboutPageProps {
   onOpenAdmission?: (courseId?: string) => void;
   siteSettings?: SiteSettings;
   testimonials?: TestimonialData[];
+  onUpdateTestimonials?: (newTestimonials: TestimonialData[]) => void;
 }
+
+const AVATAR_IMAGES = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
+  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=200&q=80',
+  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80'
+];
+
+const DEFAULT_REVIEWS: TestimonialData[] = [
+  {
+    id: 'rev-1',
+    studentName: 'Mohd Farhan',
+    courseBatch: 'Spoken English — Batch 01',
+    city: 'Amroha, UP',
+    testimonial: "Wits Lingo changed the way I look at English. Earlier, I used to freeze whenever someone asked me a question in English. Zia Sir's practical step-by-step approach helped me speak naturally in just a few weeks without memorising heavy grammar rules.",
+    rating: 5,
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+    verified: true
+  },
+  {
+    id: 'rev-2',
+    studentName: 'Shabana Parveen',
+    courseBatch: 'English Foundation',
+    city: 'Moradabad, UP',
+    testimonial: "Coming from a Hindi-medium background, I always lacked confidence in college. In Wits Lingo Academy, every single student gets a chance to speak. The batch recordings and daily worksheets are immense help!",
+    rating: 5,
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+    verified: true
+  },
+  {
+    id: 'rev-3',
+    studentName: 'Sneha Patel',
+    courseBatch: 'Communication Skills & Speaking',
+    city: 'Moradabad, UP',
+    testimonial: "The step-by-step pathway from simple sentences to natural dialogues gave me the exact confidence I needed. The mentors never judge you for making mistakes; they guide you with immense patience and care.",
+    rating: 5,
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
+    verified: true
+  },
+  {
+    id: 'rev-4',
+    studentName: 'Ahmad Sayeed',
+    courseBatch: 'English Foundation & Fluency',
+    city: 'Hapur, UP',
+    testimonial: "Coming from a Hindi-medium background in a small town, English grammar used to confuse me. Wits Lingo simplified everything with real-life examples. I can now attend job interviews with complete poise.",
+    rating: 5,
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
+    verified: true
+  },
+  {
+    id: 'rev-5',
+    studentName: 'Danish Khan',
+    courseBatch: 'Executive Communication',
+    city: 'Noida, UP',
+    testimonial: "The live interactive sessions and mock interview practice helped me crack my corporate client presentation. Zia Sir's pronunciation tips made a huge noticeable difference in my daily conversations.",
+    rating: 5,
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=200&q=80',
+    verified: true
+  },
+  {
+    id: 'rev-6',
+    studentName: 'Alisha Fatima',
+    courseBatch: 'Spoken English & Fluency',
+    city: 'Delhi NCR',
+    testimonial: "I used to hesitate and translate words in my mind before speaking. Within 3 weeks at Wits Lingo, I was able to talk spontaneously with colleagues and friends. The atmosphere is truly inspiring!",
+    rating: 5,
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
+    verified: true
+  }
+];
 
 export const AboutPage: React.FC<AboutPageProps> = ({
   onBackToHome,
   onNavigateCourses,
   onOpenAdmission,
   siteSettings,
-  testimonials = []
+  testimonials = [],
+  onUpdateTestimonials
 }) => {
   // Active Tab for Mission / Vision / Goal
   const [activeTab, setActiveTab] = useState<'mission' | 'vision' | 'goal'>('mission');
 
-  // Featured Testimonials
-  const displayTestimonials = testimonials.length >= 2 ? testimonials.slice(0, 2) : [
-    {
-      id: 'test-1',
-      studentName: 'Mohd Farhan',
-      courseBatch: 'Spoken English & Daily Fluency',
-      testimonial: 'Before joining Wits Lingo, I was terrified of speaking English in public or during presentations. Zia Sir\'s practical method of speaking from day one completely removed my hesitation. Now I express my ideas freely without mentally translating!',
-      city: 'Amroha, UP',
-      verified: true
-    },
-    {
-      id: 'test-2',
-      studentName: 'Sneha Patel',
-      courseBatch: 'Communication Skills & Speaking',
-      testimonial: 'The step-by-step pathway from simple sentences to natural dialogues gave me the exact confidence I needed. The mentors never judge you for making mistakes; they guide you with immense patience and care.',
-      city: 'Moradabad, UP',
-      verified: true
+  const allReviews = useMemo(() => {
+    if (testimonials && testimonials.length > 0) {
+      const existingIds = new Set(testimonials.map(t => (t.id || t.studentName).toLowerCase()));
+      const neededDefaults = DEFAULT_REVIEWS.filter(d => !existingIds.has((d.id || d.studentName).toLowerCase()));
+      return [...testimonials, ...neededDefaults];
     }
-  ];
+    return DEFAULT_REVIEWS;
+  }, [testimonials]);
+
+  const marqueedTestimonials = useMemo(() => {
+    let list = [...allReviews];
+    while (list.length < 6) {
+      list = [...list, ...allReviews];
+    }
+    return [...list, ...list];
+  }, [allReviews]);
 
   return (
     <div className="min-h-screen bg-[#FAF9FC] text-[#1E1B26]">
@@ -401,13 +472,16 @@ export const AboutPage: React.FC<AboutPageProps> = ({
       </section>
 
       {/* =========================================================================
-          SECTION 4: TESTIMONIALS / EXPERIENCES ("Trusted By Global Client's")
+          SECTION 4: TESTIMONIALS / EXPERIENCES ("Trusted By Global Learners & Students")
           ========================================================================= */}
-      <section className="py-20 sm:py-24 lg:py-28 bg-[#FAF9FC] border-b border-purple-100/60 relative">
+      <section id="about-reviews" className="py-20 sm:py-24 lg:py-28 bg-[#FAF9FC] border-b border-purple-100/60 relative overflow-hidden scroll-mt-16">
+        <div id="reviews" className="absolute -top-20" />
+        <div id="testimonials" className="absolute -top-20" />
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           {/* Section Heading */}
-          <div className="text-center max-w-2xl mx-auto mb-14 space-y-2.5">
+          <div className="text-center max-w-2xl mx-auto mb-12 sm:mb-14 space-y-2.5">
             <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.2em] text-[#6D28D9]">
               <span className="w-2 h-2 rounded-full bg-[#6D28D9]" />
               <span>Our Experiences</span>
@@ -420,52 +494,55 @@ export const AboutPage: React.FC<AboutPageProps> = ({
             </h2>
           </div>
 
-          {/* 2-Column Testimonial Cards (Matches Image Layout Exactly) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            {displayTestimonials.map((item, idx) => (
-              <div 
-                key={item.id || idx}
-                className="bg-white rounded-3xl p-7 sm:p-9 shadow-sm hover:shadow-md transition-shadow border border-slate-200/80 flex flex-col justify-between space-y-6 relative"
-              >
-                {/* Quote Text */}
-                <p className="text-slate-600 text-sm sm:text-[14.5px] leading-relaxed italic">
-                  &ldquo;{item.testimonial}&rdquo;
-                </p>
+        </div>
 
-                {/* Bottom Row: User Avatar + Name + 5 Stars */}
-                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-full overflow-hidden bg-purple-100 border-2 border-purple-200 shrink-0">
-                      <img 
-                        src={idx === 0 
-                          ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80' 
-                          : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80'
-                        }
-                        alt={item.studentName}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div>
-                      <h4 className="font-['Outfit'] font-bold text-sm text-[#1E1B26]">
-                        {item.studentName}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        {item.courseBatch || 'English Learner'} &bull; {item.city || 'India'}
-                      </p>
-                    </div>
-                  </div>
+        {/* Continuous Slide-Left Animation Marquee */}
+        <div className="relative w-full overflow-hidden py-3">
+          <div className="animate-slide-left flex gap-6 sm:gap-8">
+            {marqueedTestimonials.map((item, idx) => {
+              const avatar = item.avatar || AVATAR_IMAGES[idx % AVATAR_IMAGES.length];
+              return (
+                <div 
+                  key={`${item.id || idx}-${idx}`}
+                  className="w-[330px] sm:w-[420px] md:w-[480px] flex-shrink-0 bg-white rounded-3xl p-7 sm:p-9 shadow-xs hover:shadow-xl transition-all duration-300 border border-slate-200/80 flex flex-col justify-between space-y-6 group"
+                >
+                  {/* Quote Text */}
+                  <p className="text-slate-600 text-sm sm:text-[14.5px] leading-relaxed italic line-clamp-4">
+                    &ldquo;{item.testimonial}&rdquo;
+                  </p>
 
-                  {/* 5 Stars Rating */}
-                  <div className="flex items-center gap-1 text-amber-400">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                    ))}
+                  {/* Bottom Row: User Avatar + Name + 5 Stars */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-11 h-11 rounded-full overflow-hidden bg-purple-100 border-2 border-purple-200 shrink-0">
+                        <img 
+                          src={avatar}
+                          alt={item.studentName}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-['Outfit'] font-bold text-sm text-[#1E1B26] truncate group-hover:text-[#4A1D96] transition-colors">
+                          {item.studentName}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-medium truncate">
+                          {item.courseBatch || 'English Learner'} &bull; {item.city || 'India'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* 5 Stars Rating */}
+                    <div className="flex items-center gap-1 text-amber-400 shrink-0 ml-3">
+                      {[...Array(item.rating || 5)].map((_, i) => (
+                        <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-
         </div>
       </section>
 

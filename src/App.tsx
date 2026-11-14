@@ -8,7 +8,6 @@ import { Hero } from './components/Hero';
 import { StatsSection } from './components/StatsSection';
 import { WhatWeTeach } from './components/WhatWeTeach';
 import { CoursesSection } from './components/CoursesSection';
-import { TestimonialsSection } from './components/TestimonialsSection';
 import { YouTubeVideoSection } from './components/YouTubeVideoSection';
 import { CommunitySection } from './components/CommunitySection';
 import { FounderSection } from './components/FounderSection';
@@ -746,6 +745,7 @@ export default function App() {
           onOpenAdmission={(cId) => handleOpenAdmission(cId)}
           siteSettings={siteSettings}
           testimonials={testimonials}
+          onUpdateTestimonials={handleUpdateTestimonials}
         />
       ) : currentView === 'resources' ? (
         <LearningResourcesPage
@@ -805,13 +805,6 @@ export default function App() {
           <CommunitySection
             siteSettings={siteSettings}
             onJoinNewJourney={() => handleOpenAdmission()}
-          />
-
-          {/* 9. Interactive Reviews & Ratings */}
-          <TestimonialsSection
-            testimonials={testimonials}
-            onOpenAdmission={() => handleOpenCheckout()}
-            onUpdateTestimonials={handleUpdateTestimonials}
           />
 
           {/* 12. About the Founder: Ziyaur Rehman Zia */}

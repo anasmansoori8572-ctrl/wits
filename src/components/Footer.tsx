@@ -179,8 +179,19 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a 
-                  href="#testimonials" 
-                  onClick={(e) => handleSectionClick(e, 'testimonials')}
+                  href="/about#reviews" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onNavigateAbout) {
+                      onNavigateAbout();
+                      setTimeout(() => {
+                        const el = document.getElementById('about-reviews');
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }, 150);
+                    } else {
+                      handleSectionClick(e, 'about-reviews');
+                    }
+                  }}
                   className="hover:text-white transition-colors py-1 block cursor-pointer"
                 >
                   Student Reviews
