@@ -22,6 +22,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { AdminLoginPage } from './components/AdminLoginPage';
 import { GalleryPage } from './components/GalleryPage';
 import { AboutPage } from './components/AboutPage';
+import { LearningResourcesPage } from './components/LearningResourcesPage';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { FloatingNoticeWidget } from './components/FloatingNoticeWidget';
 import { CheckoutModal } from './components/CheckoutModal';
@@ -67,8 +68,8 @@ function parsePolicySubroute(path: string, hash: string): PolicyTab | undefined 
 }
 
 export default function App() {
-  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'about' | 'admin-login' | 'policy'
-  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'about' | 'admin-login' | 'policy'>(() => {
+  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'about' | 'resources' | 'admin-login' | 'policy'
+  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'about' | 'resources' | 'admin-login' | 'policy'>(() => {
     if (typeof window !== 'undefined') {
       const path = (window.location.pathname || '').toLowerCase();
       const hash = (window.location.hash || '').toLowerCase();
@@ -88,6 +89,9 @@ export default function App() {
       }
       if (path === '/about' || path === '/about-us' || hash === '#about' || hash === '#about-us' || hash === '#about-page') {
         return 'about';
+      }
+      if (path === '/resources' || path.startsWith('/resources') || path === '/learning-resources' || path.startsWith('/learning-resources') || hash === '#resources' || hash === '#learning-resources') {
+        return 'resources';
       }
       if (parsePolicySubroute(path, hash)) {
         return 'policy';
@@ -470,8 +474,10 @@ export default function App() {
         setCurrentView('gallery');
       } else if (hash === '#about' || hash === '#about-us' || path === '/about' || path === '/about-us') {
         setCurrentView('about');
+      } else if (hash === '#resources' || hash === '#learning-resources' || path === '/resources' || path === '/learning-resources' || path.startsWith('/resources') || path.startsWith('/learning-resources')) {
+        setCurrentView('resources');
       } else if (hash === '#home' || path === '/') {
-        setCurrentView(prev => (prev === 'gallery' || prev === 'about' || prev === 'admin-login' || prev === 'policy' ? 'home' : prev));
+        setCurrentView(prev => (prev === 'gallery' || prev === 'about' || prev === 'resources' || prev === 'admin-login' || prev === 'policy' ? 'home' : prev));
       }
 
       // Check URL query parameters for instant checkout and payment confirmation
@@ -666,6 +672,11 @@ export default function App() {
           setCurrentView('about');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
+        onNavigateResources={() => {
+          try { window.history.pushState(null, '', '/resources'); } catch (e) {}
+          setCurrentView('resources');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         onNavigateHome={() => {
           try { window.history.pushState(null, '', '/'); } catch (e) {}
           setCurrentView('home');
@@ -736,6 +747,17 @@ export default function App() {
           siteSettings={siteSettings}
           testimonials={testimonials}
         />
+      ) : currentView === 'resources' ? (
+        <LearningResourcesPage
+          onBackToHome={() => {
+            try { window.history.pushState(null, '', '/'); } catch (e) {}
+            setCurrentView('home');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onOpenAdmission={(cId) => handleOpenAdmission(cId)}
+          materials={materials}
+          siteSettings={siteSettings}
+        />
       ) : currentView === 'policy' ? (
         <PolicyPages
           initialTab={policyTab}
@@ -782,6 +804,11 @@ export default function App() {
               if (el) el.scrollIntoView({ behavior: 'smooth' });
             }}
             materials={materials}
+            onViewAllResources={() => {
+              try { window.history.pushState(null, '', '/resources'); } catch (e) {}
+              setCurrentView('resources');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
 
           {/* 8. Community: Learn English Every Day */}
@@ -814,6 +841,11 @@ export default function App() {
         onNavigateAbout={() => {
           try { window.history.pushState(null, '', '/about'); } catch (e) {}
           setCurrentView('about');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onNavigateResources={() => {
+          try { window.history.pushState(null, '', '/resources'); } catch (e) {}
+          setCurrentView('resources');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onNavigatePolicy={handleNavigatePolicy}

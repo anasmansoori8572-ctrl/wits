@@ -14,6 +14,7 @@ interface NavbarProps {
   onLogout: () => void;
   onNavigateGallery?: () => void;
   onNavigateAbout?: () => void;
+  onNavigateResources?: () => void;
   onNavigateHome?: () => void;
   activeSection: string;
   onBuyCourse?: () => void;
@@ -29,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onNavigateGallery,
   onNavigateAbout,
+  onNavigateResources,
   onNavigateHome,
   activeSection,
   onBuyCourse,
@@ -81,7 +83,12 @@ export const Navbar: React.FC<NavbarProps> = ({
       onNavigateAbout();
       return;
     }
-    if ((activeSection === 'gallery' || activeSection === 'about' || activeSection === 'policy') && onNavigateHome) {
+    if ((targetId === 'learning-resources' || targetId === 'resources') && onNavigateResources) {
+      e.preventDefault();
+      onNavigateResources();
+      return;
+    }
+    if ((activeSection === 'gallery' || activeSection === 'about' || activeSection === 'resources' || activeSection === 'policy') && onNavigateHome) {
       e.preventDefault();
       onNavigateHome();
       setTimeout(() => {
@@ -105,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { title: 'Foundation English & Grammar', target: 'courses', desc: 'Tenses, sentence formation, vocabulary building, and syntax' },
     { title: 'Executive Communication & Public Speaking', target: 'courses', desc: 'Professional fluency, interviews, corporate communication' },
     { title: 'Student Reviews & Success Stories', target: 'testimonials', desc: 'Verified reviews and feedback from our students' },
-    { title: 'Free Study Materials & Notes', target: 'learning-resources', desc: 'Downloadable PDF study guides, diagnostic assessments, daily vocabulary' },
+    { title: 'Learning Resources & PDF Notes', target: 'learning-resources', desc: 'Read uploaded PDF study guides, daily sentences, grammar handbooks, and worksheets' },
     { title: 'About Wits Lingo Academy', target: 'about', desc: 'Our methodology, learning framework, and academy details' },
     { title: 'Contact & Support', target: 'contact', desc: 'WhatsApp support, call assistance, admissions helpline' },
   ];
@@ -175,7 +182,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <a
               href="#home"
               onClick={(e) => {
-                if ((activeSection === 'gallery' || activeSection === 'policy') && onNavigateHome) {
+                if ((activeSection === 'gallery' || activeSection === 'about' || activeSection === 'resources' || activeSection === 'policy') && onNavigateHome) {
                   e.preventDefault();
                   onNavigateHome();
                 } else {
@@ -188,7 +195,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </a>
           </div>
 
-          {/* Center: Desktop Navigation Links (Home, Courses, Reviews, About, Gallery, Contact) */}
+          {/* Center: Desktop Navigation Links (Home, Courses, Resources, Reviews, About, Gallery, Contact) */}
           <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-[14.5px] font-semibold">
             {/* 1. Home */}
             <a
@@ -216,7 +223,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               Courses
             </a>
 
-            {/* 3. Reviews */}
+            {/* 3. Resources */}
+            <a
+              href="/resources"
+              onClick={(e) => {
+                e.preventDefault();
+                if (onNavigateResources) {
+                  onNavigateResources();
+                } else {
+                  handleNavClick(e, 'resources');
+                }
+              }}
+              className={`px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                activeSection === 'resources'
+                  ? 'text-[#281648] bg-purple-100/80 font-bold shadow-2xs'
+                  : 'text-[#4E4663] hover:text-[#1E123B] hover:bg-purple-50/70'
+              }`}
+            >
+              Resources
+            </a>
+
+            {/* 4. Reviews */}
             <a
               href="#testimonials"
               onClick={(e) => handleNavClick(e, 'testimonials')}
@@ -229,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               Reviews
             </a>
 
-            {/* 4. About */}
+            {/* 5. About */}
             <a
               href="/about"
               onClick={(e) => {
@@ -249,7 +276,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               About
             </a>
 
-            {/* 5. Gallery */}
+            {/* 6. Gallery */}
             <a
               href="/gallery"
               onClick={(e) => {
@@ -265,7 +292,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               Gallery
             </a>
 
-            {/* 6. Contact */}
+            {/* 7. Contact */}
             <a
               href="#contact"
               onClick={(e) => handleNavClick(e, 'contact')}
@@ -428,6 +455,25 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
             >
               Courses
+            </a>
+            <a
+              href="/resources"
+              onClick={(e) => {
+                e.preventDefault();
+                setMobileMenuOpen(false);
+                if (onNavigateResources) {
+                  onNavigateResources();
+                } else {
+                  handleNavClick(e, 'resources');
+                }
+              }}
+              className={`block px-3 py-2.5 rounded-xl ${
+                activeSection === 'resources'
+                  ? 'bg-purple-100 text-[#281648] font-bold'
+                  : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+              }`}
+            >
+              Learning Resources
             </a>
             <a
               href="/about"

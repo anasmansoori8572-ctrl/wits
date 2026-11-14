@@ -80,6 +80,7 @@ interface LearningResourcesProps {
   onOpenAdmission?: (courseId?: string) => void;
   onFollow?: () => void;
   materials?: StudyMaterial[];
+  onViewAllResources?: () => void;
 }
 
 export const LearningResources: React.FC<LearningResourcesProps> = ({
@@ -87,6 +88,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
   onOpenAdmission,
   onFollow,
   materials: propMaterials = [],
+  onViewAllResources,
 }) => {
   // Navigation & View Tabs
   const [activeTab, setActiveTab] = useState<'all' | 'materials' | 'videos' | 'channels'>('all');
@@ -593,9 +595,21 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                   Learning Resources & Study Guides
                 </h3>
               </div>
-              <p className="text-xs sm:text-sm text-slate-500 max-w-md">
-                Read practical guides, worksheets, and vocabulary cheat sheets curated by Wits Lingo Academy in our optimized, download-protected reader.
-              </p>
+              <div className="flex flex-col sm:items-end gap-2">
+                <p className="text-xs sm:text-sm text-slate-500 max-w-md sm:text-right">
+                  Read practical guides, worksheets, and vocabulary cheat sheets curated by Wits Lingo Academy in our optimized, download-protected reader.
+                </p>
+                {onViewAllResources && (
+                  <button
+                    type="button"
+                    onClick={onViewAllResources}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#4A1D96] hover:text-[#3C166D] hover:underline cursor-pointer"
+                  >
+                    <span>Open Dedicated Resources Page</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Search Bar & Category Filter */}
@@ -729,6 +743,20 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                 All PDF notes, worksheets, and handbooks are secured with Wits Lingo View-Only protection. Students can read smoothly on any phone, tablet, or PC without file downloads.
               </p>
             </div>
+
+            {onViewAllResources && (
+              <div className="mt-8 flex justify-center">
+                <button
+                  type="button"
+                  onClick={onViewAllResources}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#4A1D96] hover:bg-[#3C166D] text-white font-bold text-xs sm:text-sm shadow-md shadow-purple-900/10 transition-all cursor-pointer hover:scale-[1.02]"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>Explore Full Learning Resources Library</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         )}
 

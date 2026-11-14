@@ -9,6 +9,7 @@ import { PolicyTab } from './PolicyPages';
 interface FooterProps {
   onNavigateGallery?: () => void;
   onNavigateAbout?: () => void;
+  onNavigateResources?: () => void;
   onNavigatePolicy?: (tab: PolicyTab) => void;
   onNavigateSection?: (sectionId: string) => void;
   onNavigateHome?: () => void;
@@ -18,6 +19,7 @@ interface FooterProps {
 export const Footer: React.FC<FooterProps> = ({ 
   onNavigateGallery, 
   onNavigateAbout,
+  onNavigateResources,
   onNavigatePolicy, 
   onNavigateSection,
   onNavigateHome,
@@ -186,11 +188,18 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a 
-                  href="#learning-resources" 
-                  onClick={(e) => handleSectionClick(e, 'learning-resources')}
+                  href="/resources" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onNavigateResources) {
+                      onNavigateResources();
+                    } else {
+                      handleSectionClick(e, 'learning-resources');
+                    }
+                  }}
                   className="hover:text-white transition-colors py-1 block cursor-pointer"
                 >
-                  Study Resources
+                  Learning Resources
                 </a>
               </li>
               <li>
