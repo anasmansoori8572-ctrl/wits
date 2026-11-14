@@ -57,19 +57,19 @@ export const YouTubeVideoSection: React.FC<YouTubeVideoSectionProps> = ({
   siteSettings,
 }) => {
   const [backendMaterials, setBackendMaterials] = useState<StudyMaterial[]>(() => {
-    if (propMaterials && propMaterials.length > 0) return propMaterials;
+    if (Array.isArray(propMaterials) && propMaterials.length > 0) return propMaterials;
     try {
       const saved = localStorage.getItem('wits_lingo_materials');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
-    return [];
+    return Array.isArray(propMaterials) ? propMaterials : [];
   });
 
   useEffect(() => {
-    if (propMaterials && propMaterials.length > 0) {
+    if (Array.isArray(propMaterials)) {
       setBackendMaterials(propMaterials);
     }
   }, [propMaterials]);

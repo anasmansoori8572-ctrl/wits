@@ -440,7 +440,7 @@ export class DurableStorageService {
     // 1. Return from in-memory cache if available
     if (this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
-      if (Array.isArray(cached) && cached.length > 0) {
+      if (Array.isArray(cached)) {
         return [...cached];
       }
     }

@@ -1124,7 +1124,7 @@ var DurableStorageService = class _DurableStorageService {
   async getCollection(collectionName, defaultValue = []) {
     if (this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
-      if (Array.isArray(cached) && cached.length > 0) {
+      if (Array.isArray(cached)) {
         return [...cached];
       }
     }
@@ -4206,7 +4206,7 @@ function loadAllPersistedData() {
     }
     if (fs7.existsSync(BATCHES_STORAGE_FILE)) {
       const data = JSON.parse(fs7.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         batches.length = 0;
         batches.push(...data);
         console.log(`[Persistence] Loaded ${batches.length} batches.`);
@@ -4217,7 +4217,7 @@ function loadAllPersistedData() {
     if (fs7.existsSync(CLASSES_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs7.readFileSync(CLASSES_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           classes.length = 0;
           classes.push(...data);
           console.log(`[Persistence] Loaded ${classes.length} classes.`);
@@ -4231,7 +4231,7 @@ function loadAllPersistedData() {
     if (fs7.existsSync(RECORDINGS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs7.readFileSync(RECORDINGS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           recordings.length = 0;
           recordings.push(...data);
           console.log(`[Persistence] Loaded ${recordings.length} recordings.`);
@@ -4244,7 +4244,7 @@ function loadAllPersistedData() {
     }
     if (fs7.existsSync(PAYMENTS_STORAGE_FILE)) {
       const data = JSON.parse(fs7.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         payments.length = 0;
         payments.push(...data);
         console.log(`[Persistence] Loaded ${payments.length} verified payment transactions.`);
@@ -4296,7 +4296,7 @@ function loadAllPersistedData() {
     }
     if (fs7.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
       const data = JSON.parse(fs7.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         announcements.length = 0;
         announcements.push(...data);
         console.log(`[Persistence] Loaded ${announcements.length} announcements.`);
@@ -4308,7 +4308,7 @@ function loadAllPersistedData() {
     if (fs7.existsSync(MATERIALS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs7.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           for (const m of data) {
             if (m.resourceType === "youtube" || m.fileType === "youtube") {
               if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
@@ -4332,7 +4332,7 @@ function loadAllPersistedData() {
     if (fs7.existsSync(GALLERY_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs7.readFileSync(GALLERY_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           galleryItems.length = 0;
           galleryItems.push(...data);
           galleryLoaded = true;
@@ -5205,7 +5205,7 @@ app.get(["/api/auth/me", "/api/admin/auth/me"], (req, res) => {
   });
 });
 app.get("/api/batches", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (auth && auth.role === "admin") {
     return res.json({ batches });
   } else if (auth && auth.role === "student") {
@@ -5216,7 +5216,7 @@ app.get("/api/batches", (req, res) => {
 });
 app.get("/api/batches/:batchId/classes", (req, res) => {
   const { batchId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required. Please login to access batch classes." });
   }
@@ -5232,7 +5232,7 @@ app.get("/api/batches/:batchId/classes", (req, res) => {
 });
 app.get("/api/batches/:batchId/recordings", (req, res) => {
   const { batchId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required. Please login to view recordings." });
   }
@@ -5248,7 +5248,7 @@ app.get("/api/batches/:batchId/recordings", (req, res) => {
 });
 app.get("/api/batches/:batchId/recordings/:recordingId/stream-ticket", (req, res) => {
   const { batchId, recordingId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required to stream recording." });
   }
@@ -5275,7 +5275,7 @@ app.get("/api/batches/:batchId/recordings/:recordingId/stream-ticket", (req, res
 });
 app.get("/api/classes/:classId", (req, res) => {
   const { classId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required." });
   }
@@ -5301,7 +5301,7 @@ app.get("/api/classes/:classId", (req, res) => {
 });
 app.post("/api/classes/:classId/join", (req, res) => {
   const { classId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -5348,7 +5348,7 @@ app.post("/api/classes/:classId/join", (req, res) => {
 });
 app.post("/api/classes/:classId/leave", (req, res) => {
   const { classId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   const { durationMinutes } = req.body;
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
   const att = attendanceRecords.find((a) => a.studentId === auth.userId && a.classId === classId);
@@ -5363,7 +5363,7 @@ app.post("/api/classes/:classId/leave", (req, res) => {
 });
 app.get("/api/classes/:classId/recording-token", (req, res) => {
   const { classId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required to watch recording." });
   }
@@ -5432,7 +5432,7 @@ app.get("/api/stream/recording/:token", (req, res) => {
 });
 app.get("/api/batches/:batchId/materials", (req, res) => {
   const { batchId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) return res.status(401).json({ error: "Authentication required." });
   if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
     return res.status(403).json({ error: "Access Denied: You are not authorized to access study materials for this batch." });
@@ -5445,7 +5445,7 @@ app.get("/api/batches/:batchId/materials", (req, res) => {
 });
 app.get("/api/batches/:batchId/assignments", (req, res) => {
   const { batchId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) return res.status(401).json({ error: "Authentication required." });
   if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
     return res.status(403).json({ error: "Access Denied: You are not authorized to access assignments for this batch." });
@@ -5459,7 +5459,7 @@ app.get("/api/batches/:batchId/assignments", (req, res) => {
 });
 app.post("/api/assignments/:assignmentId/submit", (req, res) => {
   const { assignmentId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   const { content } = req.body;
   if (!auth) return res.status(401).json({ error: "Authentication required." });
   if (!content || !content.trim()) return res.status(400).json({ error: "Submission content cannot be empty." });
@@ -5484,7 +5484,7 @@ app.post("/api/assignments/:assignmentId/submit", (req, res) => {
 });
 app.get("/api/batches/:batchId/announcements", (req, res) => {
   const { batchId } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) return res.status(401).json({ error: "Authentication required." });
   if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
     return res.status(403).json({ error: "Access Denied: You are not authorized to view announcements for this batch." });
@@ -6645,7 +6645,7 @@ app.post("/api/admin/conversations/:id/reply", async (req, res) => {
   res.json({ success: true, message: msgItem, dispatched });
 });
 app.post("/api/admin/hero-video/upload", async (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -6685,7 +6685,7 @@ app.post("/api/admin/hero-video/upload", async (req, res) => {
   });
 });
 app.post("/api/admin/hero-video/reset", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -6731,7 +6731,7 @@ app.get("/api/files/hero-video/:filename?", (req, res) => {
   }
 });
 app.post("/api/admin/logo/upload", async (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -6805,7 +6805,7 @@ app.post("/api/admin/logo/upload", async (req, res) => {
   }
 });
 app.post("/api/admin/logo/reset", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -6902,7 +6902,7 @@ app.get("/api/gallery", (req, res) => {
   }
 });
 app.get("/api/admin/gallery", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -6922,7 +6922,7 @@ app.get("/api/admin/gallery", (req, res) => {
   }
 });
 app.post("/api/admin/gallery/upload", async (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -7026,7 +7026,7 @@ app.post("/api/admin/gallery/upload", async (req, res) => {
   }
 });
 app.put("/api/admin/gallery/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -7049,7 +7049,7 @@ app.put("/api/admin/gallery/:id", (req, res) => {
   });
 });
 app.put("/api/admin/gallery/reorder", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -7071,7 +7071,7 @@ app.put("/api/admin/gallery/reorder", (req, res) => {
   });
 });
 app.delete("/api/admin/gallery/:id", async (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -7162,7 +7162,7 @@ app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
   res.status(404).send("Gallery image not found.");
 });
 app.post("/api/admissions/register", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   const isAdmin = auth && auth.role === "admin";
   const {
     name,
@@ -7393,7 +7393,7 @@ www.witslingo.com`;
   });
 });
 app.get("/api/student/admission-slip", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required" });
   }
@@ -7459,7 +7459,7 @@ www.witslingo.com`
   });
 });
 app.get("/api/admin/students", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Access Denied: Admin authorization required." });
   }
@@ -7471,7 +7471,7 @@ app.get("/api/admin/students", (req, res) => {
   res.json({ students: list, totalCount: list.length });
 });
 app.post("/api/admin/students/:id/resend-whatsapp", async (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Access Denied: Admin authorization required." });
   }
@@ -7507,7 +7507,7 @@ app.post("/api/admin/students/:id/resend-whatsapp", async (req, res) => {
   });
 });
 app.post("/api/admin/registrations/:id/resend-whatsapp", async (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Access Denied: Admin authorization required." });
   }
@@ -7543,7 +7543,7 @@ app.post("/api/admin/registrations/:id/resend-whatsapp", async (req, res) => {
   });
 });
 app.post("/api/admin/batches", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Access Denied: Admin authorization required." });
   }
@@ -7572,7 +7572,7 @@ app.post("/api/admin/batches", (req, res) => {
   res.json({ success: true, batch: newBatch, batches });
 });
 app.post("/api/admin/schedule-class", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Access Denied: Admin authorization required." });
   }
@@ -7614,7 +7614,7 @@ app.post("/api/admin/schedule-class", (req, res) => {
   res.json({ success: true, class: newClass });
 });
 app.post("/api/admin/classes/:classId/status", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Access Denied: Admin authorization required." });
   }
@@ -7662,7 +7662,7 @@ app.post("/api/admin/classes/:classId/status", (req, res) => {
   res.json({ success: true, class: cls });
 });
 app.post("/api/admin/recordings", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -7757,7 +7757,7 @@ app.get(["/api/materials", "/api/learning-resources"], (req, res) => {
   res.json({ materials: publicMaterials, resources: publicMaterials });
 });
 app.get(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -7768,7 +7768,7 @@ app.get(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) =>
   res.json({ materials: allMaterials, resources: allMaterials });
 });
 app.post(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -7857,7 +7857,7 @@ app.post(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) =
   res.json({ success: true, material: newMat, materials: sorted, resources: sorted });
 });
 app.put(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -7941,7 +7941,7 @@ app.put(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async
   res.json({ success: true, material: mat, materials: sorted, resources: sorted });
 });
 app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8004,7 +8004,7 @@ app.get("/api/admin/b2-status", async (req, res) => {
   }
 });
 app.post("/api/admin/upload-file", async (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8304,7 +8304,7 @@ app.get("/api/proxy-pdf", async (req, res) => {
   }
 });
 app.post("/api/admin/announcements", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8331,7 +8331,7 @@ app.get("/api/announcements", (req, res) => {
   res.json({ announcements });
 });
 app.put("/api/admin/announcements/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8357,7 +8357,7 @@ app.put("/api/admin/announcements/:id", (req, res) => {
   res.json({ success: true, announcement: announcements[annIndex], announcements });
 });
 app.delete("/api/admin/announcements/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8370,7 +8370,7 @@ app.delete("/api/admin/announcements/:id", (req, res) => {
   res.json({ success: true, announcements });
 });
 app.get("/api/admin/attendance", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8385,7 +8385,7 @@ app.get("/api/admin/attendance", (req, res) => {
   res.json({ attendance: list, totalCount: list.length });
 });
 app.delete("/api/admin/students/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8405,7 +8405,7 @@ app.delete("/api/admin/students/:id", (req, res) => {
   res.status(404).json({ error: "Student registration not found." });
 });
 app.put("/api/admin/students/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8417,7 +8417,7 @@ app.put("/api/admin/students/:id", (req, res) => {
   res.json({ success: true, student: reg });
 });
 app.put("/api/admin/batches/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8429,7 +8429,7 @@ app.put("/api/admin/batches/:id", (req, res) => {
   res.json({ success: true, batch, batches });
 });
 app.delete("/api/admin/batches/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8443,7 +8443,7 @@ app.delete("/api/admin/batches/:id", (req, res) => {
   res.status(404).json({ error: "Batch not found." });
 });
 app.put("/api/admin/classes/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8455,7 +8455,7 @@ app.put("/api/admin/classes/:id", (req, res) => {
   res.json({ success: true, class: cls, classes });
 });
 app.delete("/api/admin/classes/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8469,7 +8469,7 @@ app.delete("/api/admin/classes/:id", (req, res) => {
   res.status(404).json({ error: "Class not found." });
 });
 app.put("/api/admin/recordings/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8481,7 +8481,7 @@ app.put("/api/admin/recordings/:id", (req, res) => {
   res.json({ success: true, recording: rec, recordings });
 });
 app.delete("/api/admin/recordings/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8498,7 +8498,7 @@ app.get("/api/cms/content", (req, res) => {
   res.json({ content: cmsContent });
 });
 app.post("/api/cms/content", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8552,7 +8552,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   });
 });
 app.get("/api/courses", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   const includeAll = req.query.includeAll === "true" || auth && auth.role === "admin";
   if (includeAll) {
     return res.json({ courses: cmsContent.courses });
@@ -8561,7 +8561,7 @@ app.get("/api/courses", (req, res) => {
   res.json({ courses: publishedCourses });
 });
 app.post("/api/courses", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required to create courses." });
   }
@@ -8604,7 +8604,7 @@ app.post("/api/courses", (req, res) => {
   res.status(201).json({ success: true, course: newCourse, courses: cmsContent.courses });
 });
 app.put("/api/courses/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required to edit courses." });
   }
@@ -8631,7 +8631,7 @@ app.put("/api/courses/:id", (req, res) => {
   res.json({ success: true, course: updatedCourse, courses: cmsContent.courses });
 });
 app.patch("/api/courses/:id/publish", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
@@ -8646,7 +8646,7 @@ app.patch("/api/courses/:id/publish", (req, res) => {
   res.json({ success: true, course: currentCourse, isPublished: newStatus, courses: cmsContent.courses });
 });
 app.delete("/api/courses/:id", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required to delete courses." });
   }
@@ -8662,7 +8662,7 @@ app.post("/api/courses", (req, res, next) => {
   next();
 });
 app.get("/api/reviews", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   const isAdmin = auth && auth.role === "admin";
   const all = cmsContent.testimonials || [];
   if (isAdmin) {
@@ -8705,7 +8705,7 @@ app.post("/api/reviews", (req, res) => {
 app.put("/api/reviews/:id", (req, res) => {
   const { id } = req.params;
   const { studentName, courseName, courseBatch, rating, testimonial, city, authorKey, isApproved } = req.body;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   const isAdmin = auth && auth.role === "admin";
   if (!Array.isArray(cmsContent.testimonials)) {
     cmsContent.testimonials = [];
@@ -8735,7 +8735,7 @@ app.put("/api/reviews/:id", (req, res) => {
 });
 app.delete("/api/reviews/:id", (req, res) => {
   const { id } = req.params;
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   const isAdmin = auth && auth.role === "admin";
   const authorKey = req.body.authorKey || req.headers["x-author-key"] || req.query.authorKey;
   if (!Array.isArray(cmsContent.testimonials)) {
@@ -8755,7 +8755,7 @@ app.delete("/api/reviews/:id", (req, res) => {
   res.json({ success: true, message: "Review deleted successfully.", deleted });
 });
 app.get("/api/admin/notifications", (req, res) => {
-  const auth = verifyAuthToken(req.headers.authorization);
+  const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin access required." });
   }

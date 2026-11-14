@@ -1883,7 +1883,7 @@ function loadAllPersistedData(): void {
     // 3. Batches
     if (fs.existsSync(BATCHES_STORAGE_FILE)) {
       const data = JSON.parse(fs.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         batches.length = 0;
         batches.push(...data);
         console.log(`[Persistence] Loaded ${batches.length} batches.`);
@@ -1896,7 +1896,7 @@ function loadAllPersistedData(): void {
     if (fs.existsSync(CLASSES_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(CLASSES_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           classes.length = 0;
           classes.push(...data);
           console.log(`[Persistence] Loaded ${classes.length} classes.`);
@@ -1912,7 +1912,7 @@ function loadAllPersistedData(): void {
     if (fs.existsSync(RECORDINGS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(RECORDINGS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           recordings.length = 0;
           recordings.push(...data);
           console.log(`[Persistence] Loaded ${recordings.length} recordings.`);
@@ -1927,7 +1927,7 @@ function loadAllPersistedData(): void {
     // 4. Payments
     if (fs.existsSync(PAYMENTS_STORAGE_FILE)) {
       const data = JSON.parse(fs.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         payments.length = 0;
         payments.push(...data);
         console.log(`[Persistence] Loaded ${payments.length} verified payment transactions.`);
@@ -1990,7 +1990,7 @@ function loadAllPersistedData(): void {
     // 6. Announcements
     if (fs.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
       const data = JSON.parse(fs.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         announcements.length = 0;
         announcements.push(...data);
         console.log(`[Persistence] Loaded ${announcements.length} announcements.`);
@@ -2004,7 +2004,7 @@ function loadAllPersistedData(): void {
     if (fs.existsSync(MATERIALS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           for (const m of data) {
             if (m.resourceType === "youtube" || m.fileType === "youtube") {
               if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
@@ -2030,7 +2030,7 @@ function loadAllPersistedData(): void {
     if (fs.existsSync(GALLERY_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(GALLERY_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           galleryItems.length = 0;
           galleryItems.push(...data);
           galleryLoaded = true;
@@ -3080,7 +3080,7 @@ try {
 
   // 3. BATCHES: List Batches (Public or Authenticated)
   app.get("/api/batches", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (auth && auth.role === "admin") {
       // Admin gets all batches with full stats
       return res.json({ batches });
@@ -3098,7 +3098,7 @@ try {
   // CRITICAL REQUIREMENT: Strict authorization at backend/database level.
   app.get("/api/batches/:batchId/classes", (req, res) => {
     const { batchId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
 
     if (!auth) {
       return res.status(401).json({ error: "Authentication required. Please login to access batch classes." });
@@ -3120,7 +3120,7 @@ try {
   // 4b. BATCH RECORDINGS (Authorized for Enrolled Students & Admin)
   app.get("/api/batches/:batchId/recordings", (req, res) => {
     const { batchId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
 
     if (!auth) {
       return res.status(401).json({ error: "Authentication required. Please login to view recordings." });
@@ -3141,7 +3141,7 @@ try {
   // 4c. BATCH RECORDING STREAM TICKET (Generates signed expiring playback token)
   app.get("/api/batches/:batchId/recordings/:recordingId/stream-ticket", (req, res) => {
     const { batchId, recordingId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
 
     if (!auth) {
       return res.status(401).json({ error: "Authentication required to stream recording." });
@@ -3175,7 +3175,7 @@ try {
   // 5. CLASS DETAIL & ACCESS VERIFICATION
   app.get("/api/classes/:classId", (req, res) => {
     const { classId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
 
     if (!auth) {
       return res.status(401).json({ error: "Authentication required." });
@@ -3209,7 +3209,7 @@ try {
   // 6. ATTENDANCE: Join Class (Logs Attendance on Server)
   app.post("/api/classes/:classId/join", (req, res) => {
     const { classId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
 
     if (!auth) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -3265,7 +3265,7 @@ try {
   // 7. ATTENDANCE: Leave Class (Updates duration)
   app.post("/api/classes/:classId/leave", (req, res) => {
     const { classId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     const { durationMinutes } = req.body;
 
     if (!auth) return res.status(401).json({ error: "Unauthorized" });
@@ -3286,7 +3286,7 @@ try {
   // CRITICAL REQUIREMENT: Strict verification at backend level. Expiring signed token.
   app.get("/api/classes/:classId/recording-token", (req, res) => {
     const { classId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
 
     if (!auth) {
       return res.status(401).json({ error: "Authentication required to watch recording." });
@@ -3373,7 +3373,7 @@ try {
   // 10. BATCH MATERIALS (Authorized)
   app.get("/api/batches/:batchId/materials", (req, res) => {
     const { batchId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
 
     if (!auth) return res.status(401).json({ error: "Authentication required." });
     if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
@@ -3392,7 +3392,7 @@ try {
   // 11. BATCH ASSIGNMENTS (Authorized)
   app.get("/api/batches/:batchId/assignments", (req, res) => {
     const { batchId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
 
     if (!auth) return res.status(401).json({ error: "Authentication required." });
     if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
@@ -3411,7 +3411,7 @@ try {
   // 12. SUBMIT ASSIGNMENT
   app.post("/api/assignments/:assignmentId/submit", (req, res) => {
     const { assignmentId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     const { content } = req.body;
 
     if (!auth) return res.status(401).json({ error: "Authentication required." });
@@ -3444,7 +3444,7 @@ try {
   // 13. BATCH ANNOUNCEMENTS (Authorized)
   app.get("/api/batches/:batchId/announcements", (req, res) => {
     const { batchId } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
 
     if (!auth) return res.status(401).json({ error: "Authentication required." });
     if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
@@ -4854,7 +4854,7 @@ www.witslingo.com`;
   // =========================================================================
 
   app.post("/api/admin/hero-video/upload", async (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -4904,7 +4904,7 @@ www.witslingo.com`;
   });
 
   app.post("/api/admin/hero-video/reset", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -4960,7 +4960,7 @@ www.witslingo.com`;
   // =========================================================================
 
   app.post("/api/admin/logo/upload", async (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -5042,7 +5042,7 @@ www.witslingo.com`;
   });
 
   app.post("/api/admin/logo/reset", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -5161,7 +5161,7 @@ www.witslingo.com`;
 
   // 2. Admin Gallery Items (Includes Drafts & Reorder controls)
   app.get("/api/admin/gallery", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -5185,7 +5185,7 @@ www.witslingo.com`;
 
   // 3. Admin Gallery Upload (Single or Multi-file directly to Backblaze B2)
   app.post("/api/admin/gallery/upload", async (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -5312,7 +5312,7 @@ www.witslingo.com`;
 
   // 4. Admin Update Gallery Item
   app.put("/api/admin/gallery/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -5341,7 +5341,7 @@ www.witslingo.com`;
 
   // 5. Admin Batch Reorder Gallery Items
   app.put("/api/admin/gallery/reorder", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -5369,7 +5369,7 @@ www.witslingo.com`;
 
   // 6. Admin Delete Gallery Item (Safe Persistence First, then B2 cleanup)
   app.delete("/api/admin/gallery/:id", async (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -5477,7 +5477,7 @@ www.witslingo.com`;
 
   // 14. ADMISSION & REGISTRATION (Direct Admin Registration or Standard Entry)
   app.post("/api/admissions/register", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     const isAdmin = auth && auth.role === "admin";
 
     const {
@@ -5741,7 +5741,7 @@ www.witslingo.com`;
 
   // 14b. STUDENT: Get Own Admission Confirmation Slip & WhatsApp Links
   app.get("/api/student/admission-slip", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth) {
       return res.status(401).json({ error: "Authentication required" });
     }
@@ -5817,7 +5817,7 @@ www.witslingo.com`
 
   // 15. ADMIN: List Registered Students (Batch-wise filter support)
   app.get("/api/admin/students", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
     }
@@ -5833,7 +5833,7 @@ www.witslingo.com`
 
   // 15b. ADMIN: Resend WhatsApp Enrollment Confirmation (Idempotent / Forced Retry)
   app.post("/api/admin/students/:id/resend-whatsapp", async (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
     }
@@ -5876,7 +5876,7 @@ www.witslingo.com`
 
   // Alias for /api/admin/registrations/:id/resend-whatsapp
   app.post("/api/admin/registrations/:id/resend-whatsapp", async (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
     }
@@ -5919,7 +5919,7 @@ www.witslingo.com`
 
   // 16. ADMIN: Batch Management (Create Batch)
   app.post("/api/admin/batches", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
     }
@@ -5953,7 +5953,7 @@ www.witslingo.com`
 
   // 17. ADMIN: Schedule New Class or Toggle Live
   app.post("/api/admin/schedule-class", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
     }
@@ -6003,7 +6003,7 @@ www.witslingo.com`
 
   // 18. ADMIN: Toggle Class Status (Live / Completed / Upcoming) & Auto-recording
   app.post("/api/admin/classes/:classId/status", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
     }
@@ -6061,7 +6061,7 @@ www.witslingo.com`
 
   // 19. ADMIN: Upload or Attach Manual Recording
   app.post("/api/admin/recordings", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6179,7 +6179,7 @@ www.witslingo.com`
 
   // 20b. ADMIN: Get All Study Materials & Learning Resources
   app.get(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6192,7 +6192,7 @@ www.witslingo.com`
 
   // 20c. ADMIN: Create Learning Resource (PDF or YouTube)
   app.post(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6271,7 +6271,7 @@ www.witslingo.com`
 
   // 20d. ADMIN: Update Learning Resource (PDF / YouTube / B2 references & Permissions)
   app.put(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6343,7 +6343,7 @@ www.witslingo.com`
 
   // 20e. ADMIN: Delete Learning Resource with B2 Object Cleanup
   app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6415,7 +6415,7 @@ www.witslingo.com`
 
   // 20g. ADMIN: Upload PDF / Study Material directly to Backblaze B2
   app.post("/api/admin/upload-file", async (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6786,7 +6786,7 @@ www.witslingo.com`
 
   // 21. ADMIN: Post Batch Announcement
   app.post("/api/admin/announcements", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6820,7 +6820,7 @@ www.witslingo.com`
 
   // 21c. ADMIN: Update Announcement
   app.put("/api/admin/announcements/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6852,7 +6852,7 @@ www.witslingo.com`
 
   // 21d. ADMIN: Delete Announcement
   app.delete("/api/admin/announcements/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6868,7 +6868,7 @@ www.witslingo.com`
 
   // 22. ADMIN: View Attendance Logs (Batch-wise)
   app.get("/api/admin/attendance", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6887,7 +6887,7 @@ www.witslingo.com`
 
   // DELETE Student / Admission
   app.delete("/api/admin/students/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6910,7 +6910,7 @@ www.witslingo.com`
 
   // UPDATE Student / Admission
   app.put("/api/admin/students/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6925,7 +6925,7 @@ www.witslingo.com`
 
   // UPDATE Batch
   app.put("/api/admin/batches/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6940,7 +6940,7 @@ www.witslingo.com`
 
   // DELETE Batch
   app.delete("/api/admin/batches/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6956,7 +6956,7 @@ www.witslingo.com`
 
   // UPDATE Class
   app.put("/api/admin/classes/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6971,7 +6971,7 @@ www.witslingo.com`
 
   // DELETE Class
   app.delete("/api/admin/classes/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -6987,7 +6987,7 @@ www.witslingo.com`
 
   // UPDATE Recording
   app.put("/api/admin/recordings/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -7002,7 +7002,7 @@ www.witslingo.com`
 
   // DELETE Recording
   app.delete("/api/admin/recordings/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -7024,7 +7024,7 @@ www.witslingo.com`
   });
 
   app.post("/api/cms/content", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -7088,7 +7088,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
 
   // 24B. COURSES MANAGEMENT & PUBLICATION CMS (Edit anytime, past or post publication)
   app.get("/api/courses", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     const includeAll = req.query.includeAll === "true" || (auth && auth.role === "admin");
     
     if (includeAll) {
@@ -7100,7 +7100,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   });
 
   app.post("/api/courses", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required to create courses." });
     }
@@ -7147,7 +7147,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   });
 
   app.put("/api/courses/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required to edit courses." });
     }
@@ -7179,7 +7179,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   });
 
   app.patch("/api/courses/:id/publish", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
@@ -7197,7 +7197,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   });
 
   app.delete("/api/courses/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required to delete courses." });
     }
@@ -7223,7 +7223,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   // =========================================================================
 
   app.get("/api/reviews", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     const isAdmin = auth && auth.role === "admin";
     const all = cmsContent.testimonials || [];
     if (isAdmin) {
@@ -7273,7 +7273,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   app.put("/api/reviews/:id", (req, res) => {
     const { id } = req.params;
     const { studentName, courseName, courseBatch, rating, testimonial, city, authorKey, isApproved } = req.body;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     const isAdmin = auth && auth.role === "admin";
 
     if (!Array.isArray(cmsContent.testimonials)) {
@@ -7311,7 +7311,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
 
   app.delete("/api/reviews/:id", (req, res) => {
     const { id } = req.params;
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     const isAdmin = auth && auth.role === "admin";
     const authorKey = req.body.authorKey || req.headers["x-author-key"] || req.query.authorKey;
 
@@ -7338,7 +7338,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   });
 
   app.get("/api/admin/notifications", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+    const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin access required." });
     }

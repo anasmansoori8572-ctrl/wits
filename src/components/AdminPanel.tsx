@@ -125,7 +125,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [classes, setClasses] = useState<ClassSession[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
-    if (externalMaterials && externalMaterials.length > 0) return externalMaterials;
+    if (Array.isArray(externalMaterials)) return externalMaterials;
     try {
       const saved = localStorage.getItem('wits_lingo_materials');
       if (saved) return JSON.parse(saved);
@@ -134,7 +134,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   });
 
   useEffect(() => {
-    if (externalMaterials && externalMaterials.length > 0) {
+    if (Array.isArray(externalMaterials)) {
       setMaterials(externalMaterials);
     }
   }, [externalMaterials]);
@@ -244,7 +244,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   useScrollLock(isAnyAdminModalOpen);
 
   useEffect(() => {
-    if (announcements && announcements.length > 0) {
+    if (Array.isArray(announcements)) {
       setLocalAnnouncements(announcements);
     }
   }, [announcements]);
@@ -1645,12 +1645,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleDeleteMaterial = (matId: string, title: string) => {
+    const targetMat = materials.find(m => m.id === matId);
+    const isVideo = targetMat?.resourceType === 'youtube' || targetMat?.fileType === 'youtube' || Boolean(targetMat?.youtubeUrl);
+    const itemLabel = isVideo ? 'video lesson' : 'learning resource';
+
     setDeleteModal({
       isOpen: true,
-      title: 'Delete Learning Resource',
+      title: isVideo ? 'Delete Video Lesson' : 'Delete Learning Resource',
       itemName: title,
-      itemType: 'learning resource',
-      description: `Are you sure you want to delete "${title}"? Any associated cloud files in Backblaze B2 will be permanently removed.`,
+      itemType: itemLabel,
+      description: isVideo
+        ? `Are you sure you want to delete the video lesson "${title}"? It will be permanently removed from the website and database.`
+        : `Are you sure you want to delete "${title}"? Any associated cloud files in Backblaze B2 will be permanently removed.`,
       onConfirm: async () => {
         let updatedList = materials.filter(m => m.id !== matId);
         try {
@@ -1663,9 +1669,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             if (data.materials && Array.isArray(data.materials)) {
               updatedList = data.materials;
             }
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            triggerFeedback(errData.error || `Failed to delete resource (${res.status})`);
+            return;
           }
         } catch (e) {
           console.warn('Failed to delete material on backend:', e);
+          triggerFeedback('Network error while deleting resource.');
+          return;
         }
 
         setMaterials(updatedList);
@@ -1676,7 +1688,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
         } catch (e) {}
 
-        triggerFeedback(`Learning resource deleted.`);
+        triggerFeedback(`${isVideo ? 'Video lesson' : 'Learning resource'} deleted permanently.`);
       }
     });
   };
