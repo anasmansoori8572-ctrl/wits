@@ -9,7 +9,6 @@ import { StatsSection } from './components/StatsSection';
 import { WhatWeTeach } from './components/WhatWeTeach';
 import { CoursesSection } from './components/CoursesSection';
 import { YouTubeVideoSection } from './components/YouTubeVideoSection';
-import { CommunitySection } from './components/CommunitySection';
 import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
 
@@ -798,12 +797,6 @@ export default function App() {
           <YouTubeVideoSection
             materials={materials}
             siteSettings={siteSettings}
-          />
-
-          {/* 8. Community: Learn English Every Day */}
-          <CommunitySection
-            siteSettings={siteSettings}
-            onJoinNewJourney={() => handleOpenAdmission()}
           />
 
           {/* 13. Contact Section */}
