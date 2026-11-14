@@ -165,6 +165,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showAddYouTubeModal, setShowAddYouTubeModal] = useState(false);
   const [isFetchingYtMetadata, setIsFetchingYtMetadata] = useState(false);
   const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
+  const [uploadingThumbnailVideoId, setUploadingThumbnailVideoId] = useState<string | null>(null);
   const [showAddTestimonialModal, setShowAddTestimonialModal] = useState(false);
   const [editingTestimonial, setEditingTestimonial] = useState<TestimonialData | null>(null);
 
@@ -1213,6 +1214,122 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
 
     triggerFeedback(newStatus ? `"${mat.title}" published to website.` : `"${mat.title}" unpublished (Draft mode).`);
+  };
+
+  const handleDirectUploadVideoThumbnail = async (mat: StudyMaterial, file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file (PNG, JPG, WEBP).');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      alert('Thumbnail image size exceeds 15MB. Please choose a smaller image.');
+      return;
+    }
+    setUploadingThumbnailVideoId(mat.id);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataBase64 = e.target?.result as string;
+        try {
+          const res = await fetch('/api/admin/upload-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+              filename: file.name,
+              dataBase64,
+              mimeType: file.type
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const uploadedUrl = data.url || data.b2Url;
+
+            // Persist to backend
+            const updateRes = await fetch(`/api/admin/materials/${mat.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({
+                thumbnailUrl: uploadedUrl,
+                b2ThumbnailId: data.b2FileId,
+                b2ThumbnailName: data.b2FileName
+              })
+            });
+
+            if (updateRes.ok) {
+              const updatedMat: StudyMaterial = {
+                ...mat,
+                thumbnailUrl: uploadedUrl,
+                b2ThumbnailId: data.b2FileId,
+                b2ThumbnailName: data.b2FileName
+              };
+              const updatedList = materials.map(m => m.id === mat.id ? updatedMat : m);
+              setMaterials(updatedList);
+              if (onUpdateMaterials) onUpdateMaterials(updatedList);
+              try {
+                localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
+                window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
+                window.dispatchEvent(new Event('storage'));
+              } catch (err) {}
+              triggerFeedback(`Custom thumbnail uploaded to Backblaze B2 for "${mat.title}"!`);
+            } else {
+              alert('Failed to save thumbnail in database.');
+            }
+          } else {
+            alert('Failed to upload thumbnail to Backblaze B2. Please try again.');
+          }
+        } catch (uploadErr) {
+          console.error('Error during thumbnail API upload:', uploadErr);
+          alert('Network or server error during thumbnail upload.');
+        } finally {
+          setUploadingThumbnailVideoId(null);
+        }
+      };
+      reader.onerror = () => {
+        alert('Could not read image file.');
+        setUploadingThumbnailVideoId(null);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn('Direct thumbnail upload error:', err);
+      setUploadingThumbnailVideoId(null);
+    }
+  };
+
+  const handleResetVideoThumbnail = async (mat: StudyMaterial) => {
+    const vidId = extractYouTubeVideoId(mat.youtubeUrl);
+    const defaultThumb = vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : '';
+
+    try {
+      const res = await fetch(`/api/admin/materials/${mat.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          thumbnailUrl: defaultThumb,
+          b2ThumbnailId: '',
+          b2ThumbnailName: ''
+        })
+      });
+      if (res.ok) {
+        const updatedMat: StudyMaterial = {
+          ...mat,
+          thumbnailUrl: defaultThumb,
+          b2ThumbnailId: '',
+          b2ThumbnailName: ''
+        };
+        const updatedList = materials.map(m => m.id === mat.id ? updatedMat : m);
+        setMaterials(updatedList);
+        if (onUpdateMaterials) onUpdateMaterials(updatedList);
+        try {
+          localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
+          window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
+          window.dispatchEvent(new Event('storage'));
+        } catch (err) {}
+        triggerFeedback(`Reset "${mat.title}" to default YouTube thumbnail.`);
+      }
+    } catch (err) {
+      console.warn('Error resetting thumbnail:', err);
+    }
   };
 
   const handleAddMaterial = async (e: React.FormEvent) => {
@@ -3132,16 +3249,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   <Youtube className="w-8 h-8 text-red-500" />
                                 </div>
                               )}
-                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
                                 <div className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center shadow-md">
                                   <Play className="w-4 h-4 fill-white ml-0.5" />
                                 </div>
                               </div>
                               {mat.duration && (
-                                <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-mono text-white">
+                                <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-mono text-white pointer-events-none">
                                   {mat.duration}
                                 </span>
                               )}
+
+                              {/* Click-to-upload Overlay on Thumbnail */}
+                              <label
+                                className={`absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-opacity backdrop-blur-2xs gap-1 p-2 text-center ${
+                                  uploadingThumbnailVideoId === mat.id ? 'opacity-100 pointer-events-none' : ''
+                                }`}
+                                title="Click to upload/change thumbnail image"
+                              >
+                                {uploadingThumbnailVideoId === mat.id ? (
+                                  <>
+                                    <RefreshCw className="w-5 h-5 animate-spin text-purple-300" />
+                                    <span className="text-[11px] font-bold">Uploading to B2...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UploadCloud className="w-5 h-5 text-purple-300" />
+                                    <span className="text-[11px] font-bold">Change Thumbnail</span>
+                                    <span className="text-[9px] text-purple-200">Upload to Backblaze B2</span>
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  disabled={uploadingThumbnailVideoId === mat.id}
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleDirectUploadVideoThumbnail(mat, file);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </label>
                             </div>
 
                             <div className="flex items-center justify-between gap-1 text-[11px] font-bold">
@@ -3156,6 +3305,70 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <div>
                               <h4 className="font-bold text-sm text-slate-900 line-clamp-2">{mat.title}</h4>
                               <p className="text-xs text-slate-600 line-clamp-2 mt-1">{mat.description}</p>
+                            </div>
+
+                            {/* Dedicated Thumbnail Upload Control Row */}
+                            <div className="p-2.5 rounded-xl bg-purple-50/60 border border-purple-100 space-y-2">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                                  <ImageIcon className="w-3.5 h-3.5 text-[#4A1D96]" />
+                                  <span>Thumbnail:</span>
+                                </span>
+                                {mat.b2ThumbnailId ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold">
+                                    Custom (B2)
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-medium">
+                                    YouTube Auto
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <label
+                                  className={`flex-1 py-1.5 px-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                    uploadingThumbnailVideoId === mat.id
+                                      ? 'bg-purple-100 text-purple-700 border-purple-300 pointer-events-none'
+                                      : 'bg-white hover:bg-[#4A1D96] text-[#4A1D96] hover:text-white border-purple-200 shadow-2xs hover:shadow-xs'
+                                  }`}
+                                  title="Upload custom thumbnail directly from computer to Backblaze B2"
+                                >
+                                  {uploadingThumbnailVideoId === mat.id ? (
+                                    <>
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                      <span>Uploading to B2...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UploadCloud className="w-3.5 h-3.5" />
+                                      <span>{mat.b2ThumbnailId ? 'Change Thumbnail' : 'Upload Thumbnail (B2)'}</span>
+                                    </>
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    disabled={uploadingThumbnailVideoId === mat.id}
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handleDirectUploadVideoThumbnail(mat, file);
+                                      e.target.value = '';
+                                    }}
+                                  />
+                                </label>
+
+                                {mat.b2ThumbnailId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResetVideoThumbnail(mat)}
+                                    className="py-1.5 px-2.5 rounded-xl border border-slate-200 hover:border-amber-300 bg-white hover:bg-amber-50 text-slate-500 hover:text-amber-700 text-[11px] font-semibold transition-colors cursor-pointer shadow-2xs"
+                                    title="Reset to default YouTube video thumbnail"
+                                  >
+                                    Reset
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             {/* Status & Thumbnail Tag */}
@@ -3173,16 +3386,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 {isPub ? <Eye className="w-2.5 h-2.5 text-emerald-600" /> : <EyeOff className="w-2.5 h-2.5 text-amber-600" />}
                                 <span>{isPub ? 'Published' : 'Draft'}</span>
                               </button>
-
-                              {mat.b2ThumbnailId ? (
-                                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
-                                  Custom B2 Thumbnail
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium">
-                                  Auto YouTube Thumbnail
-                                </span>
-                              )}
                             </div>
                           </div>
 

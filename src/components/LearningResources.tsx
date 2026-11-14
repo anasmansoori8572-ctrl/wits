@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, 
   Youtube, 
@@ -17,6 +17,7 @@ import {
   ShieldCheck, 
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   Filter
 } from 'lucide-react';
 import { ResourceItem, SiteSettings, StudyMaterial } from '../types';
@@ -95,6 +96,17 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
 
   // Video Section state
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const videoScrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollVideos = (direction: 'left' | 'right') => {
+    if (videoScrollRef.current) {
+      const scrollAmount = 340;
+      videoScrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
   useScrollLock(Boolean(selectedVideo));
 
   // Resources state
@@ -507,7 +519,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
             <div className="bg-[#FAF8FD] rounded-3xl p-6 sm:p-9 border border-purple-100/90 shadow-xs">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
                 <div className="space-y-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-700 text-xs font-bold uppercase tracking-wider">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-[#4A1D96] text-xs font-bold uppercase tracking-wider border border-purple-200/80">
                     <Youtube className="w-3.5 h-3.5 fill-red-600 text-red-600" />
                     <span>Official Video Channel</span>
                   </div>
@@ -519,23 +531,47 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                   </p>
                 </div>
 
-                <a
-                  href={youtubeUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.open(youtubeUrl, '_blank', 'noopener,noreferrer');
-                  }}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-red-600/25 transition-all self-start lg:self-auto cursor-pointer"
-                >
-                  <Youtube className="w-4 h-4 fill-white" />
-                  <span>Watch on YouTube</span>
-                  <ChevronRight className="w-4 h-4" />
-                </a>
+                <div className="flex items-center gap-3 self-start lg:self-auto flex-wrap">
+                  {/* Carousel Left / Right Navigation Arrows */}
+                  {displayVideos.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => scrollVideos('left')}
+                        aria-label="Previous videos"
+                        className="w-10 h-10 rounded-full border border-purple-200 bg-white hover:bg-[#4A1D96] hover:text-white text-[#281648] shadow-xs flex items-center justify-center transition-all cursor-pointer hover:shadow-md hover:border-[#4A1D96]"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scrollVideos('right')}
+                        aria-label="Next videos"
+                        className="w-10 h-10 rounded-full border border-purple-200 bg-white hover:bg-[#4A1D96] hover:text-white text-[#281648] shadow-xs flex items-center justify-center transition-all cursor-pointer hover:shadow-md hover:border-[#4A1D96]"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
+
+                  <a
+                    href={youtubeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(youtubeUrl, '_blank', 'noopener,noreferrer');
+                    }}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-red-600/25 transition-all cursor-pointer"
+                  >
+                    <Youtube className="w-4 h-4 fill-white" />
+                    <span>Visit YouTube Channel</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </a>
+                </div>
               </div>
 
-              {/* Dynamic Video Cards Grid */}
+              {/* Dynamic Video Cards Carousel (Synthesia Portrait Story Card Design in Purple Brand Theme) */}
               {displayVideos.length === 0 ? (
                 <div className="text-center py-12 px-4 bg-white rounded-2xl border border-dashed border-purple-200">
                   <Youtube className="w-12 h-12 text-red-500/60 mx-auto mb-3" />
@@ -558,78 +594,92 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                   </a>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4.5">
+                <div
+                  ref={videoScrollRef}
+                  className="flex gap-5 sm:gap-6 overflow-x-auto pb-6 pt-2 px-1 scroll-smooth scrollbar-none snap-x snap-mandatory"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
+                >
                   {displayVideos.map((video) => (
                     <a
                       key={video.id}
                       href={video.youtubeUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="group bg-white rounded-2xl p-4 border border-slate-200/80 hover:border-purple-300 shadow-xs hover:shadow-lg hover:shadow-purple-900/10 transition-all duration-300 flex flex-col justify-between cursor-pointer transform hover:-translate-y-1 block no-underline text-inherit focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        window.open(video.youtubeUrl, '_blank', 'noopener,noreferrer');
+                      }}
+                      className="group relative flex-shrink-0 w-[285px] sm:w-[320px] h-[460px] sm:h-[490px] rounded-3xl overflow-hidden shadow-md hover:shadow-2xl hover:shadow-purple-950/30 border border-purple-200/50 hover:border-purple-400 transition-all duration-300 flex flex-col justify-between cursor-pointer block no-underline text-inherit snap-start transform hover:-translate-y-1.5 focus:outline-none focus:ring-2 focus:ring-[#4A1D96]"
                     >
-                      <div className="space-y-3">
-                        {/* Video Thumbnail */}
-                        <div className={`relative aspect-video rounded-xl bg-gradient-to-br ${video.thumbnailBg || 'from-purple-900 via-indigo-900 to-purple-950'} p-3 flex flex-col justify-between overflow-hidden shadow-inner`}>
-                          {video.thumbnailUrl && (
-                            <img
-                              src={video.thumbnailUrl}
-                              alt={video.title}
-                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              loading="lazy"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                              }}
-                            />
-                          )}
-                          {/* Shading overlay */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/40 group-hover:from-black/80 transition-colors" />
+                      {/* 1. Full-bleed Thumbnail Image */}
+                      {video.thumbnailUrl ? (
+                        <img
+                          src={video.thumbnailUrl}
+                          alt={video.title}
+                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : null}
 
-                          <div className="relative z-10 flex items-center justify-between">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-black/60 text-white backdrop-blur-xs border border-white/10">
-                              {video.category}
-                            </span>
-                            {video.duration && (
-                              <span className="text-[10px] font-mono text-white/95 bg-black/60 px-1.5 py-0.5 rounded backdrop-blur-xs border border-white/10 flex items-center gap-1">
-                                <Clock className="w-2.5 h-2.5" />
-                                {video.duration}
-                              </span>
-                            )}
-                          </div>
+                      {/* Fallback gradient if no image */}
+                      <div className={`absolute inset-0 bg-gradient-to-br ${video.thumbnailBg || 'from-[#281648] via-[#3C166D] to-[#12072B]'} ${video.thumbnailUrl ? '-z-10' : ''} flex items-center justify-center`}>
+                        <Youtube className="w-16 h-16 text-purple-300/30" />
+                      </div>
 
-                          <div className="relative z-10 flex items-center justify-center my-auto py-2">
-                            <div className="w-11 h-11 rounded-full bg-red-600 group-hover:bg-red-500 text-white flex items-center justify-center shadow-xl group-hover:scale-110 transition-all duration-200 ring-4 ring-white/20">
-                              <Play className="w-5 h-5 fill-white ml-0.5" />
-                            </div>
-                          </div>
+                      {/* 2. Sleek Theme Shading Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/35 group-hover:via-black/35 transition-colors" />
+                      <div className="absolute inset-0 bg-purple-950/15 group-hover:bg-purple-950/25 transition-colors" />
 
-                          <div className="relative z-10 flex items-center justify-between text-[10px] text-white/90 font-medium drop-shadow-sm">
-                            <span className="flex items-center gap-1">
-                              <Youtube className="w-3 h-3 text-red-500 fill-red-500" />
-                              Wits Lingo
-                            </span>
-                            {video.views && <span>{video.views}</span>}
-                          </div>
-                        </div>
+                      {/* 3. Top Badges */}
+                      <div className="relative z-10 p-5 flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold px-3 py-1 rounded-full bg-black/60 text-purple-200 backdrop-blur-md border border-purple-400/30 shadow-xs flex items-center gap-1.5">
+                          <Sparkles className="w-3 h-3 text-purple-300" />
+                          <span>{video.category}</span>
+                        </span>
 
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-bold text-[#4A1D96] uppercase tracking-wider block">
-                            {video.category}
-                          </span>
-                          <h4 className="font-['Outfit'] font-bold text-sm text-slate-900 group-hover:text-[#4A1D96] transition-colors line-clamp-2 leading-snug">
-                            {video.title}
-                          </h4>
-                          <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                            {video.description}
-                          </p>
+                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-black/60 text-white backdrop-blur-md border border-white/20 shadow-xs flex items-center gap-1.5">
+                          <Youtube className="w-3.5 h-3.5 fill-red-500 text-red-500" />
+                          <span>Wits Lingo</span>
+                        </span>
+                      </div>
+
+                      {/* 4. Center Glowing Play Button */}
+                      <div className="relative z-10 flex items-center justify-center my-auto py-2">
+                        <div className="w-14 h-14 rounded-full bg-white text-[#281648] flex items-center justify-center shadow-2xl group-hover:scale-110 group-hover:bg-purple-50 transition-all duration-300 ring-4 ring-white/30 group-hover:ring-purple-400/50 backdrop-blur-xs">
+                          <Play className="w-6 h-6 fill-[#281648] text-[#281648] ml-0.5" />
                         </div>
                       </div>
 
-                      <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-red-600 group-hover:text-red-700">
-                        <span className="flex items-center gap-1.5">
-                          <Youtube className="w-3.5 h-3.5 fill-red-600 text-red-600" />
+                      {/* 5. Bottom Dark Vignette Content */}
+                      <div className="relative z-10 p-5 sm:p-6 space-y-3 mt-auto bg-gradient-to-t from-black/95 via-black/80 to-transparent rounded-b-3xl">
+                        <h4 className="font-['Outfit'] font-bold text-base sm:text-lg text-white leading-snug line-clamp-2 drop-shadow-sm group-hover:text-purple-200 transition-colors">
+                          “{video.title}”
+                        </h4>
+
+                        <div className="flex items-center gap-2 text-xs text-purple-200/90 font-medium flex-wrap">
+                          <span>Ziyaur Rehman Zia</span>
+                          <span>•</span>
+                          <span>Lead Mentor</span>
+                          {video.duration && (
+                            <>
+                              <span>•</span>
+                              <span className="flex items-center gap-1 font-mono text-white/95">
+                                <Clock className="w-3 h-3" />
+                                {video.duration}
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        {/* 6. White Pill Button (Synthesia "Play story" style in Wits Lingo theme) */}
+                        <div className="w-full py-2.5 px-4 rounded-full bg-white group-hover:bg-purple-50 text-[#281648] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg group-hover:shadow-white/20 transition-all active:scale-98">
+                          <Youtube className="w-4 h-4 fill-red-600 text-red-600" />
                           <span>Watch on YouTube</span>
-                        </span>
-                        <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                          <ArrowUpRight className="w-3.5 h-3.5 text-[#281648] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                        </div>
                       </div>
                     </a>
                   ))}
