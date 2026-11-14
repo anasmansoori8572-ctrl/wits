@@ -381,28 +381,11 @@ export const WhatWeTeach: React.FC<WhatWeTeachProps> = ({ onSelectSubject }) => 
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Section Header (Matching the exact two-sided layout of Reference Image 1) */}
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-16 sm:mb-20">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-700/80 mb-3">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse" />
-              <span>COMPREHENSIVE CURRICULUM</span>
-            </div>
-            <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#1E1B26] tracking-tight leading-tight">
-              What we teach <br />
-              <span className="text-[#4A1D96]">for real fluency.</span>
-            </h2>
-          </div>
-
-          <div className="max-w-md text-left md:text-right space-y-2">
-            <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-              A practical, multi-dimensional curriculum focused on real-world English communication rather than passive classroom theory.
-            </p>
-            <div className="inline-flex items-center gap-2 text-xs font-mono font-semibold text-purple-700/90 bg-purple-100/70 px-3 py-1 rounded-full border border-purple-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
-              <span>06 MODULES · COMPLETE MASTERY</span>
-            </div>
-          </div>
+        {/* Centered Heading Only (All extra tags and side text removed as requested) */}
+        <div className="text-center mb-14 sm:mb-18">
+          <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#1E1B26] tracking-tight">
+            What we teach <span className="text-[#4A1D96]">for real fluency.</span>
+          </h2>
         </div>
 
         {/* 6 Cards hanging in a 3-column grid (with suspended wire, clips, and 3D flip) */}
