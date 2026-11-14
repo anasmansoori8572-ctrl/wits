@@ -5,7 +5,6 @@ import { INITIAL_COURSES, INITIAL_BATCHES, INITIAL_TESTIMONIALS, INITIAL_SITE_SE
 // Components
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
-import { AboutSection } from './components/AboutSection';
 import { StatsSection } from './components/StatsSection';
 import { WhatWeTeach } from './components/WhatWeTeach';
 import { CoursesSection } from './components/CoursesSection';
@@ -766,16 +765,6 @@ export default function App() {
             courses={courses}
             onEnroll={(courseId) => handleOpenAdmission(courseId)}
             onBuyNow={(courseId) => handleOpenCheckout(courseId)}
-          />
-
-
-          {/* 3. About Section: Learn → Understand → Practise → Speak → Grow */}
-          <AboutSection
-            onNavigateAbout={() => {
-              try { window.history.pushState(null, '', '/about'); } catch (e) {}
-              setCurrentView('about');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
           />
 
           {/* 4. Our Journey / Accomplishments: 15+ Batches, 100+ Students */}
