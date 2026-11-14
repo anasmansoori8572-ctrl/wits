@@ -74,3 +74,25 @@ button, a, input, select, textarea {
   outline-offset: 2px;
 }
 
+/* Automatic Continuous Slide-Left Animation */
+@keyframes slideLeftContinuous {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-slide-left {
+  display: flex;
+  width: max-content;
+  animation: slideLeftContinuous 35s linear infinite;
+  will-change: transform;
+}
+
+.animate-slide-left:hover {
+  animation-play-state: paused;
+}
+
+

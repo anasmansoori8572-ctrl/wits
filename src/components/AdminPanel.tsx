@@ -6745,9 +6745,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                   <div>
                     <h3 className="font-['Outfit'] font-bold text-lg text-slate-900">
-                      Add YouTube Video Resource
+                      Add YouTube Video
                     </h3>
-                    <p className="text-[11px] text-slate-500">Provide a YouTube link; title & thumbnail will be auto-fetched</p>
+                    <p className="text-[11px] text-slate-500">Add video link, title & custom B2 thumbnail</p>
                   </div>
                 </div>
                 <button onClick={() => setShowAddYouTubeModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
@@ -6755,15 +6755,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
 
-              <form onSubmit={handleAddYouTubeResource} className="space-y-3.5 text-xs">
-                {/* YouTube URL */}
+              <form onSubmit={handleAddYouTubeResource} className="space-y-4 text-xs">
+                {/* Option 1: YouTube Video URL */}
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">YouTube Video URL *</label>
+                  <label className="font-bold text-slate-800 block mb-1 text-sm">
+                    YouTube Video URL <span className="text-red-500">*</span>
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="url"
                       required
-                      placeholder="https://www.youtube.com/watch?v=..."
+                      placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
                       value={newYouTubeResource.youtubeUrl}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -6774,108 +6776,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           handleFetchYouTubeMetadata(e.target.value, false);
                         }
                       }}
-                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-red-600 text-slate-900 font-medium"
+                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-purple-600 text-slate-900 font-medium text-sm"
                     />
                     <button
                       type="button"
                       disabled={isFetchingYtMetadata || !newYouTubeResource.youtubeUrl.trim()}
                       onClick={() => handleFetchYouTubeMetadata(newYouTubeResource.youtubeUrl, false)}
-                      className="px-3.5 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold border border-red-200 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
+                      className="px-3.5 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#4A1D96] font-bold border border-purple-200 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors whitespace-nowrap"
                     >
-                      <Sparkles className={`w-3.5 h-3.5 ${isFetchingYtMetadata ? 'animate-spin' : 'text-red-600'}`} />
+                      <Sparkles className={`w-3.5 h-3.5 ${isFetchingYtMetadata ? 'animate-spin' : 'text-[#4A1D96]'}`} />
                       <span>{isFetchingYtMetadata ? 'Fetching...' : 'Auto-Fetch'}</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Video Title (Auto-fetched with editable fallback) */}
+                {/* Option 2: Video Title */}
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Video Title *</label>
+                  <label className="font-bold text-slate-800 block mb-1 text-sm">
+                    Video Title <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. 50 Daily Routine Sentences Used in Real Life"
+                    placeholder="Enter video title"
                     value={newYouTubeResource.title}
                     onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, title: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-red-600 text-slate-900 font-medium"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    Auto-fetched from YouTube. You can customize or edit this title anytime.
-                  </span>
-                </div>
-
-                {/* Category, Display Order & Duration */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Category *</label>
-                    <select
-                      value={newYouTubeResource.category}
-                      onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, category: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                    >
-                      <option value="Pronunciation & Phonics">Pronunciation & Phonics</option>
-                      <option value="Spoken English & Fluency">Spoken English & Fluency</option>
-                      <option value="Learning Mindset">Learning Mindset</option>
-                      <option value="English Foundations">English Foundations</option>
-                      <option value="Daily Motivation">Daily Motivation</option>
-                      <option value="Daily English">Daily English</option>
-                      <option value="Vocabulary">Vocabulary</option>
-                      <option value="Grammar Made Easy">Grammar Made Easy</option>
-                      <option value="Speaking Practice">Speaking Practice</option>
-                      <option value="General">General</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Display Order (1 = First)</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={newYouTubeResource.displayOrder}
-                      onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, displayOrder: parseInt(e.target.value) || 1 })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Duration (Optional)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 05:20 or 00:58"
-                      value={newYouTubeResource.duration}
-                      onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, duration: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                    />
-                  </div>
-                </div>
-
-                {/* Short Description */}
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Short Description / Content</label>
-                  <textarea
-                    rows={2}
-                    value={newYouTubeResource.description}
-                    onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, description: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:border-red-600"
-                    placeholder="Brief description of the lesson..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-purple-600 text-slate-900 font-medium text-sm"
                   />
                 </div>
 
-                {/* Custom Thumbnail Upload & Preview */}
+                {/* Option 3: Upload Thumbnail (B2) */}
                 <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 text-xs">Video Thumbnail</span>
+                    <span className="font-bold text-slate-800 text-xs">Upload Thumbnail (B2)</span>
                     {newYouTubeResource.b2ThumbnailId ? (
                       <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-                        Custom B2 Image Active
+                        Custom B2 Thumbnail Active
                       </span>
                     ) : (
                       <span className="text-[10px] font-medium text-slate-500">
-                        YouTube Auto-Thumbnail
+                        YouTube Auto-Thumbnail Fallback
                       </span>
                     )}
                   </div>
 
                   {newYouTubeResource.thumbnailUrl && (
-                    <div className="relative aspect-video rounded-xl overflow-hidden bg-black/10 border border-slate-200">
+                    <div className="relative aspect-video rounded-xl overflow-hidden bg-black/10 border border-slate-200 max-h-44">
                       <img
                         src={newYouTubeResource.thumbnailUrl}
                         alt="Thumbnail preview"
@@ -6885,9 +6831,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   )}
 
                   <div className="flex items-center gap-2">
-                    <label className="flex-1 py-2 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-center cursor-pointer text-[11px] transition-colors">
-                      <UploadCloud className="w-3.5 h-3.5 inline mr-1 text-slate-500" />
-                      <span>{isUploadingThumbnail ? 'Uploading to B2...' : 'Upload Custom Thumbnail (B2)'}</span>
+                    <label className="flex-1 py-2 px-3 rounded-xl border border-purple-200 bg-white hover:bg-purple-50 text-[#4A1D96] font-bold text-center cursor-pointer text-xs transition-colors flex items-center justify-center gap-1.5 shadow-2xs">
+                      <UploadCloud className="w-3.5 h-3.5 text-[#4A1D96]" />
+                      <span>{isUploadingThumbnail ? 'Uploading to B2...' : 'Upload Thumbnail (B2)'}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -6912,7 +6858,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             b2ThumbnailName: ''
                           }));
                         }}
-                        className="py-2 px-3 rounded-xl border border-slate-200 text-slate-600 hover:text-red-600 text-[11px] font-medium transition-colors cursor-pointer"
+                        className="py-2 px-3 rounded-xl border border-slate-200 text-slate-600 hover:text-red-600 text-xs font-medium transition-colors cursor-pointer"
                         title="Reset to default YouTube thumbnail"
                       >
                         Reset
@@ -6921,37 +6867,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Publish Toggle */}
-                <div className="p-3 bg-red-50/60 border border-red-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-red-950 block text-xs">
-                      Publish on Public Website
-                    </span>
-                    <span className="text-[11px] text-red-700">
-                      Instantly visible in the Video Lessons hub on Learning Resources
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={newYouTubeResource.isPublished}
-                    onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, isPublished: e.target.checked })}
-                    className="w-4 h-4 text-red-600 rounded cursor-pointer accent-red-600"
-                  />
-                </div>
-
                 <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setShowAddYouTubeModal(false)}
-                    className="px-4 py-2 rounded-xl text-slate-500 font-bold hover:bg-slate-100 cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-slate-500 font-bold hover:bg-slate-100 cursor-pointer text-sm"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold cursor-pointer shadow-xs"
+                    className="px-6 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3C166D] text-white font-bold cursor-pointer shadow-md text-sm transition-all"
                   >
-                    Publish YouTube Lesson
+                    Publish
                   </button>
                 </div>
               </form>
@@ -7484,67 +7412,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     {/* Video Title */}
                     <div>
-                      <label className="font-bold text-slate-700 block mb-1">Video Title *</label>
+                      <label className="font-bold text-slate-800 block mb-1 text-sm">
+                        Video Title <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="text"
                         required
                         value={editingMaterial.title}
                         onChange={(e) => setEditingMaterial({ ...editingMaterial, title: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-red-600 text-slate-900 font-medium"
-                      />
-                    </div>
-
-                    {/* Category, Display Order & Duration */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="font-bold text-slate-700 block mb-1">Category *</label>
-                        <select
-                          value={editingMaterial.category || 'Daily English'}
-                          onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                        >
-                          <option value="Pronunciation & Phonics">Pronunciation & Phonics</option>
-                          <option value="Spoken English & Fluency">Spoken English & Fluency</option>
-                          <option value="Learning Mindset">Learning Mindset</option>
-                          <option value="English Foundations">English Foundations</option>
-                          <option value="Daily Motivation">Daily Motivation</option>
-                          <option value="Daily English">Daily English</option>
-                          <option value="Vocabulary">Vocabulary</option>
-                          <option value="Grammar Made Easy">Grammar Made Easy</option>
-                          <option value="Speaking Practice">Speaking Practice</option>
-                          <option value="General">General</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="font-bold text-slate-700 block mb-1">Display Order</label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={editingMaterial.displayOrder || 1}
-                          onChange={(e) => setEditingMaterial({ ...editingMaterial, displayOrder: parseInt(e.target.value) || 1 })}
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                        />
-                      </div>
-                      <div>
-                        <label className="font-bold text-slate-700 block mb-1">Duration (Optional)</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 05:20 or 00:58"
-                          value={editingMaterial.duration || ''}
-                          onChange={(e) => setEditingMaterial({ ...editingMaterial, duration: e.target.value })}
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Short Description */}
-                    <div>
-                      <label className="font-bold text-slate-700 block mb-1">Short Description</label>
-                      <textarea
-                        rows={2}
-                        value={editingMaterial.description}
-                        onChange={(e) => setEditingMaterial({ ...editingMaterial, description: e.target.value })}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:border-red-600"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-purple-600 text-slate-900 font-medium text-sm"
                       />
                     </div>
 
