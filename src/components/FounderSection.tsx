@@ -1,9 +1,16 @@
 import React from 'react';
 import { Quote, MapPin, CheckCircle } from 'lucide-react';
+import { SiteSettings } from '../types';
 
-export const FounderSection: React.FC = () => {
+interface FounderSectionProps {
+  siteSettings?: SiteSettings;
+}
+
+export const FounderSection: React.FC<FounderSectionProps> = ({ siteSettings }) => {
+  const founderName = siteSettings?.founderName || 'Ziyaur Rehman Zia';
+
   return (
-    <section className="py-20 sm:py-24 bg-gradient-to-b from-white to-[#FAF9FC] border-b border-slate-200/70">
+    <section id="founder" className="py-20 sm:py-24 bg-gradient-to-b from-white to-[#FAF9FC] border-b border-slate-200/70 scroll-mt-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <div className="max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-12 shadow-xs hover:shadow-md transition-shadow relative overflow-hidden">
@@ -31,7 +38,7 @@ export const FounderSection: React.FC = () => {
 
               <div className="pt-2">
                 <h3 className="font-['Outfit'] font-extrabold text-xl sm:text-2xl text-[#1E1B26]">
-                  Ziyaur Rehman Zia
+                  {founderName}
                 </h3>
                 <p className="text-xs font-semibold text-[#581C87] mt-0.5">
                   Founder & Director, Wits Lingo Academy

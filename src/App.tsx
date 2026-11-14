@@ -10,7 +10,6 @@ import { WhatWeTeach } from './components/WhatWeTeach';
 import { CoursesSection } from './components/CoursesSection';
 import { YouTubeVideoSection } from './components/YouTubeVideoSection';
 import { CommunitySection } from './components/CommunitySection';
-import { FounderSection } from './components/FounderSection';
 import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
 
@@ -806,9 +805,6 @@ export default function App() {
             siteSettings={siteSettings}
             onJoinNewJourney={() => handleOpenAdmission()}
           />
-
-          {/* 12. About the Founder: Ziyaur Rehman Zia */}
-          <FounderSection />
 
           {/* 13. Contact Section */}
           <ContactSection siteSettings={siteSettings} />

@@ -5,6 +5,7 @@ import {
   Star, Quote, Phone, MessageSquare, BookOpen, Compass
 } from 'lucide-react';
 import { SiteSettings, TestimonialData } from '../types';
+import { FounderSection } from './FounderSection';
 
 interface AboutPageProps {
   onBackToHome: () => void;
@@ -470,6 +471,11 @@ export const AboutPage: React.FC<AboutPageProps> = ({
           </div>
         </div>
       </section>
+
+      {/* =========================================================================
+          SECTION 3.5: FOUNDER'S VISION (Ziyaur Rehman Zia)
+          ========================================================================= */}
+      <FounderSection siteSettings={siteSettings} />
 
       {/* =========================================================================
           SECTION 4: TESTIMONIALS / EXPERIENCES ("Trusted By Global Learners & Students")
