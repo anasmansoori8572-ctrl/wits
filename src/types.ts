@@ -226,6 +226,7 @@ export interface CourseData {
   learningFormat: string;
   fee: number;
   badge?: string;
+  imageUrl?: string;
   isPublished?: boolean;
   order?: number;
 }

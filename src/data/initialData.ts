@@ -16,7 +16,8 @@ export const INITIAL_COURSES: CourseData[] = [
     duration: '2 Months (40 Sessions)',
     learningFormat: 'Live Online Interactive Classroom',
     fee: 1199,
-    badge: 'Live'
+    badge: 'Live',
+    imageUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'course-spoken-english',
@@ -32,7 +33,8 @@ export const INITIAL_COURSES: CourseData[] = [
     duration: '2.5 Months (50 Sessions)',
     learningFormat: 'Live Online Classroom + Speaking Drills',
     fee: 1499,
-    badge: 'Live'
+    badge: 'Live',
+    imageUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'course-vocabulary',
@@ -48,7 +50,8 @@ export const INITIAL_COURSES: CourseData[] = [
     duration: '1.5 Months (30 Sessions)',
     learningFormat: 'Interactive Vocabulary Workshops',
     fee: 999,
-    badge: 'Live'
+    badge: 'Live',
+    imageUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'course-conversation',
@@ -64,7 +67,8 @@ export const INITIAL_COURSES: CourseData[] = [
     duration: '2 Months (40 Sessions)',
     learningFormat: '100% Speaking & Dialogue Practice',
     fee: 1299,
-    badge: 'Upcoming'
+    badge: 'Upcoming',
+    imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'course-communication',
@@ -80,7 +84,8 @@ export const INITIAL_COURSES: CourseData[] = [
     duration: '2 Months (35 Sessions)',
     learningFormat: 'Masterclass Format + Mock Interviews',
     fee: 1699,
-    badge: 'Live'
+    badge: 'Live',
+    imageUrl: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'course-advanced',
@@ -96,7 +101,8 @@ export const INITIAL_COURSES: CourseData[] = [
     duration: '3 Months (60 Sessions)',
     learningFormat: 'Executive Live Online Classroom',
     fee: 1999,
-    badge: 'Upcoming'
+    badge: 'Upcoming',
+    imageUrl: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80'
   }
 ];
 
