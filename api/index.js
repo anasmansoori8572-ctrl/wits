@@ -821,6 +821,7 @@ var DurableStorageService = class _DurableStorageService {
     this.firestoreProjectId = "";
     this.isReadOnlyFs = false;
     this.dedupCache = /* @__PURE__ */ new Map();
+    this.hydratedFromCloud = /* @__PURE__ */ new Set();
     // In-process serialization mutex per collection to prevent race conditions during concurrent serverless writes
     this.collectionLocks = /* @__PURE__ */ new Map();
     this.detectEnvironment();
@@ -1041,50 +1042,24 @@ var DurableStorageService = class _DurableStorageService {
     }
   }
   /**
-   * Pre-seed in-memory cache from packaged seed files on startup if readable
+   * Pre-seed internal webhook deduplication cache on startup if readable
    */
   loadInitialData() {
-    const seedCollections = [
-      "courses",
-      "batches",
-      "cmsContent",
-      "announcements",
-      "gallery",
-      "testimonials",
-      "conversations",
-      "messages",
-      "support-tickets",
-      "notifications",
-      "registrations",
-      "orders",
-      "materials",
-      "webhook-dedup"
-    ];
-    for (const coll of seedCollections) {
-      try {
-        let localPath = path.join(process.cwd(), "uploads", "data", `${coll}.json`);
-        if (!fs.existsSync(localPath) && coll === "cmsContent") {
-          const altPath = path.join(process.cwd(), "uploads", "data", "cms-content.json");
-          if (fs.existsSync(altPath)) localPath = altPath;
-        }
-        if (fs.existsSync(localPath)) {
-          const raw = fs.readFileSync(localPath, "utf-8");
-          const parsed = JSON.parse(raw);
-          this.memoryCache.set(coll, parsed);
-          if (coll === "cmsContent") {
-            this.memoryCache.set("cms-content", parsed);
-          }
-          if (coll === "webhook-dedup" && Array.isArray(parsed)) {
-            const now = Date.now();
-            for (const item of parsed) {
-              if (item.key && (!item.expiresAt || item.expiresAt > now)) {
-                this.dedupCache.set(`${item.scope || "default"}:${item.key}`, item);
-              }
+    try {
+      const localPath = path.join(process.cwd(), "uploads", "data", "webhook-dedup.json");
+      if (fs.existsSync(localPath)) {
+        const raw = fs.readFileSync(localPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const now = Date.now();
+          for (const item of parsed) {
+            if (item.key && (!item.expiresAt || item.expiresAt > now)) {
+              this.dedupCache.set(`${item.scope || "default"}:${item.key}`, item);
             }
           }
         }
-      } catch {
       }
+    } catch {
     }
   }
   /**
@@ -1122,7 +1097,7 @@ var DurableStorageService = class _DurableStorageService {
    * Retrieve a collection from durable cloud storage or memory cache
    */
   async getCollection(collectionName, defaultValue = [], forceCloud = false) {
-    if (!forceCloud && this.memoryCache.has(collectionName)) {
+    if (!forceCloud && this.hydratedFromCloud.has(collectionName) && this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
       if (Array.isArray(cached)) {
         return [...cached];
@@ -1146,6 +1121,7 @@ var DurableStorageService = class _DurableStorageService {
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
             this.memoryCache.set(collectionName, parsed);
+            this.hydratedFromCloud.add(collectionName);
             return [...parsed];
           }
         }
@@ -1162,6 +1138,7 @@ var DurableStorageService = class _DurableStorageService {
           const parsed = JSON.parse(nativeContent);
           if (Array.isArray(parsed)) {
             this.memoryCache.set(collectionName, parsed);
+            this.hydratedFromCloud.add(collectionName);
             return [...parsed];
           }
         }
@@ -1169,18 +1146,26 @@ var DurableStorageService = class _DurableStorageService {
       }
     }
     try {
-      const localPath = path.join(process.cwd(), "uploads", "data", `${collectionName}.json`);
+      let localPath = path.join(process.cwd(), "uploads", "data", `${collectionName}.json`);
+      if (!fs.existsSync(localPath) && collectionName === "cmsContent") {
+        const altPath = path.join(process.cwd(), "uploads", "data", "cms-content.json");
+        if (fs.existsSync(altPath)) localPath = altPath;
+      }
       if (fs.existsSync(localPath)) {
         const raw = fs.readFileSync(localPath, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           this.memoryCache.set(collectionName, parsed);
+          this.hydratedFromCloud.add(collectionName);
+          this.saveCollection(collectionName, parsed).catch(() => {
+          });
           return [...parsed];
         }
       }
     } catch {
     }
     this.memoryCache.set(collectionName, defaultValue);
+    this.hydratedFromCloud.add(collectionName);
     return [...defaultValue];
   }
   /**
@@ -1208,6 +1193,7 @@ var DurableStorageService = class _DurableStorageService {
       const timestamp = (/* @__PURE__ */ new Date()).toISOString();
       const cloned = Array.isArray(items) ? [...items] : [];
       this.memoryCache.set(collectionName, cloned);
+      this.hydratedFromCloud.add(collectionName);
       const jsonString = JSON.stringify(cloned, null, 2);
       const bodyBuffer = Buffer.from(jsonString, "utf-8");
       const contentLength = bodyBuffer.byteLength;
@@ -3526,113 +3512,7 @@ var recordings = [
   }
 ];
 var materialsInitialized = false;
-var studyMaterials = [
-  {
-    id: "yt-01",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "Sound of C as \u201CK\u201D and \u201CS\u201D |",
-    description: "Master the pronunciation rules of the letter 'C' producing /k/ and /s/ sounds in spoken English.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=ZFuoc6aEn3w",
-    category: "Pronunciation & Phonics",
-    level: "All Levels",
-    uploadedAt: "15 Sept 2026",
-    uploadedDate: "15 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=ZFuoc6aEn3w",
-    thumbnailUrl: "https://img.youtube.com/vi/ZFuoc6aEn3w/hqdefault.jpg",
-    duration: "00:58",
-    views: "Wits Lingo",
-    displayOrder: 1,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  },
-  {
-    id: "yt-02",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "English & Society \u{1FAE3}\u{1F605} | English seekhna hi padega.",
-    description: "Why spoken English fluency is crucial in modern professional, social, and academic settings.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=Xk1gQdbSYic",
-    category: "Spoken English & Fluency",
-    level: "All Levels",
-    uploadedAt: "18 Sept 2026",
-    uploadedDate: "18 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=Xk1gQdbSYic",
-    thumbnailUrl: "https://img.youtube.com/vi/Xk1gQdbSYic/hqdefault.jpg",
-    duration: "00:55",
-    views: "Wits Lingo",
-    displayOrder: 2,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  },
-  {
-    id: "yt-03",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "Why you can't improve your English | listen to it carefully",
-    description: "Core psychological and habit mistakes that hold back English learners from achieving natural fluency.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=mImWmss_7Gw",
-    category: "Learning Mindset",
-    level: "All Levels",
-    uploadedAt: "20 Sept 2026",
-    uploadedDate: "20 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=mImWmss_7Gw",
-    thumbnailUrl: "https://img.youtube.com/vi/mImWmss_7Gw/hqdefault.jpg",
-    duration: "00:59",
-    views: "Wits Lingo",
-    displayOrder: 3,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  },
-  {
-    id: "yt-04",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "English Learning isn't hard, but to choose a right way | Learn English With Wits Lingo Team",
-    description: "Step-by-step guidance on choosing the right structured approach to learn English speaking effectively.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=K8PYUbGdazY",
-    category: "English Foundations",
-    level: "All Levels",
-    uploadedAt: "22 Sept 2026",
-    uploadedDate: "22 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=K8PYUbGdazY",
-    thumbnailUrl: "https://img.youtube.com/vi/K8PYUbGdazY/hqdefault.jpg",
-    duration: "00:52",
-    views: "Wits Lingo",
-    displayOrder: 4,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  },
-  {
-    id: "yt-05",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "Bhai, English Seekho, chahen jaha se Seekho.\u{1F605} | Wits Lingo",
-    description: "Practical encouragement and motivation to build everyday English speaking habits without hesitation.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=8yfe0F74q6M",
-    category: "Daily Motivation",
-    level: "All Levels",
-    uploadedAt: "25 Sept 2026",
-    uploadedDate: "25 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=8yfe0F74q6M",
-    thumbnailUrl: "https://img.youtube.com/vi/8yfe0F74q6M/hqdefault.jpg",
-    duration: "00:48",
-    views: "Wits Lingo",
-    displayOrder: 5,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  }
-];
+var studyMaterials = [];
 var assignments = [
   {
     id: "asg-01",
@@ -4169,51 +4049,44 @@ var galleryItems = [
     fileSize: "1.3 MB"
   }
 ];
-function loadAllPersistedData() {
+var persistenceInitPromise = null;
+async function loadAllPersistedDataAsync() {
   try {
     if (!fs7.existsSync(DATA_STORAGE_DIR)) {
-      fs7.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
-    }
-    if (fs7.existsSync(COURSES_STORAGE_FILE)) {
       try {
-        const data = JSON.parse(fs7.readFileSync(COURSES_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
-          cmsContent.courses = data;
-          console.log(`[Persistence] Loaded ${data.length} courses from courses.json.`);
-        }
+        fs7.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
       } catch (e) {
-        console.warn("[Persistence] Could not parse courses.json:", e);
       }
     }
     if (fs7.existsSync(REGISTRATIONS_STORAGE_FILE)) {
-      const data = JSON.parse(fs7.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
-        registrations.length = 0;
-        registrations.push(...data);
-        console.log(`[Persistence] Loaded ${registrations.length} student registrations.`);
+      try {
+        const data = JSON.parse(fs7.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          registrations.length = 0;
+          registrations.push(...data);
+        }
+      } catch (e) {
       }
-    } else {
-      saveRegistrations();
     }
     if (fs7.existsSync(USERS_STORAGE_FILE)) {
-      const data = JSON.parse(fs7.readFileSync(USERS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
-        users.length = 0;
-        users.push(...data);
-        console.log(`[Persistence] Loaded ${users.length} users.`);
+      try {
+        const data = JSON.parse(fs7.readFileSync(USERS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          users.length = 0;
+          users.push(...data);
+        }
+      } catch (e) {
       }
-    } else {
-      saveUsers();
     }
-    if (fs7.existsSync(BATCHES_STORAGE_FILE)) {
-      const data = JSON.parse(fs7.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data)) {
-        batches.length = 0;
-        batches.push(...data);
-        console.log(`[Persistence] Loaded ${batches.length} batches.`);
+    if (fs7.existsSync(PAYMENTS_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs7.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data)) {
+          payments.length = 0;
+          payments.push(...data);
+        }
+      } catch (e) {
       }
-    } else {
-      saveBatches();
     }
     if (fs7.existsSync(CLASSES_STORAGE_FILE)) {
       try {
@@ -4221,13 +4094,9 @@ function loadAllPersistedData() {
         if (Array.isArray(data)) {
           classes.length = 0;
           classes.push(...data);
-          console.log(`[Persistence] Loaded ${classes.length} classes.`);
         }
       } catch (e) {
-        console.warn("[Persistence] Could not parse classes.json:", e);
       }
-    } else {
-      saveClasses();
     }
     if (fs7.existsSync(RECORDINGS_STORAGE_FILE)) {
       try {
@@ -4235,152 +4104,8 @@ function loadAllPersistedData() {
         if (Array.isArray(data)) {
           recordings.length = 0;
           recordings.push(...data);
-          console.log(`[Persistence] Loaded ${recordings.length} recordings.`);
         }
       } catch (e) {
-        console.warn("[Persistence] Could not parse recordings.json:", e);
-      }
-    } else {
-      saveRecordings();
-    }
-    if (fs7.existsSync(PAYMENTS_STORAGE_FILE)) {
-      const data = JSON.parse(fs7.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data)) {
-        payments.length = 0;
-        payments.push(...data);
-        console.log(`[Persistence] Loaded ${payments.length} verified payment transactions.`);
-      }
-    } else {
-      savePayments();
-    }
-    const cmsFileToRead = fs7.existsSync(CMS_STORAGE_FILE) ? CMS_STORAGE_FILE : fs7.existsSync(CMS_ALT_STORAGE_FILE) ? CMS_ALT_STORAGE_FILE : null;
-    if (cmsFileToRead) {
-      const data = JSON.parse(fs7.readFileSync(cmsFileToRead, "utf-8"));
-      if (data && typeof data === "object") {
-        cmsContent = {
-          ...cmsContent,
-          ...data,
-          courses: Array.isArray(cmsContent.courses) && cmsContent.courses.length > 0 ? cmsContent.courses : data.courses || cmsContent.courses,
-          settings: {
-            ...cmsContent.settings,
-            ...data.settings || {}
-          }
-        };
-        if (!cmsContent.email || cmsContent.email.toLowerCase() === "witslingo@gmail.com" || cmsContent.email.toLowerCase() === "admissions@witslingo.com" || cmsContent.email.toLowerCase() === "support@witslingo.com") {
-          cmsContent.email = "hello@witslingo.com";
-        }
-        console.log(`[Persistence] Loaded custom CMS content & settings.`);
-      }
-    } else {
-      saveCmsContent();
-    }
-    try {
-      durableStorageService.getCollection("cmsContent", []).then((durableData) => {
-        if (Array.isArray(durableData) && durableData.length > 0) {
-          const remote = durableData[0];
-          if (remote && typeof remote === "object") {
-            cmsContent = {
-              ...cmsContent,
-              ...remote,
-              courses: Array.isArray(remote.courses) && remote.courses.length > 0 ? remote.courses : cmsContent.courses,
-              settings: {
-                ...cmsContent.settings,
-                ...remote.settings || {}
-              }
-            };
-            console.log(`[Persistence] Hydrated ${cmsContent.courses?.length || 0} courses from cloud durable storage.`);
-          }
-        }
-      }).catch(() => {
-      });
-    } catch (e) {
-    }
-    if (fs7.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
-      const data = JSON.parse(fs7.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data)) {
-        announcements.length = 0;
-        announcements.push(...data);
-        console.log(`[Persistence] Loaded ${announcements.length} announcements.`);
-      }
-    } else {
-      saveAnnouncements();
-    }
-    let materialsLoaded = false;
-    if (fs7.existsSync(MATERIALS_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs7.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          for (const m of data) {
-            if (m.resourceType === "youtube" || m.fileType === "youtube") {
-              if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
-            } else if (!m.downloadUrl || m.downloadUrl === "#") {
-              m.downloadUrl = `/api/files/download/${m.id}`;
-            }
-          }
-          studyMaterials.length = 0;
-          studyMaterials.push(...data);
-          materialsLoaded = true;
-          materialsInitialized = true;
-          console.log(`[Persistence] Loaded ${studyMaterials.length} study materials.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse materials.json:", e);
-      }
-    }
-    if (!materialsLoaded) {
-      try {
-        durableStorageService.getCollection("materials", [], true).then((durableMaterials) => {
-          if (Array.isArray(durableMaterials)) {
-            for (const m of durableMaterials) {
-              if (m.resourceType === "youtube" || m.fileType === "youtube") {
-                if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
-              } else if (!m.downloadUrl || m.downloadUrl === "#") {
-                m.downloadUrl = `/api/files/download/${m.id}`;
-              }
-            }
-            studyMaterials.length = 0;
-            studyMaterials.push(...durableMaterials);
-            materialsLoaded = true;
-            materialsInitialized = true;
-            console.log(`[Persistence] Hydrated ${studyMaterials.length} study materials from cloud durable storage.`);
-          }
-        }).catch(() => {
-        });
-      } catch (e) {
-      }
-    }
-    if (!materialsLoaded && studyMaterials.length > 0) {
-      savePersistedMaterials();
-    }
-    let galleryLoaded = false;
-    if (fs7.existsSync(GALLERY_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs7.readFileSync(GALLERY_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          galleryItems.length = 0;
-          galleryItems.push(...data);
-          galleryLoaded = true;
-          console.log(`[Persistence] Loaded ${galleryItems.length} gallery items.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse gallery.json:", e);
-      }
-    }
-    if (!galleryLoaded) {
-      const legacyPath = path7.join(process.cwd(), "uploads", "gallery.json");
-      if (fs7.existsSync(legacyPath)) {
-        try {
-          const data = JSON.parse(fs7.readFileSync(legacyPath, "utf-8"));
-          if (Array.isArray(data) && data.length > 0) {
-            galleryItems.length = 0;
-            galleryItems.push(...data);
-            console.log(`[Persistence] Seeded ${galleryItems.length} gallery items from legacy storage.`);
-            savePersistedGallery();
-          }
-        } catch (e) {
-        }
-      } else {
-        savePersistedGallery();
       }
     }
     if (fs7.existsSync(ORDERS_STORAGE_FILE)) {
@@ -4389,62 +4114,75 @@ function loadAllPersistedData() {
         if (Array.isArray(data)) {
           orders.length = 0;
           orders.push(...data);
-          console.log(`[Persistence] Loaded ${orders.length} student orders.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse orders.json:", e);
-      }
-    }
-    if (fs7.existsSync(NOTIFICATIONS_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs7.readFileSync(NOTIFICATIONS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          notifications.length = 0;
-          notifications.push(...data);
-          console.log(`[Persistence] Loaded ${notifications.length} WhatsApp notifications.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse notifications.json:", e);
-      }
-    }
-    if (fs7.existsSync(CONVERSATIONS_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs7.readFileSync(CONVERSATIONS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          conversations.length = 0;
-          conversations.push(...data);
         }
       } catch (e) {
       }
     }
-    if (fs7.existsSync(MESSAGES_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs7.readFileSync(MESSAGES_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          messages.length = 0;
-          messages.push(...data);
+    try {
+      const [cloudMaterials, cloudCourses, cloudCms, cloudAnnouncements, cloudBatches, cloudGallery] = await Promise.all([
+        durableStorageService.getCollection("materials", []),
+        durableStorageService.getCollection("courses", []),
+        durableStorageService.getCollection("cmsContent", []),
+        durableStorageService.getCollection("announcements", []),
+        durableStorageService.getCollection("batches", []),
+        durableStorageService.getCollection("gallery", [])
+      ]);
+      if (Array.isArray(cloudMaterials)) {
+        for (const m of cloudMaterials) {
+          if (m.resourceType === "youtube" || m.fileType === "youtube") {
+            if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
+          } else if (!m.downloadUrl || m.downloadUrl === "#") {
+            m.downloadUrl = `/api/files/download/${m.id}`;
+          }
         }
-      } catch (e) {
+        studyMaterials.length = 0;
+        studyMaterials.push(...cloudMaterials);
+        materialsInitialized = true;
+        console.log(`[Persistence] Hydrated ${studyMaterials.length} materials/videos from Backblaze B2.`);
       }
-    }
-    if (fs7.existsSync(SUPPORT_TICKETS_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs7.readFileSync(SUPPORT_TICKETS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          supportTickets.length = 0;
-          supportTickets.push(...data);
-          console.log(`[Persistence] Loaded ${supportTickets.length} support tickets.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse support-tickets.json:", e);
+      if (Array.isArray(cloudCourses) && cloudCourses.length > 0) {
+        cmsContent.courses = cloudCourses;
+        console.log(`[Persistence] Hydrated ${cloudCourses.length} courses from Backblaze B2.`);
       }
+      if (Array.isArray(cloudCms) && cloudCms.length > 0 && cloudCms[0]) {
+        const remote = cloudCms[0];
+        cmsContent = {
+          ...cmsContent,
+          ...remote,
+          courses: Array.isArray(remote.courses) && remote.courses.length > 0 ? remote.courses : cmsContent.courses,
+          settings: { ...cmsContent.settings, ...remote.settings || {} }
+        };
+        console.log(`[Persistence] Hydrated CMS settings from Backblaze B2.`);
+      }
+      if (Array.isArray(cloudAnnouncements) && cloudAnnouncements.length > 0) {
+        announcements.length = 0;
+        announcements.push(...cloudAnnouncements);
+        console.log(`[Persistence] Hydrated ${announcements.length} announcements from Backblaze B2.`);
+      }
+      if (Array.isArray(cloudBatches) && cloudBatches.length > 0) {
+        batches.length = 0;
+        batches.push(...cloudBatches);
+        console.log(`[Persistence] Hydrated ${batches.length} batches from Backblaze B2.`);
+      }
+      if (Array.isArray(cloudGallery) && cloudGallery.length > 0) {
+        galleryItems.length = 0;
+        galleryItems.push(...cloudGallery);
+        console.log(`[Persistence] Hydrated ${galleryItems.length} gallery items from Backblaze B2.`);
+      }
+    } catch (cloudErr) {
+      console.warn("[Persistence] Cloud hydration notice:", cloudErr);
     }
   } catch (err) {
-    console.warn("[Persistence] Error loading persisted data from disk:", err);
+    console.warn("[Persistence] Error loading persisted data:", err);
   }
 }
-function savePersistedGallery() {
-  durableStorageService.saveCollectionBackground("gallery", galleryItems);
+function ensurePersistenceInitialized() {
+  if (!persistenceInitPromise) {
+    persistenceInitPromise = loadAllPersistedDataAsync();
+  }
+  return persistenceInitPromise;
+}
+async function savePersistedGallery() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
@@ -4452,29 +4190,27 @@ function savePersistedGallery() {
       console.warn("[Persistence] Could not save gallery.json:", e);
     }
   }
+  await durableStorageService.saveCollection("gallery", galleryItems);
 }
-function saveRegistrations() {
-  durableStorageService.saveCollectionBackground("registrations", registrations);
+async function saveRegistrations() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
     } catch (e) {
-      console.warn("[Persistence] Could not save registrations:", e);
     }
   }
+  await durableStorageService.saveCollection("registrations", registrations);
 }
-function saveUsers() {
-  durableStorageService.saveCollectionBackground("users", users);
+async function saveUsers() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
     } catch (e) {
-      console.warn("[Persistence] Could not save users:", e);
     }
   }
+  await durableStorageService.saveCollection("users", users);
 }
-function saveBatches() {
-  durableStorageService.saveCollectionBackground("batches", batches);
+async function saveBatches() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
@@ -4482,9 +4218,9 @@ function saveBatches() {
       console.warn("[Persistence] Could not save batches:", e);
     }
   }
+  await durableStorageService.saveCollection("batches", batches);
 }
-function saveClasses() {
-  durableStorageService.saveCollectionBackground("classes", classes);
+async function saveClasses() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(CLASSES_STORAGE_FILE, JSON.stringify(classes, null, 2), "utf-8");
@@ -4492,9 +4228,9 @@ function saveClasses() {
       console.warn("[Persistence] Could not save classes:", e);
     }
   }
+  await durableStorageService.saveCollection("classes", classes);
 }
-function saveRecordings() {
-  durableStorageService.saveCollectionBackground("recordings", recordings);
+async function saveRecordings() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(RECORDINGS_STORAGE_FILE, JSON.stringify(recordings, null, 2), "utf-8");
@@ -4502,9 +4238,9 @@ function saveRecordings() {
       console.warn("[Persistence] Could not save recordings:", e);
     }
   }
+  await durableStorageService.saveCollection("recordings", recordings);
 }
-function savePayments() {
-  durableStorageService.saveCollectionBackground("payments", payments);
+async function savePayments() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
@@ -4512,30 +4248,26 @@ function savePayments() {
       console.warn("[Persistence] Could not save payments:", e);
     }
   }
+  await durableStorageService.saveCollection("payments", payments);
 }
-function saveCmsContent() {
-  durableStorageService.saveCollectionBackground("cmsContent", [cmsContent]);
-  if (Array.isArray(cmsContent.courses)) {
-    durableStorageService.saveCollectionBackground("courses", cmsContent.courses);
-    if (process.env.VERCEL !== "1") {
-      try {
-        fs7.writeFileSync(COURSES_STORAGE_FILE, JSON.stringify(cmsContent.courses, null, 2), "utf-8");
-      } catch (e) {
-        console.warn("[Persistence] Could not save courses.json:", e);
-      }
-    }
-  }
+async function saveCmsContent() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
       fs7.writeFileSync(CMS_ALT_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
+      if (Array.isArray(cmsContent.courses)) {
+        fs7.writeFileSync(COURSES_STORAGE_FILE, JSON.stringify(cmsContent.courses, null, 2), "utf-8");
+      }
     } catch (e) {
       console.warn("[Persistence] Could not save cmsContent:", e);
     }
   }
+  await durableStorageService.saveCollection("cmsContent", [cmsContent]);
+  if (Array.isArray(cmsContent.courses)) {
+    await durableStorageService.saveCollection("courses", cmsContent.courses);
+  }
 }
-function saveAnnouncements() {
-  durableStorageService.saveCollectionBackground("announcements", announcements);
+async function saveAnnouncements() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(ANNOUNCEMENTS_STORAGE_FILE, JSON.stringify(announcements, null, 2), "utf-8");
@@ -4543,6 +4275,7 @@ function saveAnnouncements() {
       console.warn("[Persistence] Could not save announcements:", e);
     }
   }
+  await durableStorageService.saveCollection("announcements", announcements);
 }
 async function savePersistedMaterials() {
   if (process.env.VERCEL !== "1") {
@@ -4558,57 +4291,53 @@ async function savePersistedMaterials() {
     console.warn("[Persistence] Durable cloud save error for materials:", err);
   }
 }
-function saveOrders() {
-  durableStorageService.saveCollectionBackground("orders", orders);
+async function saveOrders() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
     } catch (e) {
-      console.warn("[Persistence] Could not save orders:", e);
     }
   }
+  await durableStorageService.saveCollection("orders", orders);
 }
-function saveNotifications() {
-  durableStorageService.saveCollectionBackground("notifications", notifications);
+async function saveNotifications() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(NOTIFICATIONS_STORAGE_FILE, JSON.stringify(notifications, null, 2), "utf-8");
     } catch (e) {
-      console.warn("[Persistence] Could not save notifications:", e);
     }
   }
+  await durableStorageService.saveCollection("notifications", notifications);
 }
-function saveConversations() {
-  durableStorageService.saveCollectionBackground("conversations", conversations);
+async function saveConversations() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(CONVERSATIONS_STORAGE_FILE, JSON.stringify(conversations, null, 2), "utf-8");
     } catch (e) {
-      console.warn("[Persistence] Could not save conversations:", e);
     }
   }
+  await durableStorageService.saveCollection("conversations", conversations);
 }
-function saveMessages() {
-  durableStorageService.saveCollectionBackground("messages", messages);
+async function saveMessages() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(MESSAGES_STORAGE_FILE, JSON.stringify(messages, null, 2), "utf-8");
     } catch (e) {
-      console.warn("[Persistence] Could not save messages:", e);
     }
   }
+  await durableStorageService.saveCollection("messages", messages);
 }
-function saveSupportTickets() {
-  durableStorageService.saveCollectionBackground("support-tickets", supportTickets);
+async function saveSupportTickets() {
   if (process.env.VERCEL !== "1") {
     try {
       fs7.writeFileSync(SUPPORT_TICKETS_STORAGE_FILE, JSON.stringify(supportTickets, null, 2), "utf-8");
     } catch (e) {
-      console.warn("[Persistence] Could not save support tickets:", e);
     }
   }
+  await durableStorageService.saveCollection("support-tickets", supportTickets);
 }
-loadAllPersistedData();
+ensurePersistenceInitialized().catch(() => {
+});
 async function sendWhatsAppEnrollmentMessage(data) {
   const studentReg = registrations.find((r) => r.admissionId === data.admissionId || r.id === data.admissionId);
   if (studentReg && studentReg.whatsappDeliveryStatus === "sent" && !data.forceResend) {
@@ -4939,6 +4668,16 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
+  }
+  next();
+});
+app.use(async (req, res, next) => {
+  if (req.path.startsWith("/api") || req.url.startsWith("/api")) {
+    try {
+      await ensurePersistenceInitialized();
+    } catch (err) {
+      console.warn("[Persistence] Middleware init warning:", err);
+    }
   }
   next();
 });
@@ -7041,7 +6780,7 @@ app.post("/api/admin/gallery/upload", async (req, res) => {
     if (createdItems.length === 0) {
       return res.status(400).json({ error: "Failed to process any valid images." });
     }
-    savePersistedGallery();
+    await savePersistedGallery();
     res.json({
       success: true,
       items: createdItems,
@@ -7053,7 +6792,7 @@ app.post("/api/admin/gallery/upload", async (req, res) => {
     res.status(500).json({ error: "Server error during gallery upload." });
   }
 });
-app.put("/api/admin/gallery/:id", (req, res) => {
+app.put("/api/admin/gallery/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -7069,14 +6808,14 @@ app.put("/api/admin/gallery/:id", (req, res) => {
   if (typeof category === "string") item.category = category.trim();
   if (typeof isPublished === "boolean") item.isPublished = isPublished;
   if (typeof displayOrder === "number") item.displayOrder = displayOrder;
-  savePersistedGallery();
+  await savePersistedGallery();
   res.json({
     success: true,
     item,
     message: "Gallery item updated successfully."
   });
 });
-app.put("/api/admin/gallery/reorder", (req, res) => {
+app.put("/api/admin/gallery/reorder", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -7091,7 +6830,7 @@ app.put("/api/admin/gallery/reorder", (req, res) => {
       item.displayOrder = index + 1;
     }
   });
-  savePersistedGallery();
+  await savePersistedGallery();
   res.json({
     success: true,
     items: galleryItems,
@@ -7110,7 +6849,7 @@ app.delete("/api/admin/gallery/:id", async (req, res) => {
   }
   const targetItem = galleryItems[idx];
   galleryItems.splice(idx, 1);
-  savePersistedGallery();
+  await savePersistedGallery();
   try {
     if (fs7.existsSync(uploadsDir)) {
       const files = fs7.readdirSync(uploadsDir);
@@ -7570,7 +7309,7 @@ app.post("/api/admin/registrations/:id/resend-whatsapp", async (req, res) => {
     skipped: waRes.skipped
   });
 });
-app.post("/api/admin/batches", (req, res) => {
+app.post("/api/admin/batches", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Access Denied: Admin authorization required." });
@@ -7596,7 +7335,7 @@ app.post("/api/admin/batches", (req, res) => {
     googleMeetLink: googleMeetLink ? googleMeetLink.trim() : ""
   };
   batches.unshift(newBatch);
-  saveBatches();
+  await saveBatches();
   res.json({ success: true, batch: newBatch, batches });
 });
 app.post("/api/admin/schedule-class", (req, res) => {
@@ -8355,7 +8094,7 @@ app.get("/api/proxy-pdf", async (req, res) => {
     res.status(500).send("Unable to stream the requested document.");
   }
 });
-app.post("/api/admin/announcements", (req, res) => {
+app.post("/api/admin/announcements", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8376,13 +8115,13 @@ app.post("/api/admin/announcements", (req, res) => {
     isPinned: Boolean(isPinned)
   };
   announcements.unshift(newAnn);
-  saveAnnouncements();
+  await saveAnnouncements();
   res.json({ success: true, announcement: newAnn, announcements });
 });
 app.get("/api/announcements", (req, res) => {
   res.json({ announcements });
 });
-app.put("/api/admin/announcements/:id", (req, res) => {
+app.put("/api/admin/announcements/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8405,10 +8144,10 @@ app.put("/api/admin/announcements/:id", (req, res) => {
     batchId: batchId !== void 0 ? batchId === "all" ? "all" : batch ? batch.id : batchId : announcements[annIndex].batchId,
     batchName: batchId === "all" ? "All Batches (Academy-wide)" : batch ? batch.name : announcements[annIndex].batchName
   };
-  saveAnnouncements();
+  await saveAnnouncements();
   res.json({ success: true, announcement: announcements[annIndex], announcements });
 });
-app.delete("/api/admin/announcements/:id", (req, res) => {
+app.delete("/api/admin/announcements/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8417,7 +8156,7 @@ app.delete("/api/admin/announcements/:id", (req, res) => {
   const idx = announcements.findIndex((a) => a.id === id);
   if (idx !== -1) {
     announcements.splice(idx, 1);
-    saveAnnouncements();
+    await saveAnnouncements();
   }
   res.json({ success: true, announcements });
 });
@@ -8468,7 +8207,7 @@ app.put("/api/admin/students/:id", (req, res) => {
   saveRegistrations();
   res.json({ success: true, student: reg });
 });
-app.put("/api/admin/batches/:id", (req, res) => {
+app.put("/api/admin/batches/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8477,10 +8216,10 @@ app.put("/api/admin/batches/:id", (req, res) => {
   const batch = batches.find((b) => b.id === id);
   if (!batch) return res.status(404).json({ error: "Batch not found." });
   Object.assign(batch, req.body);
-  saveBatches();
+  await saveBatches();
   res.json({ success: true, batch, batches });
 });
-app.delete("/api/admin/batches/:id", (req, res) => {
+app.delete("/api/admin/batches/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8489,7 +8228,7 @@ app.delete("/api/admin/batches/:id", (req, res) => {
   const idx = batches.findIndex((b) => b.id === id);
   if (idx !== -1) {
     batches.splice(idx, 1);
-    saveBatches();
+    await saveBatches();
     return res.json({ success: true, message: "Batch deleted successfully.", batches });
   }
   res.status(404).json({ error: "Batch not found." });
@@ -8549,7 +8288,7 @@ app.delete("/api/admin/recordings/:id", (req, res) => {
 app.get("/api/cms/content", (req, res) => {
   res.json({ content: cmsContent });
 });
-app.post("/api/cms/content", (req, res) => {
+app.post("/api/cms/content", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8566,7 +8305,7 @@ app.post("/api/cms/content", (req, res) => {
   if (settings) {
     cmsContent.settings = { ...cmsContent.settings, ...settings };
   }
-  saveCmsContent();
+  await saveCmsContent();
   res.json({ success: true, content: cmsContent });
 });
 app.post("/api/contact", (req, res) => {
@@ -8612,7 +8351,7 @@ app.get("/api/courses", (req, res) => {
   const publishedCourses = cmsContent.courses.filter((c) => c.isPublished !== false);
   res.json({ courses: publishedCourses });
 });
-app.post("/api/courses", (req, res) => {
+app.post("/api/courses", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required to create courses." });
@@ -8652,10 +8391,10 @@ app.post("/api/courses", (req, res) => {
   } else {
     cmsContent.courses.push(newCourse);
   }
-  saveCmsContent();
+  await saveCmsContent();
   res.status(201).json({ success: true, course: newCourse, courses: cmsContent.courses });
 });
-app.put("/api/courses/:id", (req, res) => {
+app.put("/api/courses/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required to edit courses." });
@@ -8679,10 +8418,10 @@ app.put("/api/courses/:id", (req, res) => {
     isPublished: isPublished !== void 0 ? isPublished : currentCourse.isPublished
   };
   cmsContent.courses[courseIndex] = updatedCourse;
-  saveCmsContent();
+  await saveCmsContent();
   res.json({ success: true, course: updatedCourse, courses: cmsContent.courses });
 });
-app.patch("/api/courses/:id/publish", (req, res) => {
+app.patch("/api/courses/:id/publish", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8694,10 +8433,10 @@ app.patch("/api/courses/:id/publish", (req, res) => {
   const currentCourse = cmsContent.courses[courseIndex];
   const newStatus = req.body.isPublished !== void 0 ? Boolean(req.body.isPublished) : !Boolean(currentCourse.isPublished);
   currentCourse.isPublished = newStatus;
-  saveCmsContent();
+  await saveCmsContent();
   res.json({ success: true, course: currentCourse, isPublished: newStatus, courses: cmsContent.courses });
 });
-app.delete("/api/courses/:id", (req, res) => {
+app.delete("/api/courses/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required to delete courses." });
@@ -8707,7 +8446,7 @@ app.delete("/api/courses/:id", (req, res) => {
     return res.status(404).json({ error: "Course not found." });
   }
   const deleted = cmsContent.courses.splice(courseIndex, 1)[0];
-  saveCmsContent();
+  await saveCmsContent();
   res.json({ success: true, deleted, courses: cmsContent.courses });
 });
 app.post("/api/courses", (req, res, next) => {
@@ -8854,12 +8593,19 @@ var config = {
     bodyParser: false
   }
 };
-function handler(req, res) {
+async function handler(req, res) {
   const matchedPath = req.headers["x-matched-path"] || req.headers["x-forwarded-uri"];
   if (matchedPath && typeof matchedPath === "string" && (req.url === "/api" || req.url.startsWith("/api?") || req.url.startsWith("/api/"))) {
     const queryIdx = req.url.indexOf("?");
     const queryString = queryIdx !== -1 ? req.url.substring(queryIdx) : "";
     req.url = (matchedPath.startsWith("/") ? matchedPath : "/" + matchedPath) + queryString;
+  }
+  try {
+    if (typeof ensurePersistenceInitialized === "function") {
+      await ensurePersistenceInitialized();
+    }
+  } catch (e) {
+    console.warn("[Vercel Handler] ensurePersistenceInitialized warning:", e);
   }
   return server_default(req, res);
 }

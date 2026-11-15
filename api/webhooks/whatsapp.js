@@ -800,6 +800,7 @@ var DurableStorageService = class _DurableStorageService {
     this.firestoreProjectId = "";
     this.isReadOnlyFs = false;
     this.dedupCache = /* @__PURE__ */ new Map();
+    this.hydratedFromCloud = /* @__PURE__ */ new Set();
     // In-process serialization mutex per collection to prevent race conditions during concurrent serverless writes
     this.collectionLocks = /* @__PURE__ */ new Map();
     this.detectEnvironment();
@@ -1020,50 +1021,24 @@ var DurableStorageService = class _DurableStorageService {
     }
   }
   /**
-   * Pre-seed in-memory cache from packaged seed files on startup if readable
+   * Pre-seed internal webhook deduplication cache on startup if readable
    */
   loadInitialData() {
-    const seedCollections = [
-      "courses",
-      "batches",
-      "cmsContent",
-      "announcements",
-      "gallery",
-      "testimonials",
-      "conversations",
-      "messages",
-      "support-tickets",
-      "notifications",
-      "registrations",
-      "orders",
-      "materials",
-      "webhook-dedup"
-    ];
-    for (const coll of seedCollections) {
-      try {
-        let localPath = path.join(process.cwd(), "uploads", "data", `${coll}.json`);
-        if (!fs.existsSync(localPath) && coll === "cmsContent") {
-          const altPath = path.join(process.cwd(), "uploads", "data", "cms-content.json");
-          if (fs.existsSync(altPath)) localPath = altPath;
-        }
-        if (fs.existsSync(localPath)) {
-          const raw = fs.readFileSync(localPath, "utf-8");
-          const parsed = JSON.parse(raw);
-          this.memoryCache.set(coll, parsed);
-          if (coll === "cmsContent") {
-            this.memoryCache.set("cms-content", parsed);
-          }
-          if (coll === "webhook-dedup" && Array.isArray(parsed)) {
-            const now = Date.now();
-            for (const item of parsed) {
-              if (item.key && (!item.expiresAt || item.expiresAt > now)) {
-                this.dedupCache.set(`${item.scope || "default"}:${item.key}`, item);
-              }
+    try {
+      const localPath = path.join(process.cwd(), "uploads", "data", "webhook-dedup.json");
+      if (fs.existsSync(localPath)) {
+        const raw = fs.readFileSync(localPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const now = Date.now();
+          for (const item of parsed) {
+            if (item.key && (!item.expiresAt || item.expiresAt > now)) {
+              this.dedupCache.set(`${item.scope || "default"}:${item.key}`, item);
             }
           }
         }
-      } catch {
       }
+    } catch {
     }
   }
   /**
@@ -1101,7 +1076,7 @@ var DurableStorageService = class _DurableStorageService {
    * Retrieve a collection from durable cloud storage or memory cache
    */
   async getCollection(collectionName, defaultValue = [], forceCloud = false) {
-    if (!forceCloud && this.memoryCache.has(collectionName)) {
+    if (!forceCloud && this.hydratedFromCloud.has(collectionName) && this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
       if (Array.isArray(cached)) {
         return [...cached];
@@ -1125,6 +1100,7 @@ var DurableStorageService = class _DurableStorageService {
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
             this.memoryCache.set(collectionName, parsed);
+            this.hydratedFromCloud.add(collectionName);
             return [...parsed];
           }
         }
@@ -1141,6 +1117,7 @@ var DurableStorageService = class _DurableStorageService {
           const parsed = JSON.parse(nativeContent);
           if (Array.isArray(parsed)) {
             this.memoryCache.set(collectionName, parsed);
+            this.hydratedFromCloud.add(collectionName);
             return [...parsed];
           }
         }
@@ -1148,18 +1125,26 @@ var DurableStorageService = class _DurableStorageService {
       }
     }
     try {
-      const localPath = path.join(process.cwd(), "uploads", "data", `${collectionName}.json`);
+      let localPath = path.join(process.cwd(), "uploads", "data", `${collectionName}.json`);
+      if (!fs.existsSync(localPath) && collectionName === "cmsContent") {
+        const altPath = path.join(process.cwd(), "uploads", "data", "cms-content.json");
+        if (fs.existsSync(altPath)) localPath = altPath;
+      }
       if (fs.existsSync(localPath)) {
         const raw = fs.readFileSync(localPath, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           this.memoryCache.set(collectionName, parsed);
+          this.hydratedFromCloud.add(collectionName);
+          this.saveCollection(collectionName, parsed).catch(() => {
+          });
           return [...parsed];
         }
       }
     } catch {
     }
     this.memoryCache.set(collectionName, defaultValue);
+    this.hydratedFromCloud.add(collectionName);
     return [...defaultValue];
   }
   /**
@@ -1187,6 +1172,7 @@ var DurableStorageService = class _DurableStorageService {
       const timestamp = (/* @__PURE__ */ new Date()).toISOString();
       const cloned = Array.isArray(items) ? [...items] : [];
       this.memoryCache.set(collectionName, cloned);
+      this.hydratedFromCloud.add(collectionName);
       const jsonString = JSON.stringify(cloned, null, 2);
       const bodyBuffer = Buffer.from(jsonString, "utf-8");
       const contentLength = bodyBuffer.byteLength;

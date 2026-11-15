@@ -68,6 +68,7 @@ export class DurableStorageService {
   private firestoreProjectId: string = '';
   private isReadOnlyFs: boolean = false;
   private dedupCache: Map<string, DedupRecord> = new Map();
+  private hydratedFromCloud: Set<string> = new Set();
 
   // In-process serialization mutex per collection to prevent race conditions during concurrent serverless writes
   private collectionLocks: Map<string, Promise<any>> = new Map();
@@ -349,54 +350,25 @@ export class DurableStorageService {
   }
 
   /**
-   * Pre-seed in-memory cache from packaged seed files on startup if readable
+   * Pre-seed internal webhook deduplication cache on startup if readable
    */
   private loadInitialData(): void {
-    const seedCollections = [
-      'courses',
-      'batches',
-      'cmsContent',
-      'announcements',
-      'gallery',
-      'testimonials',
-      'conversations',
-      'messages',
-      'support-tickets',
-      'notifications',
-      'registrations',
-      'orders',
-      'materials',
-      'webhook-dedup'
-    ];
-
-    for (const coll of seedCollections) {
-      try {
-        let localPath = path.join(process.cwd(), 'uploads', 'data', `${coll}.json`);
-        if (!fs.existsSync(localPath) && coll === 'cmsContent') {
-          const altPath = path.join(process.cwd(), 'uploads', 'data', 'cms-content.json');
-          if (fs.existsSync(altPath)) localPath = altPath;
-        }
-
-        if (fs.existsSync(localPath)) {
-          const raw = fs.readFileSync(localPath, 'utf-8');
-          const parsed = JSON.parse(raw);
-          this.memoryCache.set(coll, parsed);
-          if (coll === 'cmsContent') {
-            this.memoryCache.set('cms-content', parsed);
-          }
-
-          if (coll === 'webhook-dedup' && Array.isArray(parsed)) {
-            const now = Date.now();
-            for (const item of parsed) {
-              if (item.key && (!item.expiresAt || item.expiresAt > now)) {
-                this.dedupCache.set(`${item.scope || 'default'}:${item.key}`, item);
-              }
+    try {
+      const localPath = path.join(process.cwd(), 'uploads', 'data', 'webhook-dedup.json');
+      if (fs.existsSync(localPath)) {
+        const raw = fs.readFileSync(localPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const now = Date.now();
+          for (const item of parsed) {
+            if (item.key && (!item.expiresAt || item.expiresAt > now)) {
+              this.dedupCache.set(`${item.scope || 'default'}:${item.key}`, item);
             }
           }
         }
-      } catch {
-        // Files may not exist yet on fresh start; ignore
       }
+    } catch {
+      // Ignore
     }
   }
 
@@ -437,8 +409,8 @@ export class DurableStorageService {
    * Retrieve a collection from durable cloud storage or memory cache
    */
   public async getCollection<T>(collectionName: string, defaultValue: T[] = [], forceCloud: boolean = false): Promise<T[]> {
-    // 1. Return from in-memory cache if available and forceCloud is not requested
-    if (!forceCloud && this.memoryCache.has(collectionName)) {
+    // 1. Return from in-memory cache if already verified/hydrated from cloud or recently saved, and forceCloud is not requested
+    if (!forceCloud && this.hydratedFromCloud.has(collectionName) && this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
       if (Array.isArray(cached)) {
         return [...cached];
@@ -447,7 +419,7 @@ export class DurableStorageService {
 
     const key = `data/${collectionName}.json`;
 
-    // 2. Try fetching from Backblaze B2 via S3
+    // 2. Try fetching directly from Backblaze B2 via S3
     if (this.s3Configured && this.s3Client) {
       try {
         const res = await this.s3Client.send(
@@ -466,6 +438,7 @@ export class DurableStorageService {
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
             this.memoryCache.set(collectionName, parsed);
+            this.hydratedFromCloud.add(collectionName);
             return [...parsed];
           }
         }
@@ -484,6 +457,7 @@ export class DurableStorageService {
           const parsed = JSON.parse(nativeContent);
           if (Array.isArray(parsed)) {
             this.memoryCache.set(collectionName, parsed);
+            this.hydratedFromCloud.add(collectionName);
             return [...parsed];
           }
         }
@@ -492,14 +466,21 @@ export class DurableStorageService {
       }
     }
 
-    // 4. Try reading local file if accessible
+    // 4. Try reading local file if accessible (cold start fallback only if not in cloud)
     try {
-      const localPath = path.join(process.cwd(), 'uploads', 'data', `${collectionName}.json`);
+      let localPath = path.join(process.cwd(), 'uploads', 'data', `${collectionName}.json`);
+      if (!fs.existsSync(localPath) && collectionName === 'cmsContent') {
+        const altPath = path.join(process.cwd(), 'uploads', 'data', 'cms-content.json');
+        if (fs.existsSync(altPath)) localPath = altPath;
+      }
       if (fs.existsSync(localPath)) {
         const raw = fs.readFileSync(localPath, 'utf-8');
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           this.memoryCache.set(collectionName, parsed);
+          this.hydratedFromCloud.add(collectionName);
+          // Auto-seed to cloud so subsequent restarts pull from cloud
+          this.saveCollection(collectionName, parsed).catch(() => {});
           return [...parsed];
         }
       }
@@ -508,6 +489,7 @@ export class DurableStorageService {
     }
 
     this.memoryCache.set(collectionName, defaultValue);
+    this.hydratedFromCloud.add(collectionName);
     return [...defaultValue];
   }
 
@@ -539,6 +521,7 @@ export class DurableStorageService {
       const timestamp = new Date().toISOString();
       const cloned = Array.isArray(items) ? [...items] : [];
       this.memoryCache.set(collectionName, cloned);
+      this.hydratedFromCloud.add(collectionName);
 
       const jsonString = JSON.stringify(cloned, null, 2);
       const bodyBuffer = Buffer.from(jsonString, 'utf-8');

@@ -1166,113 +1166,7 @@ const recordings: DBRecording[] = [
 ];
 
 let materialsInitialized = false;
-const studyMaterials: DBStudyMaterial[] = [
-  {
-    id: "yt-01",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "Sound of C as “K” and “S” |",
-    description: "Master the pronunciation rules of the letter 'C' producing /k/ and /s/ sounds in spoken English.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=ZFuoc6aEn3w",
-    category: "Pronunciation & Phonics",
-    level: "All Levels",
-    uploadedAt: "15 Sept 2026",
-    uploadedDate: "15 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=ZFuoc6aEn3w",
-    thumbnailUrl: "https://img.youtube.com/vi/ZFuoc6aEn3w/hqdefault.jpg",
-    duration: "00:58",
-    views: "Wits Lingo",
-    displayOrder: 1,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  },
-  {
-    id: "yt-02",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "English & Society 🫣😅 | English seekhna hi padega.",
-    description: "Why spoken English fluency is crucial in modern professional, social, and academic settings.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=Xk1gQdbSYic",
-    category: "Spoken English & Fluency",
-    level: "All Levels",
-    uploadedAt: "18 Sept 2026",
-    uploadedDate: "18 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=Xk1gQdbSYic",
-    thumbnailUrl: "https://img.youtube.com/vi/Xk1gQdbSYic/hqdefault.jpg",
-    duration: "00:55",
-    views: "Wits Lingo",
-    displayOrder: 2,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  },
-  {
-    id: "yt-03",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "Why you can't improve your English | listen to it carefully",
-    description: "Core psychological and habit mistakes that hold back English learners from achieving natural fluency.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=mImWmss_7Gw",
-    category: "Learning Mindset",
-    level: "All Levels",
-    uploadedAt: "20 Sept 2026",
-    uploadedDate: "20 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=mImWmss_7Gw",
-    thumbnailUrl: "https://img.youtube.com/vi/mImWmss_7Gw/hqdefault.jpg",
-    duration: "00:59",
-    views: "Wits Lingo",
-    displayOrder: 3,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  },
-  {
-    id: "yt-04",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "English Learning isn't hard, but to choose a right way | Learn English With Wits Lingo Team",
-    description: "Step-by-step guidance on choosing the right structured approach to learn English speaking effectively.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=K8PYUbGdazY",
-    category: "English Foundations",
-    level: "All Levels",
-    uploadedAt: "22 Sept 2026",
-    uploadedDate: "22 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=K8PYUbGdazY",
-    thumbnailUrl: "https://img.youtube.com/vi/K8PYUbGdazY/hqdefault.jpg",
-    duration: "00:52",
-    views: "Wits Lingo",
-    displayOrder: 4,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  },
-  {
-    id: "yt-05",
-    resourceType: "youtube",
-    batchId: "all",
-    title: "Bhai, English Seekho, chahen jaha se Seekho.😅 | Wits Lingo",
-    description: "Practical encouragement and motivation to build everyday English speaking habits without hesitation.",
-    fileType: "youtube",
-    fileSize: "Video",
-    downloadUrl: "https://www.youtube.com/watch?v=8yfe0F74q6M",
-    category: "Daily Motivation",
-    level: "All Levels",
-    uploadedAt: "25 Sept 2026",
-    uploadedDate: "25 Sept 2026",
-    youtubeUrl: "https://www.youtube.com/watch?v=8yfe0F74q6M",
-    thumbnailUrl: "https://img.youtube.com/vi/8yfe0F74q6M/hqdefault.jpg",
-    duration: "00:48",
-    views: "Wits Lingo",
-    displayOrder: 5,
-    isPublished: true,
-    isVisibleOnWebsite: true
-  }
-];
+const studyMaterials: DBStudyMaterial[] = [];
 
 const assignments: DBAssignment[] = [
   {
@@ -1838,320 +1732,150 @@ const galleryItems: DBGalleryItem[] = [
   }
 ];
 
-function loadAllPersistedData(): void {
+let persistenceInitPromise: Promise<void> | null = null;
+
+async function loadAllPersistedDataAsync(): Promise<void> {
   try {
     if (!fs.existsSync(DATA_STORAGE_DIR)) {
-      fs.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
+      try { fs.mkdirSync(DATA_STORAGE_DIR, { recursive: true }); } catch (e) {}
     }
 
-    // 0. Dedicated Courses Storage
-    if (fs.existsSync(COURSES_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(COURSES_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
-          cmsContent.courses = data;
-          console.log(`[Persistence] Loaded ${data.length} courses from courses.json.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse courses.json:", e);
-      }
-    }
-
-    // 1. Registrations
+    // 1. Local admin records (registrations, users, payments, orders)
     if (fs.existsSync(REGISTRATIONS_STORAGE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
-        registrations.length = 0;
-        registrations.push(...data);
-        console.log(`[Persistence] Loaded ${registrations.length} student registrations.`);
-      }
-    } else {
-      saveRegistrations();
+      try {
+        const data = JSON.parse(fs.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          registrations.length = 0;
+          registrations.push(...data);
+        }
+      } catch (e) {}
     }
-
-    // 2. Users
     if (fs.existsSync(USERS_STORAGE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(USERS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data) && data.length > 0) {
-        users.length = 0;
-        users.push(...data);
-        console.log(`[Persistence] Loaded ${users.length} users.`);
-      }
-    } else {
-      saveUsers();
+      try {
+        const data = JSON.parse(fs.readFileSync(USERS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          users.length = 0;
+          users.push(...data);
+        }
+      } catch (e) {}
     }
-
-    // 3. Batches
-    if (fs.existsSync(BATCHES_STORAGE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data)) {
-        batches.length = 0;
-        batches.push(...data);
-        console.log(`[Persistence] Loaded ${batches.length} batches.`);
-      }
-    } else {
-      saveBatches();
+    if (fs.existsSync(PAYMENTS_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data)) {
+          payments.length = 0;
+          payments.push(...data);
+        }
+      } catch (e) {}
     }
-
-    // 3b. Classes (Interactive Classroom Schedule)
     if (fs.existsSync(CLASSES_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(CLASSES_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           classes.length = 0;
           classes.push(...data);
-          console.log(`[Persistence] Loaded ${classes.length} classes.`);
         }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse classes.json:", e);
-      }
-    } else {
-      saveClasses();
+      } catch (e) {}
     }
-
-    // 3c. Recordings (Classroom Replay Archives)
     if (fs.existsSync(RECORDINGS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(RECORDINGS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           recordings.length = 0;
           recordings.push(...data);
-          console.log(`[Persistence] Loaded ${recordings.length} recordings.`);
         }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse recordings.json:", e);
-      }
-    } else {
-      saveRecordings();
-    }
-
-    // 4. Payments
-    if (fs.existsSync(PAYMENTS_STORAGE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data)) {
-        payments.length = 0;
-        payments.push(...data);
-        console.log(`[Persistence] Loaded ${payments.length} verified payment transactions.`);
-      }
-    } else {
-      savePayments();
-    }
-
-    // 5. CMS Content
-    const cmsFileToRead = fs.existsSync(CMS_STORAGE_FILE)
-      ? CMS_STORAGE_FILE
-      : (fs.existsSync(CMS_ALT_STORAGE_FILE) ? CMS_ALT_STORAGE_FILE : null);
-
-    if (cmsFileToRead) {
-      const data = JSON.parse(fs.readFileSync(cmsFileToRead, "utf-8"));
-      if (data && typeof data === "object") {
-        cmsContent = {
-          ...cmsContent,
-          ...data,
-          courses: (Array.isArray(cmsContent.courses) && cmsContent.courses.length > 0)
-            ? cmsContent.courses
-            : (data.courses || cmsContent.courses),
-          settings: {
-            ...cmsContent.settings,
-            ...(data.settings || {})
-          }
-        };
-        if (!cmsContent.email || cmsContent.email.toLowerCase() === 'witslingo@gmail.com' || cmsContent.email.toLowerCase() === 'admissions@witslingo.com' || cmsContent.email.toLowerCase() === 'support@witslingo.com') {
-          cmsContent.email = "hello@witslingo.com";
-        }
-        console.log(`[Persistence] Loaded custom CMS content & settings.`);
-      }
-    } else {
-      saveCmsContent();
-    }
-
-    // Cloud Durable Storage Hydration for CMS Content & Courses
-    try {
-      durableStorageService.getCollection<any>("cmsContent", []).then((durableData) => {
-        if (Array.isArray(durableData) && durableData.length > 0) {
-          const remote = durableData[0];
-          if (remote && typeof remote === 'object') {
-            cmsContent = {
-              ...cmsContent,
-              ...remote,
-              courses: (Array.isArray(remote.courses) && remote.courses.length > 0)
-                ? remote.courses
-                : cmsContent.courses,
-              settings: {
-                ...cmsContent.settings,
-                ...(remote.settings || {})
-              }
-            };
-            console.log(`[Persistence] Hydrated ${cmsContent.courses?.length || 0} courses from cloud durable storage.`);
-          }
-        }
-      }).catch(() => {});
-    } catch (e) {}
-
-    // 6. Announcements
-    if (fs.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
-      if (Array.isArray(data)) {
-        announcements.length = 0;
-        announcements.push(...data);
-        console.log(`[Persistence] Loaded ${announcements.length} announcements.`);
-      }
-    } else {
-      saveAnnouncements();
-    }
-
-    // 7. Study Materials
-    let materialsLoaded = false;
-    if (fs.existsSync(MATERIALS_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          for (const m of data) {
-            if (m.resourceType === "youtube" || m.fileType === "youtube") {
-              if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
-            } else if (!m.downloadUrl || m.downloadUrl === "#") {
-              m.downloadUrl = `/api/files/download/${m.id}`;
-            }
-          }
-          studyMaterials.length = 0;
-          studyMaterials.push(...data);
-          materialsLoaded = true;
-          materialsInitialized = true;
-          console.log(`[Persistence] Loaded ${studyMaterials.length} study materials.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse materials.json:", e);
-      }
-    }
-
-    // Cloud Durable Storage Hydration for Study Materials & YouTube Lessons (only if not loaded locally)
-    if (!materialsLoaded) {
-      try {
-        durableStorageService.getCollection<DBStudyMaterial>("materials", [], true).then((durableMaterials) => {
-          if (Array.isArray(durableMaterials)) {
-            for (const m of durableMaterials) {
-              if (m.resourceType === "youtube" || m.fileType === "youtube") {
-                if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
-              } else if (!m.downloadUrl || m.downloadUrl === "#") {
-                m.downloadUrl = `/api/files/download/${m.id}`;
-              }
-            }
-            studyMaterials.length = 0;
-            studyMaterials.push(...durableMaterials);
-            materialsLoaded = true;
-            materialsInitialized = true;
-            console.log(`[Persistence] Hydrated ${studyMaterials.length} study materials from cloud durable storage.`);
-          }
-        }).catch(() => {});
       } catch (e) {}
     }
-
-    if (!materialsLoaded && studyMaterials.length > 0) {
-      savePersistedMaterials();
-    }
-
-    // 8. Gallery Items
-    let galleryLoaded = false;
-    if (fs.existsSync(GALLERY_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(GALLERY_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          galleryItems.length = 0;
-          galleryItems.push(...data);
-          galleryLoaded = true;
-          console.log(`[Persistence] Loaded ${galleryItems.length} gallery items.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse gallery.json:", e);
-      }
-    }
-    if (!galleryLoaded) {
-      const legacyPath = path.join(process.cwd(), "uploads", "gallery.json");
-      if (fs.existsSync(legacyPath)) {
-        try {
-          const data = JSON.parse(fs.readFileSync(legacyPath, "utf-8"));
-          if (Array.isArray(data) && data.length > 0) {
-            galleryItems.length = 0;
-            galleryItems.push(...data);
-            console.log(`[Persistence] Seeded ${galleryItems.length} gallery items from legacy storage.`);
-            savePersistedGallery();
-          }
-        } catch (e) {}
-      } else {
-        savePersistedGallery();
-      }
-    }
-
-    // 9. Orders
     if (fs.existsSync(ORDERS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(ORDERS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data)) {
           orders.length = 0;
           orders.push(...data);
-          console.log(`[Persistence] Loaded ${orders.length} student orders.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse orders.json:", e);
-      }
-    }
-
-    // 10. Notifications
-    if (fs.existsSync(NOTIFICATIONS_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(NOTIFICATIONS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          notifications.length = 0;
-          notifications.push(...data);
-          console.log(`[Persistence] Loaded ${notifications.length} WhatsApp notifications.`);
-        }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse notifications.json:", e);
-      }
-    }
-
-    // 11. Conversations
-    if (fs.existsSync(CONVERSATIONS_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(CONVERSATIONS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          conversations.length = 0;
-          conversations.push(...data);
         }
       } catch (e) {}
     }
 
-    // 12. Messages
-    if (fs.existsSync(MESSAGES_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(MESSAGES_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          messages.length = 0;
-          messages.push(...data);
-        }
-      } catch (e) {}
-    }
+    // 2. Cloud-first Dynamic Content Hydration (Backblaze B2 is Source of Truth)
+    try {
+      const [cloudMaterials, cloudCourses, cloudCms, cloudAnnouncements, cloudBatches, cloudGallery] = await Promise.all([
+        durableStorageService.getCollection<DBStudyMaterial>("materials", []),
+        durableStorageService.getCollection<any>("courses", []),
+        durableStorageService.getCollection<any>("cmsContent", []),
+        durableStorageService.getCollection<any>("announcements", []),
+        durableStorageService.getCollection<any>("batches", []),
+        durableStorageService.getCollection<any>("gallery", [])
+      ]);
 
-    // 13. Support Tickets
-    if (fs.existsSync(SUPPORT_TICKETS_STORAGE_FILE)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(SUPPORT_TICKETS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data)) {
-          supportTickets.length = 0;
-          supportTickets.push(...data);
-          console.log(`[Persistence] Loaded ${supportTickets.length} support tickets.`);
+      // Materials & Videos
+      if (Array.isArray(cloudMaterials)) {
+        for (const m of cloudMaterials) {
+          if (m.resourceType === "youtube" || m.fileType === "youtube") {
+            if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
+          } else if (!m.downloadUrl || m.downloadUrl === "#") {
+            m.downloadUrl = `/api/files/download/${m.id}`;
+          }
         }
-      } catch (e) {
-        console.warn("[Persistence] Could not parse support-tickets.json:", e);
+        studyMaterials.length = 0;
+        studyMaterials.push(...cloudMaterials);
+        materialsInitialized = true;
+        console.log(`[Persistence] Hydrated ${studyMaterials.length} materials/videos from Backblaze B2.`);
       }
+
+      // Courses
+      if (Array.isArray(cloudCourses) && cloudCourses.length > 0) {
+        cmsContent.courses = cloudCourses;
+        console.log(`[Persistence] Hydrated ${cloudCourses.length} courses from Backblaze B2.`);
+      }
+
+      // CMS Content & Settings
+      if (Array.isArray(cloudCms) && cloudCms.length > 0 && cloudCms[0]) {
+        const remote = cloudCms[0];
+        cmsContent = {
+          ...cmsContent,
+          ...remote,
+          courses: (Array.isArray(remote.courses) && remote.courses.length > 0) ? remote.courses : cmsContent.courses,
+          settings: { ...cmsContent.settings, ...(remote.settings || {}) }
+        };
+        console.log(`[Persistence] Hydrated CMS settings from Backblaze B2.`);
+      }
+
+      // Announcements
+      if (Array.isArray(cloudAnnouncements) && cloudAnnouncements.length > 0) {
+        announcements.length = 0;
+        announcements.push(...cloudAnnouncements);
+        console.log(`[Persistence] Hydrated ${announcements.length} announcements from Backblaze B2.`);
+      }
+
+      // Batches
+      if (Array.isArray(cloudBatches) && cloudBatches.length > 0) {
+        batches.length = 0;
+        batches.push(...cloudBatches);
+        console.log(`[Persistence] Hydrated ${batches.length} batches from Backblaze B2.`);
+      }
+
+      // Gallery
+      if (Array.isArray(cloudGallery) && cloudGallery.length > 0) {
+        galleryItems.length = 0;
+        galleryItems.push(...cloudGallery);
+        console.log(`[Persistence] Hydrated ${galleryItems.length} gallery items from Backblaze B2.`);
+      }
+    } catch (cloudErr) {
+      console.warn("[Persistence] Cloud hydration notice:", cloudErr);
     }
   } catch (err) {
-    console.warn("[Persistence] Error loading persisted data from disk:", err);
+    console.warn("[Persistence] Error loading persisted data:", err);
   }
 }
 
-function savePersistedGallery(): void {
-  durableStorageService.saveCollectionBackground("gallery", galleryItems);
+export function ensurePersistenceInitialized(): Promise<void> {
+  if (!persistenceInitPromise) {
+    persistenceInitPromise = loadAllPersistedDataAsync();
+  }
+  return persistenceInitPromise;
+}
+
+async function savePersistedGallery(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
@@ -2159,32 +1883,28 @@ function savePersistedGallery(): void {
       console.warn("[Persistence] Could not save gallery.json:", e);
     }
   }
+  await durableStorageService.saveCollection("gallery", galleryItems);
 }
 
-function saveRegistrations(): void {
-  durableStorageService.saveCollectionBackground("registrations", registrations);
+async function saveRegistrations(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save registrations:", e);
-    }
+    } catch (e) {}
   }
+  await durableStorageService.saveCollection("registrations", registrations);
 }
 
-function saveUsers(): void {
-  durableStorageService.saveCollectionBackground("users", users);
+async function saveUsers(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save users:", e);
-    }
+    } catch (e) {}
   }
+  await durableStorageService.saveCollection("users", users);
 }
 
-function saveBatches(): void {
-  durableStorageService.saveCollectionBackground("batches", batches);
+async function saveBatches(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
@@ -2192,10 +1912,10 @@ function saveBatches(): void {
       console.warn("[Persistence] Could not save batches:", e);
     }
   }
+  await durableStorageService.saveCollection("batches", batches);
 }
 
-function saveClasses(): void {
-  durableStorageService.saveCollectionBackground("classes", classes);
+async function saveClasses(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(CLASSES_STORAGE_FILE, JSON.stringify(classes, null, 2), "utf-8");
@@ -2203,10 +1923,10 @@ function saveClasses(): void {
       console.warn("[Persistence] Could not save classes:", e);
     }
   }
+  await durableStorageService.saveCollection("classes", classes);
 }
 
-function saveRecordings(): void {
-  durableStorageService.saveCollectionBackground("recordings", recordings);
+async function saveRecordings(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(RECORDINGS_STORAGE_FILE, JSON.stringify(recordings, null, 2), "utf-8");
@@ -2214,10 +1934,10 @@ function saveRecordings(): void {
       console.warn("[Persistence] Could not save recordings:", e);
     }
   }
+  await durableStorageService.saveCollection("recordings", recordings);
 }
 
-function savePayments(): void {
-  durableStorageService.saveCollectionBackground("payments", payments);
+async function savePayments(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
@@ -2225,32 +1945,28 @@ function savePayments(): void {
       console.warn("[Persistence] Could not save payments:", e);
     }
   }
+  await durableStorageService.saveCollection("payments", payments);
 }
 
-function saveCmsContent(): void {
-  durableStorageService.saveCollectionBackground("cmsContent", [cmsContent]);
-  if (Array.isArray(cmsContent.courses)) {
-    durableStorageService.saveCollectionBackground("courses", cmsContent.courses);
-    if (process.env.VERCEL !== "1") {
-      try {
-        fs.writeFileSync(COURSES_STORAGE_FILE, JSON.stringify(cmsContent.courses, null, 2), "utf-8");
-      } catch (e) {
-        console.warn("[Persistence] Could not save courses.json:", e);
-      }
-    }
-  }
+async function saveCmsContent(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
       fs.writeFileSync(CMS_ALT_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
+      if (Array.isArray(cmsContent.courses)) {
+        fs.writeFileSync(COURSES_STORAGE_FILE, JSON.stringify(cmsContent.courses, null, 2), "utf-8");
+      }
     } catch (e) {
       console.warn("[Persistence] Could not save cmsContent:", e);
     }
   }
+  await durableStorageService.saveCollection("cmsContent", [cmsContent]);
+  if (Array.isArray(cmsContent.courses)) {
+    await durableStorageService.saveCollection("courses", cmsContent.courses);
+  }
 }
 
-function saveAnnouncements(): void {
-  durableStorageService.saveCollectionBackground("announcements", announcements);
+async function saveAnnouncements(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(ANNOUNCEMENTS_STORAGE_FILE, JSON.stringify(announcements, null, 2), "utf-8");
@@ -2258,6 +1974,7 @@ function saveAnnouncements(): void {
       console.warn("[Persistence] Could not save announcements:", e);
     }
   }
+  await durableStorageService.saveCollection("announcements", announcements);
 }
 
 async function savePersistedMaterials(): Promise<void> {
@@ -2275,63 +1992,53 @@ async function savePersistedMaterials(): Promise<void> {
   }
 }
 
-function saveOrders(): void {
-  durableStorageService.saveCollectionBackground("orders", orders);
+async function saveOrders(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save orders:", e);
-    }
+    } catch (e) {}
   }
+  await durableStorageService.saveCollection("orders", orders);
 }
 
-function saveNotifications(): void {
-  durableStorageService.saveCollectionBackground("notifications", notifications);
+async function saveNotifications(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(NOTIFICATIONS_STORAGE_FILE, JSON.stringify(notifications, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save notifications:", e);
-    }
+    } catch (e) {}
   }
+  await durableStorageService.saveCollection("notifications", notifications);
 }
 
-function saveConversations(): void {
-  durableStorageService.saveCollectionBackground("conversations", conversations);
+async function saveConversations(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(CONVERSATIONS_STORAGE_FILE, JSON.stringify(conversations, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save conversations:", e);
-    }
+    } catch (e) {}
   }
+  await durableStorageService.saveCollection("conversations", conversations);
 }
 
-function saveMessages(): void {
-  durableStorageService.saveCollectionBackground("messages", messages);
+async function saveMessages(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(MESSAGES_STORAGE_FILE, JSON.stringify(messages, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save messages:", e);
-    }
+    } catch (e) {}
   }
+  await durableStorageService.saveCollection("messages", messages);
 }
 
-function saveSupportTickets(): void {
-  durableStorageService.saveCollectionBackground("support-tickets", supportTickets);
+async function saveSupportTickets(): Promise<void> {
   if (process.env.VERCEL !== "1") {
     try {
       fs.writeFileSync(SUPPORT_TICKETS_STORAGE_FILE, JSON.stringify(supportTickets, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save support tickets:", e);
-    }
+    } catch (e) {}
   }
+  await durableStorageService.saveCollection("support-tickets", supportTickets);
 }
 
-// Initial boot load
-loadAllPersistedData();
+// Initial boot load (kicks off background hydration immediately)
+ensurePersistenceInitialized().catch(() => {});
 
 // =========================================================================
 // WHATSAPP CLOUD API AUTOMATION (Meta Graph API) — PRODUCTION SECURE ENGINE
@@ -2744,6 +2451,18 @@ try {
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     if (req.method === "OPTIONS") {
       return res.sendStatus(200);
+    }
+    next();
+  });
+
+  // Ensure durable cloud persistence is hydrated before handling any API requests
+  app.use(async (req, res, next) => {
+    if (req.path.startsWith("/api") || req.url.startsWith("/api")) {
+      try {
+        await ensurePersistenceInitialized();
+      } catch (err) {
+        console.warn("[Persistence] Middleware init warning:", err);
+      }
     }
     next();
   });
@@ -5325,7 +5044,7 @@ www.witslingo.com`;
         return res.status(400).json({ error: "Failed to process any valid images." });
       }
 
-      savePersistedGallery();
+      await savePersistedGallery();
 
       res.json({
         success: true,
@@ -5340,7 +5059,7 @@ www.witslingo.com`;
   });
 
   // 4. Admin Update Gallery Item
-  app.put("/api/admin/gallery/:id", (req, res) => {
+  app.put("/api/admin/gallery/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -5359,7 +5078,7 @@ www.witslingo.com`;
     if (typeof isPublished === "boolean") item.isPublished = isPublished;
     if (typeof displayOrder === "number") item.displayOrder = displayOrder;
 
-    savePersistedGallery();
+    await savePersistedGallery();
 
     res.json({
       success: true,
@@ -5369,7 +5088,7 @@ www.witslingo.com`;
   });
 
   // 5. Admin Batch Reorder Gallery Items
-  app.put("/api/admin/gallery/reorder", (req, res) => {
+  app.put("/api/admin/gallery/reorder", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -5387,7 +5106,7 @@ www.witslingo.com`;
       }
     });
 
-    savePersistedGallery();
+    await savePersistedGallery();
 
     res.json({
       success: true,
@@ -5413,7 +5132,7 @@ www.witslingo.com`;
     
     // 1. Remove from array and save metadata first for safety
     galleryItems.splice(idx, 1);
-    savePersistedGallery();
+    await savePersistedGallery();
 
     // 2. Safely clean up local disk files
     try {
@@ -5947,7 +5666,7 @@ www.witslingo.com`
   });
 
   // 16. ADMIN: Batch Management (Create Batch)
-  app.post("/api/admin/batches", (req, res) => {
+  app.post("/api/admin/batches", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
@@ -5976,7 +5695,7 @@ www.witslingo.com`
     };
 
     batches.unshift(newBatch);
-    saveBatches();
+    await saveBatches();
     res.json({ success: true, batch: newBatch, batches });
   });
 
@@ -6838,7 +6557,7 @@ www.witslingo.com`
   });
 
   // 21. ADMIN: Post Batch Announcement
-  app.post("/api/admin/announcements", (req, res) => {
+  app.post("/api/admin/announcements", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6862,7 +6581,7 @@ www.witslingo.com`
     };
 
     announcements.unshift(newAnn);
-    saveAnnouncements();
+    await saveAnnouncements();
     res.json({ success: true, announcement: newAnn, announcements });
   });
 
@@ -6872,7 +6591,7 @@ www.witslingo.com`
   });
 
   // 21c. ADMIN: Update Announcement
-  app.put("/api/admin/announcements/:id", (req, res) => {
+  app.put("/api/admin/announcements/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6899,12 +6618,12 @@ www.witslingo.com`
       batchName: batchId === 'all' ? "All Batches (Academy-wide)" : (batch ? batch.name : announcements[annIndex].batchName)
     };
 
-    saveAnnouncements();
+    await saveAnnouncements();
     res.json({ success: true, announcement: announcements[annIndex], announcements });
   });
 
   // 21d. ADMIN: Delete Announcement
-  app.delete("/api/admin/announcements/:id", (req, res) => {
+  app.delete("/api/admin/announcements/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6914,7 +6633,7 @@ www.witslingo.com`
     const idx = announcements.findIndex(a => a.id === id);
     if (idx !== -1) {
       announcements.splice(idx, 1);
-      saveAnnouncements();
+      await saveAnnouncements();
     }
     res.json({ success: true, announcements });
   });
@@ -6977,7 +6696,7 @@ www.witslingo.com`
   });
 
   // UPDATE Batch
-  app.put("/api/admin/batches/:id", (req, res) => {
+  app.put("/api/admin/batches/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6987,12 +6706,12 @@ www.witslingo.com`
     if (!batch) return res.status(404).json({ error: "Batch not found." });
 
     Object.assign(batch, req.body);
-    saveBatches();
+    await saveBatches();
     res.json({ success: true, batch, batches });
   });
 
   // DELETE Batch
-  app.delete("/api/admin/batches/:id", (req, res) => {
+  app.delete("/api/admin/batches/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -7001,7 +6720,7 @@ www.witslingo.com`
     const idx = batches.findIndex(b => b.id === id);
     if (idx !== -1) {
       batches.splice(idx, 1);
-      saveBatches();
+      await saveBatches();
       return res.json({ success: true, message: "Batch deleted successfully.", batches });
     }
     res.status(404).json({ error: "Batch not found." });
@@ -7076,7 +6795,7 @@ www.witslingo.com`
     res.json({ content: cmsContent });
   });
 
-  app.post("/api/cms/content", (req, res) => {
+  app.post("/api/cms/content", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -7095,7 +6814,7 @@ www.witslingo.com`
       cmsContent.settings = { ...cmsContent.settings, ...settings };
     }
 
-    saveCmsContent();
+    await saveCmsContent();
     res.json({ success: true, content: cmsContent });
   });
 
@@ -7152,7 +6871,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     res.json({ courses: publishedCourses });
   });
 
-  app.post("/api/courses", (req, res) => {
+  app.post("/api/courses", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required to create courses." });
@@ -7195,11 +6914,11 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     } else {
       cmsContent.courses.push(newCourse);
     }
-    saveCmsContent();
+    await saveCmsContent();
     res.status(201).json({ success: true, course: newCourse, courses: cmsContent.courses });
   });
 
-  app.put("/api/courses/:id", (req, res) => {
+  app.put("/api/courses/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required to edit courses." });
@@ -7227,11 +6946,11 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     };
 
     cmsContent.courses[courseIndex] = updatedCourse;
-    saveCmsContent();
+    await saveCmsContent();
     res.json({ success: true, course: updatedCourse, courses: cmsContent.courses });
   });
 
-  app.patch("/api/courses/:id/publish", (req, res) => {
+  app.patch("/api/courses/:id/publish", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -7245,11 +6964,11 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     const currentCourse = cmsContent.courses[courseIndex];
     const newStatus = req.body.isPublished !== undefined ? Boolean(req.body.isPublished) : !Boolean(currentCourse.isPublished);
     currentCourse.isPublished = newStatus;
-    saveCmsContent();
+    await saveCmsContent();
     res.json({ success: true, course: currentCourse, isPublished: newStatus, courses: cmsContent.courses });
   });
 
-  app.delete("/api/courses/:id", (req, res) => {
+  app.delete("/api/courses/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required to delete courses." });
@@ -7261,7 +6980,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     }
 
     const deleted = cmsContent.courses.splice(courseIndex, 1)[0];
-    saveCmsContent();
+    await saveCmsContent();
     res.json({ success: true, deleted, courses: cmsContent.courses });
   });
 
