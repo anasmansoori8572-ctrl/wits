@@ -3037,6 +3037,833 @@ async function deleteReviewDb(id, isAdmin, providedAuthorKey) {
     deleted: rowToReview(deleted[0])
   };
 }
+function rowToCourse(row) {
+  let whatYouWillLearn = [];
+  if (Array.isArray(row.what_you_will_learn)) {
+    whatYouWillLearn = row.what_you_will_learn;
+  } else if (typeof row.what_you_will_learn === "string") {
+    try {
+      whatYouWillLearn = JSON.parse(row.what_you_will_learn);
+    } catch {
+    }
+  }
+  let facilities = [];
+  if (Array.isArray(row.facilities)) {
+    facilities = row.facilities;
+  } else if (typeof row.facilities === "string") {
+    try {
+      facilities = JSON.parse(row.facilities);
+    } catch {
+    }
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    level: row.level || "Beginner to Intermediate",
+    shortDescription: row.short_description || "",
+    whatYouWillLearn,
+    facilities,
+    duration: row.duration || "",
+    learningFormat: row.learning_format || "",
+    fee: Number(row.fee) || 0,
+    badge: row.badge || void 0,
+    imageUrl: row.image_url || void 0,
+    isPublished: Boolean(row.is_published),
+    order: row.display_order ?? 0
+  };
+}
+async function getCoursesDb(includeUnpublished = false) {
+  const sql = getDb();
+  const rows = includeUnpublished ? await sql`SELECT * FROM courses ORDER BY display_order ASC, created_at ASC;` : await sql`SELECT * FROM courses WHERE is_published = true ORDER BY display_order ASC, created_at ASC;`;
+  return rows.map(rowToCourse);
+}
+async function getCourseByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM courses WHERE id = ${id} LIMIT 1;`;
+  return rows.length > 0 ? rowToCourse(rows[0]) : null;
+}
+async function createCourseDb(data) {
+  const sql = getDb();
+  const id = data.id || `course-${Date.now()}`;
+  const name = (data.name || "Untitled Course").trim();
+  const level = data.level || "Beginner to Intermediate";
+  const short_description = data.shortDescription || "";
+  const what_you_will_learn = JSON.stringify(data.whatYouWillLearn || []);
+  const facilities = JSON.stringify(data.facilities || []);
+  const duration = data.duration || "";
+  const learning_format = data.learningFormat || "Live Online Classroom";
+  const fee = Number(data.fee) || 0;
+  const badge = data.badge || null;
+  const image_url = data.imageUrl || null;
+  const is_published = data.isPublished !== false;
+  const display_order = data.order ?? 0;
+  const rows = await sql`
+    INSERT INTO courses (
+      id, name, level, short_description, what_you_will_learn,
+      facilities, duration, learning_format, fee, badge,
+      image_url, is_published, display_order
+    ) VALUES (
+      ${id}, ${name}, ${level}, ${short_description}, ${what_you_will_learn}::jsonb,
+      ${facilities}::jsonb, ${duration}, ${learning_format}, ${fee}, ${badge},
+      ${image_url}, ${is_published}, ${display_order}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      level = EXCLUDED.level,
+      short_description = EXCLUDED.short_description,
+      what_you_will_learn = EXCLUDED.what_you_will_learn,
+      facilities = EXCLUDED.facilities,
+      duration = EXCLUDED.duration,
+      learning_format = EXCLUDED.learning_format,
+      fee = EXCLUDED.fee,
+      badge = EXCLUDED.badge,
+      image_url = EXCLUDED.image_url,
+      is_published = EXCLUDED.is_published,
+      display_order = EXCLUDED.display_order,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToCourse(rows[0]);
+}
+async function updateCourseDb(id, data) {
+  const sql = getDb();
+  const existing = await getCourseByIdDb(id);
+  if (!existing) return null;
+  const name = data.name !== void 0 ? data.name.trim() : existing.name;
+  const level = data.level !== void 0 ? data.level : existing.level;
+  const short_description = data.shortDescription !== void 0 ? data.shortDescription : existing.shortDescription;
+  const what_you_will_learn = JSON.stringify(data.whatYouWillLearn !== void 0 ? data.whatYouWillLearn : existing.whatYouWillLearn);
+  const facilities = JSON.stringify(data.facilities !== void 0 ? data.facilities : existing.facilities || []);
+  const duration = data.duration !== void 0 ? data.duration : existing.duration;
+  const learning_format = data.learningFormat !== void 0 ? data.learningFormat : existing.learningFormat;
+  const fee = data.fee !== void 0 ? Number(data.fee) : existing.fee;
+  const badge = data.badge !== void 0 ? data.badge : existing.badge || null;
+  const image_url = data.imageUrl !== void 0 ? data.imageUrl : existing.imageUrl || null;
+  const is_published = data.isPublished !== void 0 ? Boolean(data.isPublished) : existing.isPublished;
+  const display_order = data.order !== void 0 ? data.order : existing.order;
+  const rows = await sql`
+    UPDATE courses SET
+      name = ${name},
+      level = ${level},
+      short_description = ${short_description},
+      what_you_will_learn = ${what_you_will_learn}::jsonb,
+      facilities = ${facilities}::jsonb,
+      duration = ${duration},
+      learning_format = ${learning_format},
+      fee = ${fee},
+      badge = ${badge},
+      image_url = ${image_url},
+      is_published = ${is_published},
+      display_order = ${display_order},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToCourse(rows[0]) : null;
+}
+async function setCoursePublishedDb(id, isPublished) {
+  const sql = getDb();
+  const rows = await sql`
+    UPDATE courses SET
+      is_published = ${isPublished},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToCourse(rows[0]) : null;
+}
+async function deleteCourseDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM courses WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToCourse(rows[0]) : null;
+}
+function rowToBatch(row) {
+  const enrolled = Number(row.enrolled_count ?? 0);
+  const maxCap = Number(row.max_students ?? 30);
+  return {
+    id: row.id,
+    name: row.name,
+    courseId: row.course_id || "",
+    courseName: row.course_name || "",
+    batchCode: row.batch_code || "",
+    startDate: row.start_date || "",
+    endDate: row.end_date || "",
+    teacherName: row.teacher_name || "",
+    scheduleTime: row.schedule_time || "",
+    classTime: row.class_time || void 0,
+    scheduleInfo: row.schedule_info || void 0,
+    maxStudents: maxCap,
+    currentStudentsCount: enrolled,
+    enrolledCount: enrolled,
+    maxCapacity: maxCap,
+    status: row.status || "Upcoming",
+    recordingsExpiryDate: row.recordings_expiry_date || void 0,
+    description: row.description || void 0,
+    isVisibleOnWebsite: row.is_visible_on_website !== false,
+    googleMeetLink: row.google_meet_link || void 0,
+    meetLink: row.google_meet_link || void 0
+  };
+}
+async function getBatchesDb(includeHidden = false) {
+  const sql = getDb();
+  const rows = includeHidden ? await sql`
+        SELECT b.*,
+               COALESCE((
+                 SELECT count(*)::int 
+                 FROM student_registrations sr 
+                 WHERE sr.batch_id = b.id
+               ), 0) AS enrolled_count
+        FROM batches b
+        ORDER BY b.created_at DESC;
+      ` : await sql`
+        SELECT b.*,
+               COALESCE((
+                 SELECT count(*)::int 
+                 FROM student_registrations sr 
+                 WHERE sr.batch_id = b.id
+               ), 0) AS enrolled_count
+        FROM batches b
+        WHERE b.is_visible_on_website = true
+        ORDER BY b.created_at DESC;
+      `;
+  return rows.map(rowToBatch);
+}
+async function getBatchByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT b.*,
+           COALESCE((
+             SELECT count(*)::int 
+             FROM student_registrations sr 
+             WHERE sr.batch_id = b.id
+           ), 0) AS enrolled_count
+    FROM batches b
+    WHERE b.id = ${id}
+    LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToBatch(rows[0]) : null;
+}
+async function createBatchDb(data) {
+  const sql = getDb();
+  const id = data.id || `batch-${Date.now()}`;
+  const name = (data.name || "New Batch").trim();
+  const course_id = data.courseId || null;
+  const course_name = data.courseName || null;
+  const batch_code = data.batchCode || "";
+  const start_date = data.startDate || "";
+  const end_date = data.endDate || "";
+  const teacher_name = data.teacherName || "";
+  const schedule_time = data.scheduleTime || "";
+  const class_time = data.classTime || schedule_time;
+  const schedule_info = data.scheduleInfo || "";
+  const max_students = Number(data.maxStudents || data.maxCapacity || 30);
+  const status = data.status || "Upcoming";
+  const recordings_expiry_date = data.recordingsExpiryDate || null;
+  const description = data.description || null;
+  const is_visible_on_website = data.isVisibleOnWebsite !== false;
+  const google_meet_link = data.googleMeetLink || data.meetLink || null;
+  const rows = await sql`
+    INSERT INTO batches (
+      id, name, course_id, course_name, batch_code,
+      start_date, end_date, teacher_name, schedule_time, class_time,
+      schedule_info, max_students, status, recordings_expiry_date,
+      description, is_visible_on_website, google_meet_link
+    ) VALUES (
+      ${id}, ${name}, ${course_id}, ${course_name}, ${batch_code},
+      ${start_date}, ${end_date}, ${teacher_name}, ${schedule_time}, ${class_time},
+      ${schedule_info}, ${max_students}, ${status}, ${recordings_expiry_date},
+      ${description}, ${is_visible_on_website}, ${google_meet_link}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      course_id = EXCLUDED.course_id,
+      course_name = EXCLUDED.course_name,
+      batch_code = EXCLUDED.batch_code,
+      start_date = EXCLUDED.start_date,
+      end_date = EXCLUDED.end_date,
+      teacher_name = EXCLUDED.teacher_name,
+      schedule_time = EXCLUDED.schedule_time,
+      class_time = EXCLUDED.class_time,
+      schedule_info = EXCLUDED.schedule_info,
+      max_students = EXCLUDED.max_students,
+      status = EXCLUDED.status,
+      recordings_expiry_date = EXCLUDED.recordings_expiry_date,
+      description = EXCLUDED.description,
+      is_visible_on_website = EXCLUDED.is_visible_on_website,
+      google_meet_link = EXCLUDED.google_meet_link,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToBatch(rows[0]);
+}
+async function updateBatchDb(id, data) {
+  const sql = getDb();
+  const existing = await getBatchByIdDb(id);
+  if (!existing) return null;
+  const name = data.name !== void 0 ? data.name.trim() : existing.name;
+  const course_id = data.courseId !== void 0 ? data.courseId || null : existing.courseId || null;
+  const course_name = data.courseName !== void 0 ? data.courseName : existing.courseName;
+  const batch_code = data.batchCode !== void 0 ? data.batchCode : existing.batchCode;
+  const start_date = data.startDate !== void 0 ? data.startDate : existing.startDate;
+  const end_date = data.endDate !== void 0 ? data.endDate : existing.endDate;
+  const teacher_name = data.teacherName !== void 0 ? data.teacherName : existing.teacherName;
+  const schedule_time = data.scheduleTime !== void 0 ? data.scheduleTime : existing.scheduleTime;
+  const class_time = data.classTime !== void 0 ? data.classTime : existing.classTime || existing.scheduleTime;
+  const schedule_info = data.scheduleInfo !== void 0 ? data.scheduleInfo : existing.scheduleInfo || null;
+  const max_students = data.maxStudents !== void 0 ? Number(data.maxStudents) : data.maxCapacity !== void 0 ? Number(data.maxCapacity) : existing.maxStudents;
+  const status = data.status !== void 0 ? data.status : existing.status;
+  const recordings_expiry_date = data.recordingsExpiryDate !== void 0 ? data.recordingsExpiryDate : existing.recordingsExpiryDate || null;
+  const description = data.description !== void 0 ? data.description : existing.description || null;
+  const is_visible_on_website = data.isVisibleOnWebsite !== void 0 ? Boolean(data.isVisibleOnWebsite) : existing.isVisibleOnWebsite;
+  const google_meet_link = data.googleMeetLink !== void 0 || data.meetLink !== void 0 ? data.googleMeetLink || data.meetLink || null : existing.googleMeetLink || null;
+  const rows = await sql`
+    UPDATE batches SET
+      name = ${name},
+      course_id = ${course_id},
+      course_name = ${course_name},
+      batch_code = ${batch_code},
+      start_date = ${start_date},
+      end_date = ${end_date},
+      teacher_name = ${teacher_name},
+      schedule_time = ${schedule_time},
+      class_time = ${class_time},
+      schedule_info = ${schedule_info},
+      max_students = ${max_students},
+      status = ${status},
+      recordings_expiry_date = ${recordings_expiry_date},
+      description = ${description},
+      is_visible_on_website = ${is_visible_on_website},
+      google_meet_link = ${google_meet_link},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToBatch(rows[0]) : null;
+}
+async function deleteBatchDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM batches WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToBatch(rows[0]) : null;
+}
+function rowToStudyMaterial(row) {
+  return {
+    id: row.id,
+    resourceType: row.resource_type || "pdf",
+    batchId: row.batch_id || "",
+    classId: row.class_id || void 0,
+    title: row.title,
+    description: row.description || "",
+    fileType: row.file_type || "pdf",
+    fileSize: row.file_size || "",
+    downloadUrl: row.download_url || "",
+    pdfUrl: row.pdf_url || row.download_url || "",
+    b2FileId: row.b2_file_id || void 0,
+    b2FileName: row.b2_file_name || void 0,
+    mimeType: row.mime_type || void 0,
+    isViewOnly: Boolean(row.is_view_only),
+    allowDownload: Boolean(row.allow_download),
+    uploadedAt: row.uploaded_at ? new Date(row.uploaded_at).toISOString() : (/* @__PURE__ */ new Date()).toISOString(),
+    uploadedDate: row.uploaded_at ? new Date(row.uploaded_at).toISOString() : (/* @__PURE__ */ new Date()).toISOString(),
+    category: row.category || "General",
+    level: row.level || "All Levels",
+    isVisibleOnWebsite: Boolean(row.is_visible_on_website),
+    isPublished: Boolean(row.is_published),
+    displayOrder: row.display_order ?? 0,
+    youtubeUrl: row.youtube_url || void 0,
+    thumbnailUrl: row.thumbnail_url || void 0,
+    b2ThumbnailId: row.b2_thumbnail_id || void 0,
+    b2ThumbnailName: row.b2_thumbnail_name || void 0,
+    duration: row.duration || void 0,
+    views: row.views || "0",
+    downloadCount: Number(row.download_count ?? 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+async function getStudyMaterialsDb(opts) {
+  const sql = getDb();
+  const resourceType = opts?.resourceType;
+  const batchId = opts?.batchId;
+  const includeUnpublished = Boolean(opts?.includeUnpublished);
+  let rows;
+  if (includeUnpublished) {
+    if (resourceType && batchId) {
+      rows = await sql`
+        SELECT * FROM study_materials 
+        WHERE resource_type = ${resourceType} AND batch_id = ${batchId}
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    } else if (resourceType) {
+      rows = await sql`
+        SELECT * FROM study_materials 
+        WHERE resource_type = ${resourceType}
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    } else if (batchId) {
+      rows = await sql`
+        SELECT * FROM study_materials 
+        WHERE batch_id = ${batchId}
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    } else {
+      rows = await sql`
+        SELECT * FROM study_materials 
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    }
+  } else {
+    if (resourceType && batchId) {
+      rows = await sql`
+        SELECT * FROM study_materials 
+        WHERE is_published = true AND resource_type = ${resourceType} AND batch_id = ${batchId}
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    } else if (resourceType) {
+      rows = await sql`
+        SELECT * FROM study_materials 
+        WHERE is_published = true AND resource_type = ${resourceType}
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    } else if (batchId) {
+      rows = await sql`
+        SELECT * FROM study_materials 
+        WHERE is_published = true AND batch_id = ${batchId}
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    } else {
+      rows = await sql`
+        SELECT * FROM study_materials 
+        WHERE is_published = true
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    }
+  }
+  return rows.map(rowToStudyMaterial);
+}
+async function getStudyMaterialByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM study_materials WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToStudyMaterial(rows[0]) : null;
+}
+async function createStudyMaterialDb(data) {
+  const sql = getDb();
+  const id = data.id || `mat-${Date.now()}`;
+  const resource_type = data.resourceType || "pdf";
+  const batch_id = data.batchId || null;
+  const class_id = data.classId || null;
+  const title = (data.title || "Untitled Resource").trim();
+  const description = data.description || "";
+  const category = data.category || "General";
+  const level = data.level || "All Levels";
+  const file_type = data.fileType || "pdf";
+  const file_size = data.fileSize || "";
+  const download_url = data.downloadUrl || data.pdfUrl || "";
+  const pdf_url = data.pdfUrl || download_url;
+  const b2_file_id = data.b2FileId || null;
+  const b2_file_name = data.b2FileName || null;
+  const mime_type = data.mimeType || null;
+  const is_view_only = data.isViewOnly !== false;
+  const allow_download = data.allowDownload === true;
+  const is_visible_on_website = data.isVisibleOnWebsite !== false;
+  const is_published = data.isPublished !== false;
+  const display_order = data.displayOrder ?? 0;
+  const youtube_url = data.youtubeUrl || null;
+  const thumbnail_url = data.thumbnailUrl || null;
+  const b2_thumbnail_id = data.b2ThumbnailId || null;
+  const b2_thumbnail_name = data.b2ThumbnailName || null;
+  const duration = data.duration || null;
+  const views = data.views || "0";
+  const rows = await sql`
+    INSERT INTO study_materials (
+      id, resource_type, batch_id, class_id, title, description,
+      category, level, file_type, file_size, download_url, pdf_url,
+      b2_file_id, b2_file_name, mime_type, is_view_only, allow_download,
+      is_visible_on_website, is_published, display_order, youtube_url,
+      thumbnail_url, b2_thumbnail_id, b2_thumbnail_name, duration, views
+    ) VALUES (
+      ${id}, ${resource_type}, ${batch_id}, ${class_id}, ${title}, ${description},
+      ${category}, ${level}, ${file_type}, ${file_size}, ${download_url}, ${pdf_url},
+      ${b2_file_id}, ${b2_file_name}, ${mime_type}, ${is_view_only}, ${allow_download},
+      ${is_visible_on_website}, ${is_published}, ${display_order}, ${youtube_url},
+      ${thumbnail_url}, ${b2_thumbnail_id}, ${b2_thumbnail_name}, ${duration}, ${views}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      resource_type = EXCLUDED.resource_type,
+      batch_id = EXCLUDED.batch_id,
+      class_id = EXCLUDED.class_id,
+      title = EXCLUDED.title,
+      description = EXCLUDED.description,
+      category = EXCLUDED.category,
+      level = EXCLUDED.level,
+      file_type = EXCLUDED.file_type,
+      file_size = EXCLUDED.file_size,
+      download_url = EXCLUDED.download_url,
+      pdf_url = EXCLUDED.pdf_url,
+      b2_file_id = EXCLUDED.b2_file_id,
+      b2_file_name = EXCLUDED.b2_file_name,
+      mime_type = EXCLUDED.mime_type,
+      is_view_only = EXCLUDED.is_view_only,
+      allow_download = EXCLUDED.allow_download,
+      is_visible_on_website = EXCLUDED.is_visible_on_website,
+      is_published = EXCLUDED.is_published,
+      display_order = EXCLUDED.display_order,
+      youtube_url = EXCLUDED.youtube_url,
+      thumbnail_url = EXCLUDED.thumbnail_url,
+      b2_thumbnail_id = EXCLUDED.b2_thumbnail_id,
+      b2_thumbnail_name = EXCLUDED.b2_thumbnail_name,
+      duration = EXCLUDED.duration,
+      views = EXCLUDED.views,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToStudyMaterial(rows[0]);
+}
+async function updateStudyMaterialDb(id, data) {
+  const sql = getDb();
+  const existing = await getStudyMaterialByIdDb(id);
+  if (!existing) return null;
+  const title = data.title !== void 0 ? data.title.trim() : existing.title;
+  const description = data.description !== void 0 ? data.description : existing.description;
+  const category = data.category !== void 0 ? data.category : existing.category;
+  const level = data.level !== void 0 ? data.level : existing.level;
+  const file_type = data.fileType !== void 0 ? data.fileType : existing.fileType;
+  const file_size = data.fileSize !== void 0 ? data.fileSize : existing.fileSize;
+  const download_url = data.downloadUrl !== void 0 ? data.downloadUrl : existing.downloadUrl;
+  const pdf_url = data.pdfUrl !== void 0 ? data.pdfUrl : existing.pdfUrl;
+  const b2_file_id = data.b2FileId !== void 0 ? data.b2FileId : existing.b2FileId || null;
+  const b2_file_name = data.b2FileName !== void 0 ? data.b2FileName : existing.b2FileName || null;
+  const mime_type = data.mimeType !== void 0 ? data.mimeType : existing.mimeType || null;
+  const is_view_only = data.isViewOnly !== void 0 ? Boolean(data.isViewOnly) : existing.isViewOnly;
+  const allow_download = data.allowDownload !== void 0 ? Boolean(data.allowDownload) : existing.allowDownload;
+  const is_visible_on_website = data.isVisibleOnWebsite !== void 0 ? Boolean(data.isVisibleOnWebsite) : existing.isVisibleOnWebsite;
+  const is_published = data.isPublished !== void 0 ? Boolean(data.isPublished) : existing.isPublished;
+  const display_order = data.displayOrder !== void 0 ? data.displayOrder : existing.displayOrder;
+  const youtube_url = data.youtubeUrl !== void 0 ? data.youtubeUrl : existing.youtubeUrl || null;
+  const thumbnail_url = data.thumbnailUrl !== void 0 ? data.thumbnailUrl : existing.thumbnailUrl || null;
+  const b2_thumbnail_id = data.b2ThumbnailId !== void 0 ? data.b2ThumbnailId : existing.b2ThumbnailId || null;
+  const b2_thumbnail_name = data.b2ThumbnailName !== void 0 ? data.b2ThumbnailName : existing.b2ThumbnailName || null;
+  const duration = data.duration !== void 0 ? data.duration : existing.duration || null;
+  const views = data.views !== void 0 ? data.views : existing.views;
+  const rows = await sql`
+    UPDATE study_materials SET
+      title = ${title},
+      description = ${description},
+      category = ${category},
+      level = ${level},
+      file_type = ${file_type},
+      file_size = ${file_size},
+      download_url = ${download_url},
+      pdf_url = ${pdf_url},
+      b2_file_id = ${b2_file_id},
+      b2_file_name = ${b2_file_name},
+      mime_type = ${mime_type},
+      is_view_only = ${is_view_only},
+      allow_download = ${allow_download},
+      is_visible_on_website = ${is_visible_on_website},
+      is_published = ${is_published},
+      display_order = ${display_order},
+      youtube_url = ${youtube_url},
+      thumbnail_url = ${thumbnail_url},
+      b2_thumbnail_id = ${b2_thumbnail_id},
+      b2_thumbnail_name = ${b2_thumbnail_name},
+      duration = ${duration},
+      views = ${views},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToStudyMaterial(rows[0]) : null;
+}
+async function deleteStudyMaterialDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM study_materials WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rows[0] : null;
+}
+async function incrementMaterialDownloadCountDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    UPDATE study_materials 
+    SET download_count = download_count + 1 
+    WHERE id = ${id} 
+    RETURNING download_count;
+  `;
+  return rows.length > 0 ? Number(rows[0].download_count) : 0;
+}
+function rowToAnnouncement(row) {
+  return {
+    id: row.id,
+    batchId: row.batch_id || "all",
+    batchName: row.batch_name || "All Batches (Academy-wide)",
+    title: row.title,
+    message: row.message,
+    date: row.date || (row.created_at ? new Date(row.created_at).toLocaleDateString("en-IN") : ""),
+    author: row.author || "Administration",
+    priority: row.priority || "Normal",
+    category: row.category || "General",
+    effectiveDate: row.effective_date || void 0,
+    isPinned: Boolean(row.is_pinned)
+  };
+}
+async function getAnnouncementsDb(batchId) {
+  const sql = getDb();
+  let rows;
+  if (batchId && batchId !== "all") {
+    rows = await sql`
+      SELECT * FROM announcements 
+      WHERE batch_id = ${batchId} OR batch_id IS NULL
+      ORDER BY is_pinned DESC, created_at DESC;
+    `;
+  } else {
+    rows = await sql`
+      SELECT * FROM announcements 
+      ORDER BY is_pinned DESC, created_at DESC;
+    `;
+  }
+  return rows.map(rowToAnnouncement);
+}
+async function getAnnouncementByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM announcements WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToAnnouncement(rows[0]) : null;
+}
+async function createAnnouncementDb(data) {
+  const sql = getDb();
+  const id = data.id || `ann-${Date.now()}`;
+  const batch_id = data.batchId && data.batchId !== "all" ? data.batchId : null;
+  const batch_name = batch_id ? data.batchName || null : "All Batches (Academy-wide)";
+  const title = (data.title || "Announcement").trim();
+  const message = (data.message || "").trim();
+  const date = data.date || (/* @__PURE__ */ new Date()).toLocaleDateString("en-IN");
+  const author = data.author || "Administration";
+  const validPriorities = ["Normal", "Important", "Urgent"];
+  const priority = validPriorities.includes(data.priority) ? data.priority : "Normal";
+  const category = data.category || "General";
+  const effective_date = data.effectiveDate || null;
+  const is_pinned = Boolean(data.isPinned);
+  const rows = await sql`
+    INSERT INTO announcements (
+      id, batch_id, batch_name, title, message, date,
+      author, priority, category, effective_date, is_pinned
+    ) VALUES (
+      ${id}, ${batch_id}, ${batch_name}, ${title}, ${message}, ${date},
+      ${author}, ${priority}, ${category}, ${effective_date}, ${is_pinned}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      batch_id = EXCLUDED.batch_id,
+      batch_name = EXCLUDED.batch_name,
+      title = EXCLUDED.title,
+      message = EXCLUDED.message,
+      date = EXCLUDED.date,
+      author = EXCLUDED.author,
+      priority = EXCLUDED.priority,
+      category = EXCLUDED.category,
+      effective_date = EXCLUDED.effective_date,
+      is_pinned = EXCLUDED.is_pinned,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToAnnouncement(rows[0]);
+}
+async function updateAnnouncementDb(id, data) {
+  const sql = getDb();
+  const existing = await getAnnouncementByIdDb(id);
+  if (!existing) return null;
+  const batch_id = data.batchId !== void 0 ? data.batchId && data.batchId !== "all" ? data.batchId : null : existing.batchId && existing.batchId !== "all" ? existing.batchId : null;
+  const batch_name = batch_id ? data.batchName !== void 0 ? data.batchName : existing.batchName : "All Batches (Academy-wide)";
+  const title = data.title !== void 0 ? data.title.trim() : existing.title;
+  const message = data.message !== void 0 ? data.message.trim() : existing.message;
+  const date = data.date !== void 0 ? data.date : existing.date;
+  const author = data.author !== void 0 ? data.author : existing.author;
+  const validPriorities = ["Normal", "Important", "Urgent"];
+  const priority = data.priority !== void 0 ? validPriorities.includes(data.priority) ? data.priority : "Normal" : existing.priority;
+  const category = data.category !== void 0 ? data.category : existing.category;
+  const effective_date = data.effectiveDate !== void 0 ? data.effectiveDate : existing.effectiveDate || null;
+  const is_pinned = data.isPinned !== void 0 ? Boolean(data.isPinned) : existing.isPinned;
+  const rows = await sql`
+    UPDATE announcements SET
+      batch_id = ${batch_id},
+      batch_name = ${batch_name},
+      title = ${title},
+      message = ${message},
+      date = ${date},
+      author = ${author},
+      priority = ${priority},
+      category = ${category},
+      effective_date = ${effective_date},
+      is_pinned = ${is_pinned},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToAnnouncement(rows[0]) : null;
+}
+async function deleteAnnouncementDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM announcements WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToAnnouncement(rows[0]) : null;
+}
+function rowToGalleryItem(row) {
+  return {
+    id: row.id,
+    title: row.title || void 0,
+    caption: row.caption || void 0,
+    category: row.category || "General",
+    imageUrl: row.image_url,
+    thumbnailUrl: row.thumbnail_url || void 0,
+    b2FileId: row.b2_file_id || void 0,
+    b2FileName: row.b2_file_name || void 0,
+    fileSize: row.file_size || void 0,
+    uploadedBy: row.uploaded_by || void 0,
+    isPublished: Boolean(row.is_published),
+    displayOrder: row.display_order ?? 0,
+    uploadedAt: row.uploaded_at ? new Date(row.uploaded_at).toISOString() : (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function getGalleryItemsDb(includeUnpublished = false, categoryFilter) {
+  const sql = getDb();
+  let rows;
+  const cat = categoryFilter && categoryFilter.toLowerCase() !== "all" && categoryFilter.toLowerCase() !== "all moments" ? categoryFilter.trim() : null;
+  if (includeUnpublished) {
+    if (cat) {
+      rows = await sql`
+        SELECT * FROM gallery_items 
+        WHERE LOWER(category) = LOWER(${cat})
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    } else {
+      rows = await sql`
+        SELECT * FROM gallery_items 
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    }
+  } else {
+    if (cat) {
+      rows = await sql`
+        SELECT * FROM gallery_items 
+        WHERE is_published = true AND LOWER(category) = LOWER(${cat})
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    } else {
+      rows = await sql`
+        SELECT * FROM gallery_items 
+        WHERE is_published = true
+        ORDER BY display_order ASC, uploaded_at DESC;
+      `;
+    }
+  }
+  return rows.map(rowToGalleryItem);
+}
+async function getGalleryItemByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM gallery_items WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToGalleryItem(rows[0]) : null;
+}
+async function createGalleryItemDb(data) {
+  const sql = getDb();
+  const id = data.id || `gal-${Date.now()}`;
+  const title = data.title || null;
+  const caption = data.caption || null;
+  const category = data.category || "General";
+  const image_url = data.imageUrl || "";
+  const thumbnail_url = data.thumbnailUrl || null;
+  const b2_file_id = data.b2FileId || null;
+  const b2_file_name = data.b2FileName || null;
+  const file_size = data.fileSize || null;
+  const uploaded_by = data.uploadedBy || "Admin";
+  const is_published = data.isPublished !== false;
+  const display_order = data.displayOrder ?? 0;
+  const rows = await sql`
+    INSERT INTO gallery_items (
+      id, title, caption, category, image_url, thumbnail_url,
+      b2_file_id, b2_file_name, file_size, uploaded_by,
+      is_published, display_order
+    ) VALUES (
+      ${id}, ${title}, ${caption}, ${category}, ${image_url}, ${thumbnail_url},
+      ${b2_file_id}, ${b2_file_name}, ${file_size}, ${uploaded_by},
+      ${is_published}, ${display_order}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      title = EXCLUDED.title,
+      caption = EXCLUDED.caption,
+      category = EXCLUDED.category,
+      image_url = EXCLUDED.image_url,
+      thumbnail_url = EXCLUDED.thumbnail_url,
+      b2_file_id = EXCLUDED.b2_file_id,
+      b2_file_name = EXCLUDED.b2_file_name,
+      file_size = EXCLUDED.file_size,
+      uploaded_by = EXCLUDED.uploaded_by,
+      is_published = EXCLUDED.is_published,
+      display_order = EXCLUDED.display_order,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToGalleryItem(rows[0]);
+}
+async function updateGalleryItemDb(id, data) {
+  const sql = getDb();
+  const existing = await getGalleryItemByIdDb(id);
+  if (!existing) return null;
+  const title = data.title !== void 0 ? data.title : existing.title;
+  const caption = data.caption !== void 0 ? data.caption : existing.caption;
+  const category = data.category !== void 0 ? data.category : existing.category;
+  const image_url = data.imageUrl !== void 0 ? data.imageUrl : existing.imageUrl;
+  const thumbnail_url = data.thumbnailUrl !== void 0 ? data.thumbnailUrl : existing.thumbnailUrl || null;
+  const b2_file_id = data.b2FileId !== void 0 ? data.b2FileId : existing.b2FileId || null;
+  const b2_file_name = data.b2FileName !== void 0 ? data.b2FileName : existing.b2FileName || null;
+  const file_size = data.fileSize !== void 0 ? data.fileSize : existing.fileSize || null;
+  const uploaded_by = data.uploadedBy !== void 0 ? data.uploadedBy : existing.uploadedBy || null;
+  const is_published = data.isPublished !== void 0 ? Boolean(data.isPublished) : existing.isPublished;
+  const display_order = data.displayOrder !== void 0 ? data.displayOrder : existing.displayOrder;
+  const rows = await sql`
+    UPDATE gallery_items SET
+      title = ${title},
+      caption = ${caption},
+      category = ${category},
+      image_url = ${image_url},
+      thumbnail_url = ${thumbnail_url},
+      b2_file_id = ${b2_file_id},
+      b2_file_name = ${b2_file_name},
+      file_size = ${file_size},
+      uploaded_by = ${uploaded_by},
+      is_published = ${is_published},
+      display_order = ${display_order},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToGalleryItem(rows[0]) : null;
+}
+async function reorderGalleryItemsDb(orderPairs) {
+  const sql = getDb();
+  for (const pair of orderPairs) {
+    await sql`
+      UPDATE gallery_items 
+      SET display_order = ${pair.displayOrder}, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ${pair.id};
+    `;
+  }
+}
+async function deleteGalleryItemDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM gallery_items WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToGalleryItem(rows[0]) : null;
+}
 
 // server.ts
 var s3ClientInstance = null;
@@ -3375,7 +4202,6 @@ var batches = [];
 var classes = [];
 var recordings = [];
 var studyMaterials = [];
-var materialsInitialized = false;
 var assignments = [];
 var submissions = [];
 var announcements = [];
@@ -3453,9 +4279,6 @@ function verifyAuthToken(reqOrHeader) {
       const cookies = parseCookies(reqOrHeader);
       token = cookies.admin_session_token || cookies.wits_auth_token;
     }
-    if (!token && typeof reqOrHeader.query?.token === "string") {
-      token = reqOrHeader.query.token.trim();
-    }
     if (!token && reqOrHeader.body && typeof reqOrHeader.body.adminToken === "string") {
       token = reqOrHeader.body.adminToken.trim();
     }
@@ -3511,9 +4334,6 @@ function requireAdmin(req, res, next) {
       const trimmed = authHeader.trim();
       token = trimmed.startsWith("Bearer ") ? trimmed.substring(7).trim() : trimmed;
     }
-  }
-  if (!token && typeof req.query?.token === "string") {
-    token = req.query.token.trim();
   }
   if (!token || token === "null" || token === "undefined") {
     return res.status(401).json({ success: false, error: "Unauthorized: Admin session cookie or token required." });
@@ -3591,7 +4411,6 @@ var notifications = [];
 var conversations = [];
 var messages = [];
 var supportTickets = [];
-var galleryItems = [];
 var persistenceInitPromise = null;
 async function loadAllPersistedDataAsync() {
   try {
@@ -3663,12 +4482,7 @@ async function loadAllPersistedDataAsync() {
     }
     try {
       const [
-        cloudMaterials,
-        cloudCourses,
         cloudCms,
-        cloudAnnouncements,
-        cloudBatches,
-        cloudGallery,
         cloudRegistrations,
         cloudUsers,
         cloudClasses,
@@ -3676,12 +4490,7 @@ async function loadAllPersistedDataAsync() {
         cloudOrders,
         cloudPayments
       ] = await Promise.all([
-        durableStorageService.getCollection("materials", []),
-        durableStorageService.getCollection("courses", []),
         durableStorageService.getCollection("cmsContent", []),
-        durableStorageService.getCollection("announcements", []),
-        durableStorageService.getCollection("batches", []),
-        durableStorageService.getCollection("gallery", []),
         durableStorageService.getCollection("registrations", []),
         durableStorageService.getCollection("users", defaultAdminUsers),
         durableStorageService.getCollection("classes", []),
@@ -3689,48 +4498,16 @@ async function loadAllPersistedDataAsync() {
         durableStorageService.getCollection("orders", []),
         durableStorageService.getCollection("payments", [])
       ]);
-      if (Array.isArray(cloudMaterials)) {
-        for (const m of cloudMaterials) {
-          if (m.resourceType === "youtube" || m.fileType === "youtube") {
-            if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
-          } else if (!m.downloadUrl || m.downloadUrl === "#") {
-            m.downloadUrl = `/api/files/download/${m.id}`;
-          }
-        }
-        studyMaterials.length = 0;
-        studyMaterials.push(...cloudMaterials);
-        materialsInitialized = true;
-        console.log(`[Persistence] Hydrated ${studyMaterials.length} materials/videos from Backblaze B2.`);
-      }
-      if (Array.isArray(cloudCourses)) {
-        cmsContent.courses = cloudCourses;
-        console.log(`[Persistence] Hydrated ${cloudCourses.length} courses from Backblaze B2.`);
-      }
       if (Array.isArray(cloudCms) && cloudCms.length > 0 && cloudCms[0]) {
         const remote = cloudCms[0];
         cmsContent = {
           ...cmsContent,
           ...remote,
           testimonials: [],
-          courses: Array.isArray(remote.courses) ? remote.courses : cmsContent.courses,
+          courses: [],
           settings: { ...cmsContent.settings, ...remote.settings || {} }
         };
         console.log(`[Persistence] Hydrated CMS settings from Backblaze B2.`);
-      }
-      if (Array.isArray(cloudAnnouncements)) {
-        announcements.length = 0;
-        announcements.push(...cloudAnnouncements);
-        console.log(`[Persistence] Hydrated ${announcements.length} announcements from Backblaze B2.`);
-      }
-      if (Array.isArray(cloudBatches)) {
-        batches.length = 0;
-        batches.push(...cloudBatches);
-        console.log(`[Persistence] Hydrated ${batches.length} batches from Backblaze B2.`);
-      }
-      if (Array.isArray(cloudGallery)) {
-        galleryItems.length = 0;
-        galleryItems.push(...cloudGallery);
-        console.log(`[Persistence] Hydrated ${galleryItems.length} gallery items from Backblaze B2.`);
       }
       if (Array.isArray(cloudRegistrations)) {
         registrations.length = 0;
@@ -3788,16 +4565,6 @@ function ensurePersistenceInitialized() {
     persistenceInitPromise = loadAllPersistedDataAsync();
   }
   return persistenceInitPromise;
-}
-async function savePersistedGallery() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save gallery.json:", e);
-    }
-  }
-  await durableStorageService.saveCollection("gallery", galleryItems);
 }
 async function saveRegistrations() {
   if (process.env.VERCEL !== "1") {
@@ -3862,17 +4629,11 @@ async function saveCmsContent() {
     try {
       fs7.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
       fs7.writeFileSync(CMS_ALT_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
-      if (Array.isArray(cmsContent.courses)) {
-        fs7.writeFileSync(COURSES_STORAGE_FILE, JSON.stringify(cmsContent.courses, null, 2), "utf-8");
-      }
     } catch (e) {
       console.warn("[Persistence] Could not save cmsContent:", e);
     }
   }
   await durableStorageService.saveCollection("cmsContent", [cmsContent]);
-  if (Array.isArray(cmsContent.courses)) {
-    await durableStorageService.saveCollection("courses", cmsContent.courses);
-  }
 }
 async function saveAnnouncements() {
   if (process.env.VERCEL !== "1") {
@@ -3883,20 +4644,6 @@ async function saveAnnouncements() {
     }
   }
   await durableStorageService.saveCollection("announcements", announcements);
-}
-async function savePersistedMaterials() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save materials:", e);
-    }
-  }
-  try {
-    await durableStorageService.saveCollection("materials", studyMaterials);
-  } catch (err) {
-    console.warn("[Persistence] Durable cloud save error for materials:", err);
-  }
 }
 async function saveOrders() {
   if (process.env.VERCEL !== "1") {
@@ -4720,15 +5467,32 @@ app.get(["/api/auth/me", "/api/admin/auth/me"], (req, res) => {
     batches: userBatches
   });
 });
-app.get("/api/batches", (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (auth && auth.role === "admin") {
-    return res.json({ batches });
-  } else if (auth && auth.role === "student") {
-    const myBatches = batches.filter((b) => auth.batchIds.includes(b.id));
-    return res.json({ batches: myBatches, allPublicBatches: batches });
+app.get("/api/batches", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const auth = verifyAuthToken(req);
+    const isAdmin = auth && auth.role === "admin";
+    const batchesList = await getBatchesDb(Boolean(isAdmin));
+    if (auth && auth.role === "student") {
+      const studentBatchIds = Array.isArray(auth.batchIds) ? auth.batchIds : [];
+      const myBatches = batchesList.filter((b) => studentBatchIds.includes(b.id));
+      return res.json({ success: true, batches: myBatches, allPublicBatches: batchesList });
+    }
+    return res.json({ success: true, batches: batchesList });
+  } catch (err) {
+    console.error("[Batches GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to retrieve batches from database." });
   }
-  res.json({ batches });
+});
+app.get("/api/admin/batches", requireAdmin, async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const batchesList = await getBatchesDb(true);
+    return res.json({ success: true, batches: batchesList });
+  } catch (err) {
+    console.error("[Admin Batches GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to retrieve batches from database." });
+  }
 });
 app.get("/api/batches/:batchId/classes", (req, res) => {
   const { batchId } = req.params;
@@ -4946,18 +5710,25 @@ app.get("/api/stream/recording/:token", (req, res) => {
     notes: rec.notesSummary
   });
 });
-app.get("/api/batches/:batchId/materials", (req, res) => {
-  const { batchId } = req.params;
-  const auth = verifyAuthToken(req);
-  if (!auth) return res.status(401).json({ error: "Authentication required." });
-  if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
-    return res.status(403).json({ error: "Access Denied: You are not authorized to access study materials for this batch." });
+app.get("/api/batches/:batchId/materials", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const { batchId } = req.params;
+    const auth = verifyAuthToken(req);
+    if (!auth) return res.status(401).json({ success: false, error: "Authentication required." });
+    if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
+      return res.status(403).json({ success: false, error: "Access Denied: You are not authorized to access study materials for this batch." });
+    }
+    const allMaterials = await getStudyMaterialsDb({ includeUnpublished: auth.role === "admin" });
+    const materials = allMaterials.filter((m) => m.batchId === batchId || m.batchId === "all").map((m) => ({
+      ...m,
+      downloadUrl: !m.downloadUrl || m.downloadUrl === "#" ? `/api/files/download/${m.id}` : m.downloadUrl
+    }));
+    return res.json({ success: true, materials });
+  } catch (err) {
+    console.error("[Batch Materials GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to retrieve batch materials from database." });
   }
-  const materials = studyMaterials.filter((m) => m.batchId === batchId || m.batchId === "all").map((m) => ({
-    ...m,
-    downloadUrl: !m.downloadUrl || m.downloadUrl === "#" ? `/api/files/download/${m.id}` : m.downloadUrl
-  }));
-  res.json({ materials });
 });
 app.get("/api/batches/:batchId/assignments", (req, res) => {
   const { batchId } = req.params;
@@ -4998,15 +5769,21 @@ app.post("/api/assignments/:assignmentId/submit", (req, res) => {
   asg.submissionsCount += 1;
   res.json({ success: true, message: "Assignment submitted successfully! Teacher will review it soon.", submission });
 });
-app.get("/api/batches/:batchId/announcements", (req, res) => {
-  const { batchId } = req.params;
-  const auth = verifyAuthToken(req);
-  if (!auth) return res.status(401).json({ error: "Authentication required." });
-  if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
-    return res.status(403).json({ error: "Access Denied: You are not authorized to view announcements for this batch." });
+app.get("/api/batches/:batchId/announcements", async (req, res) => {
+  try {
+    const { batchId } = req.params;
+    const auth = verifyAuthToken(req);
+    if (!auth) return res.status(401).json({ error: "Authentication required." });
+    if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
+      return res.status(403).json({ error: "Access Denied: You are not authorized to view announcements for this batch." });
+    }
+    res.setHeader("Cache-Control", "no-store");
+    const batchAnnouncements = await getAnnouncementsDb(batchId);
+    res.json({ announcements: batchAnnouncements });
+  } catch (err) {
+    console.error("Error fetching batch announcements:", err);
+    res.status(500).json({ error: "Failed to fetch announcements." });
   }
-  const batchAnnouncements = announcements.filter((a) => a.batchId === batchId);
-  res.json({ announcements: batchAnnouncements });
 });
 var RAZORPAY_DEFAULT_TEST_KEY_ID = "rzp_test_TxdOEl65TI6T87";
 var RAZORPAY_DEFAULT_TEST_KEY_SECRET = "PLOsUNgyfqb4tSn0D9eUImMS";
@@ -6382,20 +7159,17 @@ app.get(
     res.status(404).end();
   }
 );
-app.get("/api/gallery", (req, res) => {
+app.get("/api/gallery", async (req, res) => {
   try {
+    res.setHeader("Cache-Control", "no-store");
     const categoryFilter = typeof req.query.category === "string" ? req.query.category.trim() : "";
-    let items = galleryItems.filter((item) => item.isPublished === true);
+    const allPublished = await getGalleryItemsDb(false);
+    let items = allPublished;
     if (categoryFilter && categoryFilter.toLowerCase() !== "all" && categoryFilter.toLowerCase() !== "all moments") {
-      items = items.filter((item) => (item.category || "").toLowerCase() === categoryFilter.toLowerCase());
+      items = allPublished.filter((item) => (item.category || "").toLowerCase() === categoryFilter.toLowerCase());
     }
-    items.sort((a, b) => {
-      const orderDiff = (a.displayOrder || 999) - (b.displayOrder || 999);
-      if (orderDiff !== 0) return orderDiff;
-      return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
-    });
     const allCategoriesSet = /* @__PURE__ */ new Set();
-    for (const item of galleryItems.filter((i) => i.isPublished === true)) {
+    for (const item of allPublished) {
       if (item.category && item.category.trim()) {
         allCategoriesSet.add(item.category.trim());
       }
@@ -6411,37 +7185,28 @@ app.get("/api/gallery", (req, res) => {
       totalCount: items.length
     });
   } catch (err) {
-    console.error("[Gallery] Public fetch error:", err);
+    console.error("[Gallery] Public fetch error from Neon:", err);
     res.status(500).json({ error: "Failed to load gallery." });
   }
 });
-app.get("/api/admin/gallery", (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
+app.get("/api/admin/gallery", requireAdmin, async (_req, res) => {
   try {
-    const sorted = [...galleryItems].sort((a, b) => {
-      const orderDiff = (a.displayOrder || 999) - (b.displayOrder || 999);
-      if (orderDiff !== 0) return orderDiff;
-      return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
-    });
+    res.setHeader("Cache-Control", "no-store");
+    const items = await getGalleryItemsDb(true);
     res.json({
       success: true,
-      items: sorted,
-      totalCount: sorted.length
+      items,
+      totalCount: items.length
     });
   } catch (err) {
+    console.error("[Gallery] Admin fetch error from Neon:", err);
     res.status(500).json({ error: "Failed to load admin gallery." });
   }
 });
-app.post("/api/admin/gallery/upload", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
+app.post("/api/admin/gallery/upload", requireAdmin, async (req, res) => {
   try {
     const { images, dataBase64, filename, mimeType, title, caption, category, isPublished, displayOrder } = req.body;
+    const auth = req.auth || {};
     const uploadList = [];
     if (Array.isArray(images) && images.length > 0) {
       uploadList.push(...images);
@@ -6469,6 +7234,8 @@ app.post("/api/admin/gallery/upload", async (req, res) => {
       "image/svg+xml"
     ];
     const createdItems = [];
+    const existingItems = await getGalleryItemsDb(true);
+    let currentOrderCount = existingItems.length;
     for (const item of uploadList) {
       if (!item.dataBase64) continue;
       const mime = (item.mimeType || "image/jpeg").toLowerCase();
@@ -6506,7 +7273,8 @@ app.post("/api/admin/gallery/upload", async (req, res) => {
       const sizeMB = buffer.length / (1024 * 1024);
       const fileSize = sizeMB >= 1 ? `${sizeMB.toFixed(1)} MB` : `${Math.round(buffer.length / 1024)} KB`;
       const autoTitle = (item.title || "").trim() || safeOriginalName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
-      const newGalleryItem = {
+      currentOrderCount++;
+      const savedItem = await createGalleryItemDb({
         id,
         title: autoTitle,
         caption: (item.caption || "").trim(),
@@ -6516,111 +7284,112 @@ app.post("/api/admin/gallery/upload", async (req, res) => {
         b2FileId,
         b2FileName,
         isPublished: item.isPublished !== false,
-        displayOrder: typeof item.displayOrder === "number" ? item.displayOrder : galleryItems.length + 1,
-        uploadedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        displayOrder: typeof item.displayOrder === "number" ? item.displayOrder : currentOrderCount,
         uploadedBy: auth.userId || "admin",
         fileSize
-      };
-      galleryItems.unshift(newGalleryItem);
-      createdItems.push(newGalleryItem);
+      });
+      createdItems.push(savedItem);
     }
     if (createdItems.length === 0) {
       return res.status(400).json({ error: "Failed to process any valid images." });
     }
-    await savePersistedGallery();
+    const allItems = await getGalleryItemsDb(true);
     res.json({
       success: true,
       items: createdItems,
-      totalCount: galleryItems.length,
+      totalCount: allItems.length,
       message: `Successfully uploaded ${createdItems.length} image(s) to Gallery.`
     });
   } catch (err) {
-    console.error("[Gallery] Upload failed:", err);
+    console.error("[Gallery] Upload failed in Neon:", err);
     res.status(500).json({ error: "Server error during gallery upload." });
   }
 });
-app.put("/api/admin/gallery/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
-  const { id } = req.params;
-  const item = galleryItems.find((g) => g.id === id);
-  if (!item) {
-    return res.status(404).json({ error: "Gallery item not found." });
-  }
-  const { title, caption, category, isPublished, displayOrder } = req.body;
-  if (typeof title === "string") item.title = title.trim();
-  if (typeof caption === "string") item.caption = caption.trim();
-  if (typeof category === "string") item.category = category.trim();
-  if (typeof isPublished === "boolean") item.isPublished = isPublished;
-  if (typeof displayOrder === "number") item.displayOrder = displayOrder;
-  await savePersistedGallery();
-  res.json({
-    success: true,
-    item,
-    message: "Gallery item updated successfully."
-  });
-});
-app.put("/api/admin/gallery/reorder", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
-  const { orderedIds } = req.body;
-  if (!Array.isArray(orderedIds)) {
-    return res.status(400).json({ error: "orderedIds array required." });
-  }
-  orderedIds.forEach((id, index) => {
-    const item = galleryItems.find((g) => g.id === id);
-    if (item) {
-      item.displayOrder = index + 1;
-    }
-  });
-  await savePersistedGallery();
-  res.json({
-    success: true,
-    items: galleryItems,
-    message: "Gallery order updated successfully."
-  });
-});
-app.delete("/api/admin/gallery/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
-  const { id } = req.params;
-  const idx = galleryItems.findIndex((g) => g.id === id);
-  if (idx === -1) {
-    return res.status(404).json({ error: "Gallery item not found." });
-  }
-  const targetItem = galleryItems[idx];
-  galleryItems.splice(idx, 1);
-  await savePersistedGallery();
+app.put("/api/admin/gallery/:id", requireAdmin, async (req, res) => {
   try {
-    if (fs7.existsSync(uploadsDir)) {
-      const files = fs7.readdirSync(uploadsDir);
-      for (const file of files) {
-        if (file.startsWith(id) || file.startsWith(`gal-${id}`)) {
-          try {
-            fs7.unlinkSync(path7.join(uploadsDir, file));
-          } catch (unlinkErr) {
+    const { id } = req.params;
+    const { title, caption, category, isPublished, displayOrder } = req.body;
+    const updated = await updateGalleryItemDb(id, {
+      title: typeof title === "string" ? title.trim() : void 0,
+      caption: typeof caption === "string" ? caption.trim() : void 0,
+      category: typeof category === "string" ? category.trim() : void 0,
+      isPublished: typeof isPublished === "boolean" ? isPublished : void 0,
+      displayOrder: typeof displayOrder === "number" ? displayOrder : void 0
+    });
+    if (!updated) {
+      return res.status(404).json({ error: "Gallery item not found." });
+    }
+    res.json({
+      success: true,
+      item: updated,
+      message: "Gallery item updated successfully."
+    });
+  } catch (err) {
+    console.error("[Gallery] Update failed in Neon:", err);
+    res.status(500).json({ error: "Failed to update gallery item." });
+  }
+});
+app.put("/api/admin/gallery/reorder", requireAdmin, async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) {
+      return res.status(400).json({ error: "orderedIds array required." });
+    }
+    const pairs = orderedIds.map((id, index) => ({
+      id,
+      displayOrder: index + 1
+    }));
+    await reorderGalleryItemsDb(pairs);
+    const items = await getGalleryItemsDb(true);
+    res.json({
+      success: true,
+      items,
+      message: "Gallery order updated successfully."
+    });
+  } catch (err) {
+    console.error("[Gallery] Reorder failed in Neon:", err);
+    res.status(500).json({ error: "Failed to reorder gallery items." });
+  }
+});
+app.delete("/api/admin/gallery/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const targetItem = await deleteGalleryItemDb(id);
+    if (!targetItem) {
+      return res.status(404).json({ error: "Gallery item not found." });
+    }
+    try {
+      if (fs7.existsSync(uploadsDir)) {
+        const files = fs7.readdirSync(uploadsDir);
+        for (const file of files) {
+          if (file.startsWith(id) || file.startsWith(`gal-${id}`)) {
+            try {
+              fs7.unlinkSync(path7.join(uploadsDir, file));
+            } catch (unlinkErr) {
+            }
           }
         }
       }
+    } catch (cleanErr) {
+      console.warn("[Gallery] Local file cleanup error:", cleanErr);
     }
-  } catch (cleanErr) {
-    console.warn("[Gallery] Local file cleanup error:", cleanErr);
-  }
-  if (targetItem.b2FileId || targetItem.b2FileName) {
-    deleteFileFromB2(targetItem.b2FileId, targetItem.b2FileName).catch((b2Err) => {
-      console.warn("[Gallery] B2 file delete error:", b2Err);
+    const galFileId = targetItem.b2FileId || targetItem.b2_file_id;
+    const galFileName = targetItem.b2FileName || targetItem.b2_file_name;
+    if (galFileId || galFileName) {
+      try {
+        await deleteFileFromB2(galFileId, galFileName);
+      } catch (b2Err) {
+        console.warn("[Gallery] B2 file delete error:", b2Err);
+      }
+    }
+    res.json({
+      success: true,
+      message: "Gallery image deleted successfully."
     });
+  } catch (err) {
+    console.error("[Gallery] Delete failed in Neon:", err);
+    res.status(500).json({ error: "Failed to delete gallery item." });
   }
-  res.json({
-    success: true,
-    message: "Gallery image deleted successfully."
-  });
 });
 app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
   const { id, filename } = req.params;
@@ -6652,7 +7421,12 @@ app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     return fs7.createReadStream(foundPath).pipe(res);
   }
-  const item = galleryItems.find((g) => g.id === id);
+  let item = null;
+  try {
+    item = await getGalleryItemByIdDb(id);
+  } catch (e) {
+    console.warn("[Gallery] Error fetching item for streaming:", e);
+  }
   if (item && (item.b2FileId || item.b2FileName)) {
     try {
       const b2Res = await downloadBufferFromB2(item.b2FileId, item.b2FileName);
@@ -7058,34 +7832,33 @@ app.post("/api/admin/registrations/:id/resend-whatsapp", async (req, res) => {
     skipped: waRes.skipped
   });
 });
-app.post("/api/admin/batches", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Access Denied: Admin authorization required." });
+app.post("/api/admin/batches", requireAdmin, async (req, res) => {
+  try {
+    const { name, courseId, courseName, batchCode, startDate, endDate, teacherName, scheduleTime, maxStudents, status, googleMeetLink, isVisibleOnWebsite } = req.body;
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ success: false, error: "Batch name is required." });
+    }
+    const created = await createBatchDb({
+      id: req.body.id || `batch-${(batchCode || name).toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now()}`,
+      name: name.trim(),
+      courseId: courseId || null,
+      courseName: courseName || null,
+      batchCode: batchCode || "",
+      startDate: startDate || "",
+      endDate: endDate || "",
+      teacherName: teacherName || "",
+      scheduleTime: scheduleTime || "",
+      maxStudents: Number(maxStudents) || 30,
+      status: status || "Upcoming",
+      isVisibleOnWebsite: isVisibleOnWebsite !== false,
+      googleMeetLink: googleMeetLink ? googleMeetLink.trim() : null
+    });
+    const freshBatches = await getBatchesDb(true);
+    return res.status(201).json({ success: true, batch: created, batches: freshBatches });
+  } catch (err) {
+    console.error("[Batches POST] Database insertion failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to create batch in database." });
   }
-  const { name, courseId, courseName, batchCode, startDate, endDate, teacherName, scheduleTime, maxStudents, status, googleMeetLink } = req.body;
-  if (!name || !batchCode) {
-    return res.status(400).json({ error: "Batch name and code are required." });
-  }
-  const newBatch = {
-    id: `batch-${batchCode.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now()}`,
-    name,
-    courseId: courseId || "course-spoken-english",
-    courseName: courseName || "Spoken English",
-    batchCode,
-    startDate: startDate || "2026-10-01",
-    endDate: endDate || "2026-12-31",
-    teacherName: teacherName || "Ziyaur Rehman Zia",
-    scheduleTime: scheduleTime || "Mon, Wed, Fri 7:00 PM - 8:00 PM IST",
-    maxStudents: Number(maxStudents) || 35,
-    currentStudentsCount: 0,
-    status: status || "Upcoming",
-    isVisibleOnWebsite: req.body.isVisibleOnWebsite !== false,
-    googleMeetLink: googleMeetLink ? googleMeetLink.trim() : ""
-  };
-  batches.unshift(newBatch);
-  await saveBatches();
-  res.json({ success: true, batch: newBatch, batches });
 });
 app.post("/api/admin/schedule-class", async (req, res) => {
   const auth = verifyAuthToken(req);
@@ -7257,261 +8030,158 @@ app.post("/api/admin/youtube-metadata", handleYouTubeMetadataFetch);
 app.get("/api/admin/youtube-metadata", handleYouTubeMetadataFetch);
 app.post("/api/youtube-metadata", handleYouTubeMetadataFetch);
 app.get("/api/youtube-metadata", handleYouTubeMetadataFetch);
-function sortLearningMaterials(items) {
-  return [...items].sort((a, b) => {
-    const orderA = a.displayOrder !== void 0 ? a.displayOrder : 9999;
-    const orderB = b.displayOrder !== void 0 ? b.displayOrder : 9999;
-    if (orderA !== orderB) return orderA - orderB;
-    return (b.id || "").localeCompare(a.id || "");
-  });
-}
 app.get(["/api/materials", "/api/learning-resources"], async (req, res) => {
-  if (!materialsInitialized && studyMaterials.length === 0) {
-    try {
-      const durableMaterials = await durableStorageService.getCollection("materials", []);
-      if (Array.isArray(durableMaterials)) {
-        studyMaterials.length = 0;
-        studyMaterials.push(...durableMaterials);
-        materialsInitialized = true;
-      }
-    } catch (e) {
-    }
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const materials = await getStudyMaterialsDb({ includeUnpublished: false });
+    return res.json({ success: true, materials, resources: materials });
+  } catch (err) {
+    console.error("[Materials GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to retrieve study materials from database." });
   }
-  const publicMaterials = sortLearningMaterials(studyMaterials).filter((m) => m.isVisibleOnWebsite !== false && m.isPublished !== false).map((m) => ({
-    ...m,
-    downloadUrl: !m.downloadUrl || m.downloadUrl === "#" ? `/api/files/download/${m.id}` : m.downloadUrl
-  }));
-  res.json({ materials: publicMaterials, resources: publicMaterials });
 });
-app.get(["/api/admin/materials", "/api/admin/learning-resources"], async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.get(["/api/admin/materials", "/api/admin/learning-resources"], requireAdmin, async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const materials = await getStudyMaterialsDb({ includeUnpublished: true });
+    return res.json({ success: true, materials, resources: materials });
+  } catch (err) {
+    console.error("[Admin Materials GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to retrieve study materials from database." });
   }
-  if (!materialsInitialized && studyMaterials.length === 0) {
-    try {
-      const durableMaterials = await durableStorageService.getCollection("materials", []);
-      if (Array.isArray(durableMaterials)) {
-        studyMaterials.length = 0;
-        studyMaterials.push(...durableMaterials);
-        materialsInitialized = true;
-      }
-    } catch (e) {
-    }
-  }
-  const allMaterials = sortLearningMaterials(studyMaterials).map((m) => ({
-    ...m,
-    downloadUrl: !m.downloadUrl || m.downloadUrl === "#" ? `/api/files/download/${m.id}` : m.downloadUrl
-  }));
-  res.json({ materials: allMaterials, resources: allMaterials });
 });
-app.post(["/api/admin/materials", "/api/admin/learning-resources"], async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
-  const {
-    resourceType,
-    batchId,
-    classId,
-    title,
-    description,
-    fileType,
-    fileSize,
-    pdfUrl,
-    downloadUrl,
-    b2FileId,
-    b2FileName,
-    mimeType,
-    isViewOnly,
-    allowDownload,
-    isVisibleOnWebsite,
-    isPublished,
-    displayOrder,
-    category,
-    level,
-    youtubeUrl,
-    thumbnailUrl,
-    b2ThumbnailId,
-    b2ThumbnailName,
-    duration,
-    views
-  } = req.body;
-  const newId = `mat-${Date.now()}`;
-  const resType = resourceType === "youtube" || fileType === "youtube" ? "youtube" : "pdf";
-  let safeTitle = (title || (resType === "youtube" ? "YouTube Video Lesson" : "Study Material.pdf")).trim();
-  let finalFileType = fileType || (resType === "youtube" ? "youtube" : safeTitle.toLowerCase().endsWith(".pdf") ? "pdf" : "doc");
-  let finalDownloadUrl = downloadUrl && downloadUrl !== "#" ? downloadUrl : `/api/files/download/${newId}`;
-  let finalPdfUrl = pdfUrl || (resType === "pdf" ? `/api/files/pdf/${newId}/${encodeURIComponent(safeTitle)}` : void 0);
-  let finalYoutubeUrl = youtubeUrl;
-  let finalThumbnailUrl = thumbnailUrl;
-  if (resType === "youtube") {
-    if (youtubeUrl) {
+app.post(["/api/admin/materials", "/api/admin/learning-resources"], requireAdmin, async (req, res) => {
+  try {
+    const {
+      resourceType,
+      batchId,
+      classId,
+      title,
+      description,
+      fileType,
+      fileSize,
+      pdfUrl,
+      downloadUrl,
+      b2FileId,
+      b2FileName,
+      mimeType,
+      isViewOnly,
+      allowDownload,
+      isVisibleOnWebsite,
+      isPublished,
+      displayOrder,
+      category,
+      level,
+      youtubeUrl,
+      thumbnailUrl,
+      b2ThumbnailId,
+      b2ThumbnailName,
+      duration,
+      views
+    } = req.body;
+    const newId = req.body.id || `mat-${Date.now()}`;
+    const resType = resourceType === "youtube" || fileType === "youtube" ? "youtube" : "pdf";
+    const safeTitle = (title || (resType === "youtube" ? "YouTube Video Lesson" : "Study Material.pdf")).trim();
+    const finalFileType = fileType || (resType === "youtube" ? "youtube" : safeTitle.toLowerCase().endsWith(".pdf") ? "pdf" : "doc");
+    const finalDownloadUrl = downloadUrl && downloadUrl !== "#" ? downloadUrl : `/api/files/download/${newId}`;
+    const finalPdfUrl = pdfUrl || (resType === "pdf" ? `/api/files/pdf/${newId}/${encodeURIComponent(safeTitle)}` : null);
+    let finalThumbnailUrl = thumbnailUrl || null;
+    if (resType === "youtube" && youtubeUrl && !finalThumbnailUrl) {
       const vidId = extractYouTubeVideoId(youtubeUrl);
-      if (vidId && !finalThumbnailUrl) {
+      if (vidId) {
         finalThumbnailUrl = `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`;
       }
     }
+    const created = await createStudyMaterialDb({
+      id: newId,
+      resourceType: resType,
+      batchId: batchId || "all",
+      classId: classId || null,
+      title: safeTitle,
+      description: description || "",
+      fileType: finalFileType,
+      fileSize: fileSize || (resType === "youtube" ? "Video" : "1.5 MB"),
+      downloadUrl: finalDownloadUrl,
+      pdfUrl: finalPdfUrl,
+      b2FileId: b2FileId || null,
+      b2FileName: b2FileName || null,
+      mimeType: mimeType || (resType === "youtube" ? "video/youtube" : getSafeFileMimeType(safeTitle)),
+      isViewOnly: isViewOnly !== void 0 ? Boolean(isViewOnly) : true,
+      allowDownload: Boolean(allowDownload),
+      isVisibleOnWebsite: isVisibleOnWebsite !== void 0 ? Boolean(isVisibleOnWebsite) : isPublished !== void 0 ? Boolean(isPublished) : true,
+      isPublished: isPublished !== void 0 ? Boolean(isPublished) : isVisibleOnWebsite !== void 0 ? Boolean(isVisibleOnWebsite) : true,
+      displayOrder: displayOrder !== void 0 ? Number(displayOrder) : 0,
+      category: category || (resType === "youtube" ? "Daily English" : "Worksheets"),
+      level: level || "All Levels",
+      youtubeUrl: youtubeUrl || null,
+      thumbnailUrl: finalThumbnailUrl,
+      b2ThumbnailId: b2ThumbnailId || null,
+      b2ThumbnailName: b2ThumbnailName || null,
+      duration: duration || "12:00",
+      views: views || "0"
+    });
+    const freshMaterials = await getStudyMaterialsDb({ includeUnpublished: true });
+    return res.status(201).json({ success: true, material: created, materials: freshMaterials, resources: freshMaterials });
+  } catch (err) {
+    console.error("[Materials POST] Database insertion failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to save study material to database." });
   }
-  const newMat = {
-    id: newId,
-    resourceType: resType,
-    batchId: batchId || "all",
-    classId,
-    title: safeTitle,
-    description: description || (resType === "youtube" ? "Video lesson for practical spoken English fluency." : "Study materials uploaded by academy instructor."),
-    fileType: finalFileType,
-    fileSize: fileSize || (resType === "youtube" ? "Video" : "1.5 MB"),
-    downloadUrl: finalDownloadUrl,
-    pdfUrl: finalPdfUrl,
-    b2FileId,
-    b2FileName,
-    mimeType: mimeType || (resType === "youtube" ? "video/youtube" : getSafeFileMimeType(safeTitle)),
-    isViewOnly: isViewOnly !== void 0 ? Boolean(isViewOnly) : true,
-    allowDownload: Boolean(allowDownload),
-    isVisibleOnWebsite: isVisibleOnWebsite !== void 0 ? Boolean(isVisibleOnWebsite) : isPublished !== void 0 ? Boolean(isPublished) : true,
-    isPublished: isPublished !== void 0 ? Boolean(isPublished) : isVisibleOnWebsite !== void 0 ? Boolean(isVisibleOnWebsite) : true,
-    displayOrder: displayOrder !== void 0 ? Number(displayOrder) : studyMaterials.length + 1,
-    category: category || (resType === "youtube" ? "Daily English" : "Worksheets"),
-    level: level || "All Levels",
-    uploadedAt: (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
-    uploadedDate: (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
-    youtubeUrl: finalYoutubeUrl,
-    thumbnailUrl: finalThumbnailUrl,
-    b2ThumbnailId,
-    b2ThumbnailName,
-    duration: duration || "12:00",
-    views: views || "1.2K views",
-    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  studyMaterials.unshift(newMat);
-  materialsInitialized = true;
-  if (classId) {
-    const cls = classes.find((c) => c.id === classId);
-    if (cls) cls.hasStudyMaterial = true;
-  }
-  await savePersistedMaterials();
-  const sorted = sortLearningMaterials(studyMaterials);
-  res.json({ success: true, material: newMat, materials: sorted, resources: sorted });
 });
-app.put(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
-  const { id } = req.params;
-  const mat = studyMaterials.find((m) => m.id === id);
-  if (!mat) {
-    return res.status(404).json({ error: "Study material or learning resource not found." });
-  }
-  const {
-    resourceType,
-    title,
-    description,
-    batchId,
-    classId,
-    fileType,
-    fileSize,
-    pdfUrl,
-    downloadUrl,
-    b2FileId,
-    b2FileName,
-    mimeType,
-    isViewOnly,
-    allowDownload,
-    isVisibleOnWebsite,
-    isPublished,
-    displayOrder,
-    category,
-    level,
-    youtubeUrl,
-    thumbnailUrl,
-    b2ThumbnailId,
-    b2ThumbnailName,
-    duration,
-    views
-  } = req.body;
-  if (b2FileId && mat.b2FileId && b2FileId !== mat.b2FileId) {
-    deleteFileFromB2(mat.b2FileId, mat.b2FileName).catch(() => {
-    });
-  }
-  if (b2ThumbnailId && mat.b2ThumbnailId && b2ThumbnailId !== mat.b2ThumbnailId) {
-    deleteFileFromB2(mat.b2ThumbnailId, mat.b2ThumbnailName).catch(() => {
-    });
-  }
-  if (resourceType !== void 0) mat.resourceType = resourceType;
-  if (title !== void 0) mat.title = title;
-  if (description !== void 0) mat.description = description;
-  if (batchId !== void 0) mat.batchId = batchId;
-  if (classId !== void 0) mat.classId = classId;
-  if (fileType !== void 0) mat.fileType = fileType;
-  if (fileSize !== void 0) mat.fileSize = fileSize;
-  if (pdfUrl !== void 0) mat.pdfUrl = pdfUrl;
-  if (downloadUrl !== void 0 && downloadUrl !== "#") mat.downloadUrl = downloadUrl;
-  if (b2FileId !== void 0) mat.b2FileId = b2FileId;
-  if (b2FileName !== void 0) mat.b2FileName = b2FileName;
-  if (mimeType !== void 0) mat.mimeType = mimeType;
-  if (isViewOnly !== void 0) mat.isViewOnly = Boolean(isViewOnly);
-  if (allowDownload !== void 0) mat.allowDownload = Boolean(allowDownload);
-  if (isVisibleOnWebsite !== void 0) mat.isVisibleOnWebsite = Boolean(isVisibleOnWebsite);
-  if (isPublished !== void 0) {
-    mat.isPublished = Boolean(isPublished);
-    mat.isVisibleOnWebsite = Boolean(isPublished);
-  }
-  if (displayOrder !== void 0) mat.displayOrder = Number(displayOrder);
-  if (category !== void 0) mat.category = category;
-  if (level !== void 0) mat.level = level;
-  if (youtubeUrl !== void 0) {
-    mat.youtubeUrl = youtubeUrl;
-    const vidId = extractYouTubeVideoId(youtubeUrl);
-    if (vidId && !thumbnailUrl && !mat.thumbnailUrl) {
-      mat.thumbnailUrl = `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`;
-    }
-  }
-  if (thumbnailUrl !== void 0) mat.thumbnailUrl = thumbnailUrl;
-  if (b2ThumbnailId !== void 0) mat.b2ThumbnailId = b2ThumbnailId;
-  if (b2ThumbnailName !== void 0) mat.b2ThumbnailName = b2ThumbnailName;
-  if (duration !== void 0) mat.duration = duration;
-  if (views !== void 0) mat.views = views;
-  mat.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  await savePersistedMaterials();
-  const sorted = sortLearningMaterials(studyMaterials);
-  res.json({ success: true, material: mat, materials: sorted, resources: sorted });
-});
-app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
-  const { id } = req.params;
-  const idx = studyMaterials.findIndex((m) => m.id === id);
-  if (idx === -1) {
-    return res.status(404).json({ error: "Study material or resource not found." });
-  }
-  const mat = studyMaterials[idx];
-  if (mat.b2FileId || mat.b2FileName) {
-    deleteFileFromB2(mat.b2FileId, mat.b2FileName).catch(() => {
-    });
-  }
-  if (mat.b2ThumbnailId || mat.b2ThumbnailName) {
-    deleteFileFromB2(mat.b2ThumbnailId, mat.b2ThumbnailName).catch(() => {
-    });
-  }
+app.put(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], requireAdmin, async (req, res) => {
   try {
-    const diskPath1 = path7.join(uploadsDir, `${id}.pdf`);
-    if (fs7.existsSync(diskPath1)) fs7.unlinkSync(diskPath1);
-    if (mat.b2FileName) {
-      const diskPath2 = path7.join(uploadsDir, path7.basename(mat.b2FileName));
-      if (fs7.existsSync(diskPath2)) fs7.unlinkSync(diskPath2);
+    const { id } = req.params;
+    const existingRaw = await getStudyMaterialByIdDb(id);
+    if (!existingRaw) {
+      return res.status(404).json({ success: false, error: "Study material or learning resource not found." });
     }
-  } catch (e) {
+    if (req.body.b2FileId && existingRaw.b2FileId && req.body.b2FileId !== existingRaw.b2FileId) {
+      deleteFileFromB2(existingRaw.b2FileId, existingRaw.b2FileName).catch(() => {
+      });
+    }
+    if (req.body.b2ThumbnailId && existingRaw.b2ThumbnailId && req.body.b2ThumbnailId !== existingRaw.b2ThumbnailId) {
+      deleteFileFromB2(existingRaw.b2ThumbnailId, existingRaw.b2ThumbnailName).catch(() => {
+      });
+    }
+    const updated = await updateStudyMaterialDb(id, req.body);
+    const freshMaterials = await getStudyMaterialsDb({ includeUnpublished: true });
+    return res.json({ success: true, material: updated, materials: freshMaterials, resources: freshMaterials });
+  } catch (err) {
+    console.error("[Materials PUT] Database update failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to update study material in database." });
   }
-  studyMaterials.splice(idx, 1);
-  materialsInitialized = true;
-  await savePersistedMaterials();
-  const sorted = sortLearningMaterials(studyMaterials);
-  res.json({ success: true, message: "Resource deleted.", materials: sorted, resources: sorted });
+});
+app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedRow = await deleteStudyMaterialDb(id);
+    if (!deletedRow) {
+      return res.status(404).json({ success: false, error: "Study material or resource not found." });
+    }
+    const fileId = deletedRow.b2_file_id || deletedRow.b2FileId;
+    const fileName = deletedRow.b2_file_name || deletedRow.b2FileName;
+    if (fileId || fileName) {
+      await deleteFileFromB2(fileId, fileName);
+    }
+    const thumbId = deletedRow.b2_thumbnail_id || deletedRow.b2ThumbnailId;
+    const thumbName = deletedRow.b2_thumbnail_name || deletedRow.b2ThumbnailName;
+    if (thumbId || thumbName) {
+      await deleteFileFromB2(thumbId, thumbName);
+    }
+    try {
+      const diskPath1 = path7.join(uploadsDir, `${id}.pdf`);
+      if (fs7.existsSync(diskPath1)) fs7.unlinkSync(diskPath1);
+      if (deletedRow.b2_file_name) {
+        const diskPath2 = path7.join(uploadsDir, path7.basename(deletedRow.b2_file_name));
+        if (fs7.existsSync(diskPath2)) fs7.unlinkSync(diskPath2);
+      }
+    } catch (e) {
+    }
+    const freshMaterials = await getStudyMaterialsDb({ includeUnpublished: true });
+    return res.json({ success: true, message: "Resource deleted.", materials: freshMaterials, resources: freshMaterials });
+  } catch (err) {
+    console.error("[Materials DELETE] Database deletion failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to delete study material from database." });
+  }
 });
 app.get("/api/admin/b2-status", async (req, res) => {
   try {
@@ -7623,7 +8293,12 @@ app.get("/api/files/pdf/:id/:filename?", async (req, res) => {
   let buffer = null;
   let filename = reqFilename || "document.pdf";
   let mimeType = "application/pdf";
-  const mat = studyMaterials.find((m) => m.id === id || m.pdfUrl?.includes(id));
+  let mat = null;
+  try {
+    mat = await getStudyMaterialByIdDb(id);
+  } catch (e) {
+    console.warn("Error fetching material by ID from Neon:", e);
+  }
   const memFile = uploadedPdfFiles.get(id);
   if (mat) {
     filename = mat.title || filename;
@@ -7696,10 +8371,14 @@ app.get("/api/files/pdf/:id/:filename?", async (req, res) => {
 app.get("/api/files/download/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const rawToken = (req.headers.authorization?.replace(/^Bearer\s+/i, "") || req.query.token || "").trim();
-    const auth = rawToken ? verifyAuthToken(rawToken) : null;
+    const auth = verifyAuthToken(req);
     const isAdmin = auth?.role === "admin";
-    const mat = studyMaterials.find((m) => m.id === id || m.pdfUrl?.includes(id) || m.downloadUrl?.includes(id));
+    let mat = null;
+    try {
+      mat = await getStudyMaterialByIdDb(id);
+    } catch (e) {
+      console.warn("Error fetching material by ID for download:", e);
+    }
     const memFile = uploadedPdfFiles.get(id);
     if (!mat && !memFile && !isAdmin) {
       return res.status(404).json({ error: "Requested study material was not found." });
@@ -7774,6 +8453,13 @@ app.get("/api/files/download/:id", async (req, res) => {
     if (!buffer) {
       return res.status(404).json({ error: "File content could not be retrieved." });
     }
+    if (mat) {
+      try {
+        await incrementMaterialDownloadCountDb(mat.id);
+      } catch (cntErr) {
+        console.warn("Failed to increment material download count:", cntErr);
+      }
+    }
     const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -7843,71 +8529,87 @@ app.get("/api/proxy-pdf", async (req, res) => {
     res.status(500).send("Unable to stream the requested document.");
   }
 });
-app.post("/api/admin/announcements", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.post("/api/admin/announcements", requireAdmin, async (req, res) => {
+  try {
+    const { batchId, title, message, priority, category, effectiveDate, isPinned } = req.body;
+    let batchName = "All Batches (Academy-wide)";
+    if (batchId && batchId !== "all") {
+      const batch = await getBatchByIdDb(batchId);
+      if (batch) batchName = batch.name;
+    }
+    const newAnn = await createAnnouncementDb({
+      batchId: batchId && batchId !== "all" ? batchId : void 0,
+      batchName,
+      title: title || "Official Academy Announcement",
+      message: message || "",
+      priority: priority || "Normal",
+      category: category || "General",
+      effectiveDate: effectiveDate || void 0,
+      isPinned: Boolean(isPinned)
+    });
+    const announcements2 = await getAnnouncementsDb();
+    res.json({ success: true, announcement: newAnn, announcements: announcements2 });
+  } catch (err) {
+    console.error("Error creating announcement in Neon:", err);
+    res.status(500).json({ error: "Failed to create announcement." });
   }
-  const { batchId, title, message, priority, category, effectiveDate, isPinned } = req.body;
-  const batch = batches.find((b) => b.id === batchId);
-  const newAnn = {
-    id: `ann-${Date.now()}`,
-    batchId: batchId === "all" ? "all" : batchId || (batch ? batch.id : "all"),
-    batchName: batchId === "all" ? "All Batches (Academy-wide)" : batch ? batch.name : "All Batches (Academy-wide)",
-    title: title || "Official Academy Announcement",
-    message: message || "",
-    date: (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
-    author: "Ziyaur Rehman Zia",
-    priority: priority || "Normal",
-    category: category || "General",
-    effectiveDate: effectiveDate || "",
-    isPinned: Boolean(isPinned)
-  };
-  announcements.unshift(newAnn);
-  await saveAnnouncements();
-  res.json({ success: true, announcement: newAnn, announcements });
 });
-app.get("/api/announcements", (req, res) => {
-  res.json({ announcements });
+app.get(["/api/announcements", "/api/admin/announcements"], async (_req, res) => {
+  try {
+    res.setHeader("Cache-Control", "no-store");
+    const announcements2 = await getAnnouncementsDb();
+    res.json({ announcements: announcements2 });
+  } catch (err) {
+    console.error("Error fetching announcements from Neon:", err);
+    res.status(500).json({ error: "Failed to fetch announcements." });
+  }
 });
-app.put("/api/admin/announcements/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.put("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, message, priority, category, effectiveDate, isPinned, batchId } = req.body;
+    let batchName;
+    if (batchId !== void 0) {
+      if (batchId === "all" || !batchId) {
+        batchName = "All Batches (Academy-wide)";
+      } else {
+        const batch = await getBatchByIdDb(batchId);
+        batchName = batch ? batch.name : void 0;
+      }
+    }
+    const updated = await updateAnnouncementDb(id, {
+      title,
+      message,
+      priority,
+      category,
+      effectiveDate,
+      isPinned,
+      batchId,
+      batchName
+    });
+    if (!updated) {
+      return res.status(404).json({ error: "Announcement not found." });
+    }
+    const announcements2 = await getAnnouncementsDb();
+    res.json({ success: true, announcement: updated, announcements: announcements2 });
+  } catch (err) {
+    console.error("Error updating announcement in Neon:", err);
+    res.status(500).json({ error: "Failed to update announcement." });
   }
-  const { id } = req.params;
-  const annIndex = announcements.findIndex((a) => a.id === id);
-  if (annIndex === -1) {
-    return res.status(404).json({ error: "Announcement not found." });
-  }
-  const { title, message, priority, category, effectiveDate, isPinned, batchId } = req.body;
-  const batch = batches.find((b) => b.id === batchId);
-  announcements[annIndex] = {
-    ...announcements[annIndex],
-    title: title !== void 0 ? title : announcements[annIndex].title,
-    message: message !== void 0 ? message : announcements[annIndex].message,
-    priority: priority !== void 0 ? priority : announcements[annIndex].priority,
-    category: category !== void 0 ? category : announcements[annIndex].category,
-    effectiveDate: effectiveDate !== void 0 ? effectiveDate : announcements[annIndex].effectiveDate,
-    isPinned: isPinned !== void 0 ? Boolean(isPinned) : announcements[annIndex].isPinned,
-    batchId: batchId !== void 0 ? batchId === "all" ? "all" : batch ? batch.id : batchId : announcements[annIndex].batchId,
-    batchName: batchId === "all" ? "All Batches (Academy-wide)" : batch ? batch.name : announcements[annIndex].batchName
-  };
-  await saveAnnouncements();
-  res.json({ success: true, announcement: announcements[annIndex], announcements });
 });
-app.delete("/api/admin/announcements/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.delete("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await deleteAnnouncementDb(id);
+    if (!deleted) {
+      return res.status(404).json({ error: "Announcement not found." });
+    }
+    const announcements2 = await getAnnouncementsDb();
+    res.json({ success: true, announcements: announcements2 });
+  } catch (err) {
+    console.error("Error deleting announcement in Neon:", err);
+    res.status(500).json({ error: "Failed to delete announcement." });
   }
-  const { id } = req.params;
-  const idx = announcements.findIndex((a) => a.id === id);
-  if (idx !== -1) {
-    announcements.splice(idx, 1);
-    await saveAnnouncements();
-  }
-  res.json({ success: true, announcements });
 });
 app.get("/api/admin/attendance", (req, res) => {
   const auth = verifyAuthToken(req);
@@ -8017,31 +8719,33 @@ app.put("/api/admin/students/:id", async (req, res) => {
   await saveRegistrations();
   res.json({ success: true, student: reg });
 });
-app.put("/api/admin/batches/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.put("/api/admin/batches/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await updateBatchDb(id, req.body);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: "Batch not found." });
+    }
+    const freshBatches = await getBatchesDb(true);
+    return res.json({ success: true, batch: updated, batches: freshBatches });
+  } catch (err) {
+    console.error("[Batches PUT] Database update failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to update batch in database." });
   }
-  const { id } = req.params;
-  const batch = batches.find((b) => b.id === id);
-  if (!batch) return res.status(404).json({ error: "Batch not found." });
-  Object.assign(batch, req.body);
-  await saveBatches();
-  res.json({ success: true, batch, batches });
 });
-app.delete("/api/admin/batches/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.delete("/api/admin/batches/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await deleteBatchDb(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: "Batch not found." });
+    }
+    const freshBatches = await getBatchesDb(true);
+    return res.json({ success: true, message: "Batch deleted successfully.", deleted, batches: freshBatches });
+  } catch (err) {
+    console.error("[Batches DELETE] Database deletion failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to delete batch from database." });
   }
-  const { id } = req.params;
-  const idx = batches.findIndex((b) => b.id === id);
-  if (idx !== -1) {
-    batches.splice(idx, 1);
-    await saveBatches();
-    return res.json({ success: true, message: "Batch deleted successfully.", batches });
-  }
-  res.status(404).json({ error: "Batch not found." });
 });
 app.put("/api/admin/classes/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
@@ -8099,8 +8803,9 @@ app.get("/api/cms/content", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   try {
     const settings = await getSiteSettingsDb();
+    const courses = await getCoursesDb(false);
     const contentPayload = {
-      courses: cmsContent.courses || [],
+      courses,
       settings,
       academyName: settings.academyName || "WITS LINGO",
       tagline: settings.tagline || "A Global Language Platform",
@@ -8136,8 +8841,11 @@ app.post("/api/cms/content", requireAdmin, async (req, res) => {
       settings
     } = req.body;
     if (courses && Array.isArray(courses)) {
-      cmsContent.courses = courses;
-      await saveCmsContent();
+      for (const c of courses) {
+        if (c && c.name) {
+          await createCourseDb(c);
+        }
+      }
     }
     const patch = { ...settings || {} };
     if (phoneNumbers && Array.isArray(phoneNumbers)) {
@@ -8151,8 +8859,9 @@ app.post("/api/cms/content", requireAdmin, async (req, res) => {
     if (showAnnouncement !== void 0) patch.showAnnouncement = showAnnouncement;
     if (showBatchesSection !== void 0) patch.showBatchesSection = showBatchesSection;
     const updatedSettings = await updateSiteSettingsDb(patch);
+    const freshCourses = await getCoursesDb(false);
     const contentPayload = {
-      courses: cmsContent.courses || [],
+      courses: freshCourses,
       settings: updatedSettings,
       academyName: updatedSettings.academyName,
       tagline: updatedSettings.tagline,
@@ -8227,115 +8936,98 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     }
   });
 });
-app.get("/api/courses", (req, res) => {
-  const auth = verifyAuthToken(req);
-  const includeAll = req.query.includeAll === "true" || auth && auth.role === "admin";
-  if (includeAll) {
-    return res.json({ courses: cmsContent.courses });
+app.get("/api/courses", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const auth = verifyAuthToken(req);
+    const includeAll = req.query.includeAll === "true" || Boolean(auth && auth.role === "admin");
+    const courses = await getCoursesDb(includeAll);
+    return res.json({ success: true, courses });
+  } catch (err) {
+    console.error("[Courses GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to retrieve courses from database." });
   }
-  const publishedCourses = cmsContent.courses.filter((c) => c.isPublished !== false);
-  res.json({ courses: publishedCourses });
 });
-app.post("/api/courses", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required to create courses." });
+app.get("/api/admin/courses", requireAdmin, async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const courses = await getCoursesDb(true);
+    return res.json({ success: true, courses });
+  } catch (err) {
+    console.error("[Admin Courses GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to retrieve courses from database." });
   }
-  const { name, level, shortDescription, whatYouWillLearn, duration, learningFormat, fee, badge, isPublished } = req.body;
-  if (!name) {
-    return res.status(400).json({ error: "Course name is required." });
-  }
-  const newCourse = {
-    id: req.body.id || `course-${name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now()}`,
-    name,
-    level: level || "Beginner to Intermediate",
-    shortDescription: shortDescription || "Practical language training.",
-    whatYouWillLearn: Array.isArray(whatYouWillLearn) && whatYouWillLearn.length > 0 ? whatYouWillLearn : [
-      "Master natural conversational speaking",
-      "Overcome public hesitation and stage fear",
-      "Daily vocabulary in context",
-      "Pronunciation and accent clarity"
-    ],
-    facilities: Array.isArray(req.body.facilities) && req.body.facilities.length > 0 ? req.body.facilities : [
-      "Live Interactive Online Classes on Google Meet",
-      "Digital PDF Study Notes & Practice Workbooks",
-      "Telegram & WhatsApp Student Practice Community",
-      "Course Completion Certificate",
-      "Class Recording Access for Revision"
-    ],
-    duration: duration || "2 Months (40 Sessions)",
-    learningFormat: learningFormat || "Live Online Classroom",
-    fee: Number(fee) || 1499,
-    badge: badge || "Live",
-    isPublished: isPublished !== false
-  };
-  if (!Array.isArray(cmsContent.courses)) cmsContent.courses = [];
-  const existingIndex = cmsContent.courses.findIndex((c) => c.id === newCourse.id || c.name.toLowerCase() === newCourse.name.toLowerCase());
-  if (existingIndex !== -1) {
-    cmsContent.courses[existingIndex] = { ...cmsContent.courses[existingIndex], ...newCourse };
-  } else {
-    cmsContent.courses.push(newCourse);
-  }
-  await saveCmsContent();
-  res.status(201).json({ success: true, course: newCourse, courses: cmsContent.courses });
 });
-app.put("/api/courses/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required to edit courses." });
+app.post(["/api/courses", "/api/admin/courses"], requireAdmin, async (req, res) => {
+  try {
+    const { name, level, shortDescription, whatYouWillLearn, facilities, duration, learningFormat, fee, badge, isPublished, order } = req.body;
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ success: false, error: "Course name is required." });
+    }
+    const created = await createCourseDb({
+      id: req.body.id || `course-${name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now()}`,
+      name: name.trim(),
+      level: level || "Beginner to Intermediate",
+      shortDescription: shortDescription || "",
+      whatYouWillLearn: Array.isArray(whatYouWillLearn) ? whatYouWillLearn : [],
+      facilities: Array.isArray(facilities) ? facilities : [],
+      duration: duration || "2 Months (40 Sessions)",
+      learningFormat: learningFormat || "Live Online Classroom",
+      fee: Number(fee) || 0,
+      badge: badge || void 0,
+      isPublished: isPublished !== false,
+      order: typeof order === "number" ? order : 0
+    });
+    const freshCourses = await getCoursesDb(true);
+    return res.status(201).json({ success: true, course: created, courses: freshCourses });
+  } catch (err) {
+    console.error("[Courses POST] Database insertion failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to create course in database." });
   }
-  const courseIndex = cmsContent.courses.findIndex((c) => c.id === req.params.id);
-  if (courseIndex === -1) {
-    return res.status(404).json({ error: "Course not found." });
-  }
-  const currentCourse = cmsContent.courses[courseIndex];
-  const { name, level, shortDescription, whatYouWillLearn, duration, learningFormat, fee, badge, isPublished } = req.body;
-  const updatedCourse = {
-    ...currentCourse,
-    name: name !== void 0 ? name : currentCourse.name,
-    level: level !== void 0 ? level : currentCourse.level,
-    shortDescription: shortDescription !== void 0 ? shortDescription : currentCourse.shortDescription,
-    whatYouWillLearn: Array.isArray(whatYouWillLearn) ? whatYouWillLearn : currentCourse.whatYouWillLearn,
-    duration: duration !== void 0 ? duration : currentCourse.duration,
-    learningFormat: learningFormat !== void 0 ? learningFormat : currentCourse.learningFormat,
-    fee: fee !== void 0 ? Number(fee) : currentCourse.fee,
-    badge: badge !== void 0 ? badge : currentCourse.badge,
-    isPublished: isPublished !== void 0 ? isPublished : currentCourse.isPublished
-  };
-  cmsContent.courses[courseIndex] = updatedCourse;
-  await saveCmsContent();
-  res.json({ success: true, course: updatedCourse, courses: cmsContent.courses });
 });
-app.patch("/api/courses/:id/publish", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.put(["/api/courses/:id", "/api/admin/courses/:id"], requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await updateCourseDb(id, req.body);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: "Course not found." });
+    }
+    const freshCourses = await getCoursesDb(true);
+    return res.json({ success: true, course: updated, courses: freshCourses });
+  } catch (err) {
+    console.error("[Courses PUT] Database update failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to update course in database." });
   }
-  const courseIndex = cmsContent.courses.findIndex((c) => c.id === req.params.id);
-  if (courseIndex === -1) {
-    return res.status(404).json({ error: "Course not found." });
-  }
-  const currentCourse = cmsContent.courses[courseIndex];
-  const newStatus = req.body.isPublished !== void 0 ? Boolean(req.body.isPublished) : !Boolean(currentCourse.isPublished);
-  currentCourse.isPublished = newStatus;
-  await saveCmsContent();
-  res.json({ success: true, course: currentCourse, isPublished: newStatus, courses: cmsContent.courses });
 });
-app.delete("/api/courses/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required to delete courses." });
+app.patch(["/api/courses/:id/publish", "/api/admin/courses/:id/publish"], requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const target = await getCourseByIdDb(id);
+    if (!target) {
+      return res.status(404).json({ success: false, error: "Course not found." });
+    }
+    const nextPublished = req.body.isPublished !== void 0 ? Boolean(req.body.isPublished) : !Boolean(target.isPublished);
+    const updated = await setCoursePublishedDb(id, nextPublished);
+    const freshCourses = await getCoursesDb(true);
+    return res.json({ success: true, course: updated, isPublished: nextPublished, courses: freshCourses });
+  } catch (err) {
+    console.error("[Courses PATCH] Database publication update failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to update publication status in database." });
   }
-  const courseIndex = cmsContent.courses.findIndex((c) => c.id === req.params.id);
-  if (courseIndex === -1) {
-    return res.status(404).json({ error: "Course not found." });
-  }
-  const deleted = cmsContent.courses.splice(courseIndex, 1)[0];
-  await saveCmsContent();
-  res.json({ success: true, deleted, courses: cmsContent.courses });
 });
-app.post("/api/courses", (req, res, next) => {
-  next();
+app.delete(["/api/courses/:id", "/api/admin/courses/:id"], requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await deleteCourseDb(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: "Course not found." });
+    }
+    const freshCourses = await getCoursesDb(true);
+    return res.json({ success: true, message: "Course deleted successfully.", deleted, courses: freshCourses });
+  } catch (err) {
+    console.error("[Courses DELETE] Database deletion failed:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to delete course from database." });
+  }
 });
 app.get("/api/reviews", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");

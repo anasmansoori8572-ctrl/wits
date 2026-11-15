@@ -488,8 +488,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
       if (bRes.ok) {
         const bData = await bRes.json();
-        if (Array.isArray(bData)) {
+        if (bData && Array.isArray(bData.batches)) {
+          onUpdateBatches(bData.batches);
+        } else if (Array.isArray(bData)) {
           onUpdateBatches(bData);
+        }
+      }
+
+      // 1b. Courses
+      const crsRes = await adminFetch('/api/courses?includeAll=true');
+      if (crsRes.ok) {
+        const crsData = await crsRes.json();
+        if (crsData && Array.isArray(crsData.courses)) {
+          onUpdateCourses(crsData.courses);
+        }
+      }
+
+      // 1c. Announcements
+      const aRes = await adminFetch('/api/admin/announcements');
+      if (aRes.ok) {
+        const aData = await aRes.json();
+        if (aData && Array.isArray(aData.announcements)) {
+          updateAllAnnouncements(aData.announcements);
         }
       }
 
@@ -520,9 +540,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const loaded = Array.isArray(mData) ? mData : (mData.materials || []);
         setMaterials(loaded);
         if (onUpdateMaterials) onUpdateMaterials(loaded);
-        try {
-          localStorage.setItem('wits_lingo_materials', JSON.stringify(loaded));
-        } catch (e) {}
       }
 
       // 5. Gallery Items
@@ -1311,11 +1328,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const updatedList = materials.map(m => m.id === mat.id ? updated : m);
     setMaterials(updatedList);
     if (onUpdateMaterials) onUpdateMaterials(updatedList);
-    try {
-      localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
-      window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
-      window.dispatchEvent(new Event('storage'));
-    } catch (e) {}
+    window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
 
     try {
       const res = await adminFetch(`/api/admin/materials/${mat.id}`, {
@@ -1387,11 +1400,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               const updatedList = materials.map(m => m.id === mat.id ? updatedMat : m);
               setMaterials(updatedList);
               if (onUpdateMaterials) onUpdateMaterials(updatedList);
-              try {
-                localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
-                window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
-                window.dispatchEvent(new Event('storage'));
-              } catch (err) {}
+              window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
               triggerFeedback(`Custom thumbnail uploaded to Backblaze B2 for "${mat.title}"!`);
             } else {
               alert('Failed to save thumbnail in database.');
@@ -1441,11 +1450,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const updatedList = materials.map(m => m.id === mat.id ? updatedMat : m);
         setMaterials(updatedList);
         if (onUpdateMaterials) onUpdateMaterials(updatedList);
-        try {
-          localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
-          window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
-          window.dispatchEvent(new Event('storage'));
-        } catch (err) {}
+        window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
         triggerFeedback(`Reset "${mat.title}" to default YouTube thumbnail.`);
       }
     } catch (err) {
@@ -1581,11 +1586,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     setMaterials(updatedList);
     if (onUpdateMaterials) onUpdateMaterials(updatedList);
-    try {
-      localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
-      window.dispatchEvent(new Event('storage'));
-      window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
-    } catch (e) {}
+    window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
 
     setShowAddMaterialModal(false);
     setPdfUploadError(null);
@@ -1672,11 +1673,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     setMaterials(updatedList);
     if (onUpdateMaterials) onUpdateMaterials(updatedList);
-    try {
-      localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
-      window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
-      window.dispatchEvent(new Event('storage'));
-    } catch (e) {}
+    window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
 
     setShowAddYouTubeModal(false);
     setNewYouTubeResource({
@@ -1748,11 +1745,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     setMaterials(updatedList);
     if (onUpdateMaterials) onUpdateMaterials(updatedList);
-    try {
-      localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
-      window.dispatchEvent(new Event('storage'));
-      window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
-    } catch (e) {}
+    window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
 
     setEditingMaterial(null);
     triggerFeedback(`"${updated.title}" updated.`);
@@ -1796,11 +1789,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         setMaterials(updatedList);
         if (onUpdateMaterials) onUpdateMaterials(updatedList);
-        try {
-          localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
-          window.dispatchEvent(new Event('storage'));
-          window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
-        } catch (e) {}
+        window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
 
         triggerFeedback(`${isVideo ? 'Video lesson' : 'Learning resource'} deleted permanently.`);
       }

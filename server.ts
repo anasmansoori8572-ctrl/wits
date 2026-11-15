@@ -22,8 +22,37 @@ import {
   getReviewsDb,
   createReviewDb,
   updateReviewDb,
-  deleteReviewDb
+  deleteReviewDb,
+  getCoursesDb,
+  getCourseByIdDb,
+  createCourseDb,
+  updateCourseDb,
+  setCoursePublishedDb,
+  deleteCourseDb,
+  getBatchesDb,
+  getBatchByIdDb,
+  createBatchDb,
+  updateBatchDb,
+  deleteBatchDb,
+  getStudyMaterialsDb,
+  getStudyMaterialByIdDb,
+  createStudyMaterialDb,
+  updateStudyMaterialDb,
+  deleteStudyMaterialDb,
+  incrementMaterialDownloadCountDb,
+  getAnnouncementsDb,
+  getAnnouncementByIdDb,
+  createAnnouncementDb,
+  updateAnnouncementDb,
+  deleteAnnouncementDb,
+  getGalleryItemsDb,
+  getGalleryItemByIdDb,
+  createGalleryItemDb,
+  updateGalleryItemDb,
+  reorderGalleryItemsDb,
+  deleteGalleryItemDb
 } from "./src/lib/db";
+import type { GalleryItem, StudyMaterial, CourseData, Batch, Announcement } from "./src/types";
 
 let s3ClientInstance: S3Client | null = null;
 
@@ -863,9 +892,6 @@ function verifyAuthToken(reqOrHeader?: express.Request | string): { userId: stri
       const cookies = parseCookies(reqOrHeader);
       token = cookies.admin_session_token || cookies.wits_auth_token;
     }
-    if (!token && typeof reqOrHeader.query?.token === "string") {
-      token = reqOrHeader.query.token.trim();
-    }
     if (!token && reqOrHeader.body && typeof reqOrHeader.body.adminToken === "string") {
       token = reqOrHeader.body.adminToken.trim();
     }
@@ -937,11 +963,6 @@ export function requireAdmin(req: express.Request, res: express.Response, next: 
       const trimmed = authHeader.trim();
       token = trimmed.startsWith("Bearer ") ? trimmed.substring(7).trim() : trimmed;
     }
-  }
-
-  // 3. Check query param
-  if (!token && typeof req.query?.token === "string") {
-    token = req.query.token.trim();
   }
 
   if (!token || token === "null" || token === "undefined") {
@@ -1103,12 +1124,7 @@ async function loadAllPersistedDataAsync(): Promise<void> {
     // 2. Cloud-first Dynamic Content Hydration (Backblaze B2 is Source of Truth)
     try {
       const [
-        cloudMaterials,
-        cloudCourses,
         cloudCms,
-        cloudAnnouncements,
-        cloudBatches,
-        cloudGallery,
         cloudRegistrations,
         cloudUsers,
         cloudClasses,
@@ -1116,12 +1132,7 @@ async function loadAllPersistedDataAsync(): Promise<void> {
         cloudOrders,
         cloudPayments
       ] = await Promise.all([
-        durableStorageService.getCollection<DBStudyMaterial>("materials", []),
-        durableStorageService.getCollection<any>("courses", []),
         durableStorageService.getCollection<any>("cmsContent", []),
-        durableStorageService.getCollection<any>("announcements", []),
-        durableStorageService.getCollection<any>("batches", []),
-        durableStorageService.getCollection<any>("gallery", []),
         durableStorageService.getCollection<DBStudentRegistration>("registrations", []),
         durableStorageService.getCollection<DBUser>("users", defaultAdminUsers),
         durableStorageService.getCollection<DBClass>("classes", []),
@@ -1130,59 +1141,17 @@ async function loadAllPersistedDataAsync(): Promise<void> {
         durableStorageService.getCollection<DBPayment>("payments", [])
       ]);
 
-      // Materials & Videos
-      if (Array.isArray(cloudMaterials)) {
-        for (const m of cloudMaterials) {
-          if (m.resourceType === "youtube" || m.fileType === "youtube") {
-            if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
-          } else if (!m.downloadUrl || m.downloadUrl === "#") {
-            m.downloadUrl = `/api/files/download/${m.id}`;
-          }
-        }
-        studyMaterials.length = 0;
-        studyMaterials.push(...cloudMaterials);
-        materialsInitialized = true;
-        console.log(`[Persistence] Hydrated ${studyMaterials.length} materials/videos from Backblaze B2.`);
-      }
-
-      // Courses
-      if (Array.isArray(cloudCourses)) {
-        cmsContent.courses = cloudCourses;
-        console.log(`[Persistence] Hydrated ${cloudCourses.length} courses from Backblaze B2.`);
-      }
-
-      // CMS Content & Settings
+      // CMS Settings (Courses and reviews are managed directly in Neon PostgreSQL)
       if (Array.isArray(cloudCms) && cloudCms.length > 0 && cloudCms[0]) {
         const remote = cloudCms[0];
         cmsContent = {
           ...cmsContent,
           ...remote,
           testimonials: [],
-          courses: Array.isArray(remote.courses) ? remote.courses : cmsContent.courses,
+          courses: [],
           settings: { ...cmsContent.settings, ...(remote.settings || {}) }
         };
         console.log(`[Persistence] Hydrated CMS settings from Backblaze B2.`);
-      }
-
-      // Announcements
-      if (Array.isArray(cloudAnnouncements)) {
-        announcements.length = 0;
-        announcements.push(...cloudAnnouncements);
-        console.log(`[Persistence] Hydrated ${announcements.length} announcements from Backblaze B2.`);
-      }
-
-      // Batches
-      if (Array.isArray(cloudBatches)) {
-        batches.length = 0;
-        batches.push(...cloudBatches);
-        console.log(`[Persistence] Hydrated ${batches.length} batches from Backblaze B2.`);
-      }
-
-      // Gallery
-      if (Array.isArray(cloudGallery)) {
-        galleryItems.length = 0;
-        galleryItems.push(...cloudGallery);
-        console.log(`[Persistence] Hydrated ${galleryItems.length} gallery items from Backblaze B2.`);
       }
 
       // Registrations (Admissions & Students)
@@ -1335,17 +1304,11 @@ async function saveCmsContent(): Promise<void> {
     try {
       fs.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
       fs.writeFileSync(CMS_ALT_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
-      if (Array.isArray(cmsContent.courses)) {
-        fs.writeFileSync(COURSES_STORAGE_FILE, JSON.stringify(cmsContent.courses, null, 2), "utf-8");
-      }
     } catch (e) {
       console.warn("[Persistence] Could not save cmsContent:", e);
     }
   }
   await durableStorageService.saveCollection("cmsContent", [cmsContent]);
-  if (Array.isArray(cmsContent.courses)) {
-    await durableStorageService.saveCollection("courses", cmsContent.courses);
-  }
 }
 
 async function saveAnnouncements(): Promise<void> {
@@ -2376,20 +2339,36 @@ try {
     });
   });
 
-  // 3. BATCHES: List Batches (Public or Authenticated)
-  app.get("/api/batches", (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (auth && auth.role === "admin") {
-      // Admin gets all batches with full stats
-      return res.json({ batches });
-    } else if (auth && auth.role === "student") {
-      // Student gets their assigned batches plus active public listings
-      const myBatches = batches.filter(b => auth.batchIds.includes(b.id));
-      return res.json({ batches: myBatches, allPublicBatches: batches });
-    }
+  // 3. BATCHES: List Batches (Public or Authenticated, Neon PostgreSQL)
+  app.get("/api/batches", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const auth = verifyAuthToken(req);
+      const isAdmin = auth && auth.role === "admin";
+      const batchesList = await getBatchesDb(Boolean(isAdmin));
 
-    // Public visitor
-    res.json({ batches });
+      if (auth && auth.role === "student") {
+        const studentBatchIds = Array.isArray(auth.batchIds) ? auth.batchIds : [];
+        const myBatches = batchesList.filter(b => studentBatchIds.includes(b.id));
+        return res.json({ success: true, batches: myBatches, allPublicBatches: batchesList });
+      }
+
+      return res.json({ success: true, batches: batchesList });
+    } catch (err: any) {
+      console.error("[Batches GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve batches from database." });
+    }
+  });
+
+  app.get("/api/admin/batches", requireAdmin, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const batchesList = await getBatchesDb(true);
+      return res.json({ success: true, batches: batchesList });
+    } catch (err: any) {
+      console.error("[Admin Batches GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve batches from database." });
+    }
   });
 
   // 4. BATCH ACCESS CONTROL: Get Classes for Batch
@@ -2668,23 +2647,30 @@ try {
     });
   });
 
-  // 10. BATCH MATERIALS (Authorized)
-  app.get("/api/batches/:batchId/materials", (req, res) => {
-    const { batchId } = req.params;
-    const auth = verifyAuthToken(req);
+  // 10. BATCH MATERIALS (Authorized, Neon PostgreSQL)
+  app.get("/api/batches/:batchId/materials", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const { batchId } = req.params;
+      const auth = verifyAuthToken(req);
 
-    if (!auth) return res.status(401).json({ error: "Authentication required." });
-    if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
-      return res.status(403).json({ error: "Access Denied: You are not authorized to access study materials for this batch." });
+      if (!auth) return res.status(401).json({ success: false, error: "Authentication required." });
+      if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
+        return res.status(403).json({ success: false, error: "Access Denied: You are not authorized to access study materials for this batch." });
+      }
+
+      const allMaterials = await getStudyMaterialsDb({ includeUnpublished: auth.role === "admin" });
+      const materials = allMaterials
+        .filter(m => m.batchId === batchId || m.batchId === "all")
+        .map(m => ({
+          ...m,
+          downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
+        }));
+      return res.json({ success: true, materials });
+    } catch (err: any) {
+      console.error("[Batch Materials GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve batch materials from database." });
     }
-
-    const materials = studyMaterials
-      .filter(m => m.batchId === batchId || m.batchId === 'all')
-      .map(m => ({
-        ...m,
-        downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
-      }));
-    res.json({ materials });
   });
 
   // 11. BATCH ASSIGNMENTS (Authorized)
@@ -2740,17 +2726,23 @@ try {
   });
 
   // 13. BATCH ANNOUNCEMENTS (Authorized)
-  app.get("/api/batches/:batchId/announcements", (req, res) => {
-    const { batchId } = req.params;
-    const auth = verifyAuthToken(req);
+  app.get("/api/batches/:batchId/announcements", async (req, res) => {
+    try {
+      const { batchId } = req.params;
+      const auth = verifyAuthToken(req);
 
-    if (!auth) return res.status(401).json({ error: "Authentication required." });
-    if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
-      return res.status(403).json({ error: "Access Denied: You are not authorized to view announcements for this batch." });
+      if (!auth) return res.status(401).json({ error: "Authentication required." });
+      if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
+        return res.status(403).json({ error: "Access Denied: You are not authorized to view announcements for this batch." });
+      }
+
+      res.setHeader("Cache-Control", "no-store");
+      const batchAnnouncements = await getAnnouncementsDb(batchId);
+      res.json({ announcements: batchAnnouncements });
+    } catch (err: any) {
+      console.error("Error fetching batch announcements:", err);
+      res.status(500).json({ error: "Failed to fetch announcements." });
     }
-
-    const batchAnnouncements = announcements.filter(a => a.batchId === batchId);
-    res.json({ announcements: batchAnnouncements });
   });
 
   // =========================================================================
@@ -4408,27 +4400,21 @@ www.witslingo.com`;
   // GALLERY MANAGEMENT & BACKBLAZE B2 PHOTO STORAGE
   // =========================================================================
 
-  // 1. Public Gallery Items
-  app.get("/api/gallery", (req, res) => {
+  // 1. Public Gallery Items (Neon PostgreSQL)
+  app.get("/api/gallery", async (req, res) => {
     try {
+      res.setHeader("Cache-Control", "no-store");
       const categoryFilter = typeof req.query.category === "string" ? req.query.category.trim() : "";
       
-      let items = galleryItems.filter(item => item.isPublished === true);
-      
+      const allPublished = await getGalleryItemsDb(false);
+      let items = allPublished;
       if (categoryFilter && categoryFilter.toLowerCase() !== "all" && categoryFilter.toLowerCase() !== "all moments") {
-        items = items.filter(item => (item.category || "").toLowerCase() === categoryFilter.toLowerCase());
+        items = allPublished.filter(item => (item.category || "").toLowerCase() === categoryFilter.toLowerCase());
       }
-      
-      // Sort by displayOrder ascending, then uploadedAt descending
-      items.sort((a, b) => {
-        const orderDiff = (a.displayOrder || 999) - (b.displayOrder || 999);
-        if (orderDiff !== 0) return orderDiff;
-        return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
-      });
 
       // Collect all unique categories from published items
       const allCategoriesSet = new Set<string>();
-      for (const item of galleryItems.filter(i => i.isPublished === true)) {
+      for (const item of allPublished) {
         if (item.category && item.category.trim()) {
           allCategoriesSet.add(item.category.trim());
         }
@@ -4446,44 +4432,33 @@ www.witslingo.com`;
         totalCount: items.length
       });
     } catch (err: any) {
-      console.error("[Gallery] Public fetch error:", err);
+      console.error("[Gallery] Public fetch error from Neon:", err);
       res.status(500).json({ error: "Failed to load gallery." });
     }
   });
 
   // 2. Admin Gallery Items (Includes Drafts & Reorder controls)
-  app.get("/api/admin/gallery", (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
-
+  app.get("/api/admin/gallery", requireAdmin, async (_req, res) => {
     try {
-      const sorted = [...galleryItems].sort((a, b) => {
-        const orderDiff = (a.displayOrder || 999) - (b.displayOrder || 999);
-        if (orderDiff !== 0) return orderDiff;
-        return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
-      });
+      res.setHeader("Cache-Control", "no-store");
+      const items = await getGalleryItemsDb(true);
 
       res.json({
         success: true,
-        items: sorted,
-        totalCount: sorted.length
+        items,
+        totalCount: items.length
       });
     } catch (err: any) {
+      console.error("[Gallery] Admin fetch error from Neon:", err);
       res.status(500).json({ error: "Failed to load admin gallery." });
     }
   });
 
-  // 3. Admin Gallery Upload (Single or Multi-file directly to Backblaze B2)
-  app.post("/api/admin/gallery/upload", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
-
+  // 3. Admin Gallery Upload (Single or Multi-file directly to Backblaze B2 & Neon)
+  app.post("/api/admin/gallery/upload", requireAdmin, async (req, res) => {
     try {
       const { images, dataBase64, filename, mimeType, title, caption, category, isPublished, displayOrder } = req.body;
+      const auth = (req as any).auth || {};
       
       const uploadList: Array<{
         dataBase64: string;
@@ -4517,7 +4492,9 @@ www.witslingo.com`;
         "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/avif", "image/svg+xml"
       ];
 
-      const createdItems: DBGalleryItem[] = [];
+      const createdItems: GalleryItem[] = [];
+      const existingItems = await getGalleryItemsDb(true);
+      let currentOrderCount = existingItems.length;
 
       for (const item of uploadList) {
         if (!item.dataBase64) continue;
@@ -4563,8 +4540,9 @@ www.witslingo.com`;
         const fileSize = sizeMB >= 1 ? `${sizeMB.toFixed(1)} MB` : `${Math.round(buffer.length / 1024)} KB`;
 
         const autoTitle = (item.title || "").trim() || safeOriginalName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+        currentOrderCount++;
 
-        const newGalleryItem: DBGalleryItem = {
+        const savedItem = await createGalleryItemDb({
           id,
           title: autoTitle,
           caption: (item.caption || "").trim(),
@@ -4574,140 +4552,135 @@ www.witslingo.com`;
           b2FileId,
           b2FileName,
           isPublished: item.isPublished !== false,
-          displayOrder: typeof item.displayOrder === "number" ? item.displayOrder : (galleryItems.length + 1),
-          uploadedAt: new Date().toISOString(),
+          displayOrder: typeof item.displayOrder === "number" ? item.displayOrder : currentOrderCount,
           uploadedBy: auth.userId || "admin",
           fileSize
-        };
+        });
 
-        galleryItems.unshift(newGalleryItem);
-        createdItems.push(newGalleryItem);
+        createdItems.push(savedItem);
       }
 
       if (createdItems.length === 0) {
         return res.status(400).json({ error: "Failed to process any valid images." });
       }
 
-      await savePersistedGallery();
+      const allItems = await getGalleryItemsDb(true);
 
       res.json({
         success: true,
         items: createdItems,
-        totalCount: galleryItems.length,
+        totalCount: allItems.length,
         message: `Successfully uploaded ${createdItems.length} image(s) to Gallery.`
       });
     } catch (err: any) {
-      console.error("[Gallery] Upload failed:", err);
+      console.error("[Gallery] Upload failed in Neon:", err);
       res.status(500).json({ error: "Server error during gallery upload." });
     }
   });
 
   // 4. Admin Update Gallery Item
-  app.put("/api/admin/gallery/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  app.put("/api/admin/gallery/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, caption, category, isPublished, displayOrder } = req.body;
+
+      const updated = await updateGalleryItemDb(id, {
+        title: typeof title === "string" ? title.trim() : undefined,
+        caption: typeof caption === "string" ? caption.trim() : undefined,
+        category: typeof category === "string" ? category.trim() : undefined,
+        isPublished: typeof isPublished === "boolean" ? isPublished : undefined,
+        displayOrder: typeof displayOrder === "number" ? displayOrder : undefined
+      });
+
+      if (!updated) {
+        return res.status(404).json({ error: "Gallery item not found." });
+      }
+
+      res.json({
+        success: true,
+        item: updated,
+        message: "Gallery item updated successfully."
+      });
+    } catch (err: any) {
+      console.error("[Gallery] Update failed in Neon:", err);
+      res.status(500).json({ error: "Failed to update gallery item." });
     }
-
-    const { id } = req.params;
-    const item = galleryItems.find(g => g.id === id);
-    if (!item) {
-      return res.status(404).json({ error: "Gallery item not found." });
-    }
-
-    const { title, caption, category, isPublished, displayOrder } = req.body;
-    if (typeof title === "string") item.title = title.trim();
-    if (typeof caption === "string") item.caption = caption.trim();
-    if (typeof category === "string") item.category = category.trim();
-    if (typeof isPublished === "boolean") item.isPublished = isPublished;
-    if (typeof displayOrder === "number") item.displayOrder = displayOrder;
-
-    await savePersistedGallery();
-
-    res.json({
-      success: true,
-      item,
-      message: "Gallery item updated successfully."
-    });
   });
 
   // 5. Admin Batch Reorder Gallery Items
-  app.put("/api/admin/gallery/reorder", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
-
-    const { orderedIds } = req.body;
-    if (!Array.isArray(orderedIds)) {
-      return res.status(400).json({ error: "orderedIds array required." });
-    }
-
-    orderedIds.forEach((id: string, index: number) => {
-      const item = galleryItems.find(g => g.id === id);
-      if (item) {
-        item.displayOrder = index + 1;
+  app.put("/api/admin/gallery/reorder", requireAdmin, async (req, res) => {
+    try {
+      const { orderedIds } = req.body;
+      if (!Array.isArray(orderedIds)) {
+        return res.status(400).json({ error: "orderedIds array required." });
       }
-    });
 
-    await savePersistedGallery();
+      const pairs = orderedIds.map((id: string, index: number) => ({
+        id,
+        displayOrder: index + 1
+      }));
 
-    res.json({
-      success: true,
-      items: galleryItems,
-      message: "Gallery order updated successfully."
-    });
+      await reorderGalleryItemsDb(pairs);
+      const items = await getGalleryItemsDb(true);
+
+      res.json({
+        success: true,
+        items,
+        message: "Gallery order updated successfully."
+      });
+    } catch (err: any) {
+      console.error("[Gallery] Reorder failed in Neon:", err);
+      res.status(500).json({ error: "Failed to reorder gallery items." });
+    }
   });
 
-  // 6. Admin Delete Gallery Item (Safe Persistence First, then B2 cleanup)
-  app.delete("/api/admin/gallery/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
-
-    const { id } = req.params;
-    const idx = galleryItems.findIndex(g => g.id === id);
-    if (idx === -1) {
-      return res.status(404).json({ error: "Gallery item not found." });
-    }
-
-    const targetItem = galleryItems[idx];
-    
-    // 1. Remove from array and save metadata first for safety
-    galleryItems.splice(idx, 1);
-    await savePersistedGallery();
-
-    // 2. Safely clean up local disk files
+  // 6. Admin Delete Gallery Item (Neon first, then B2 and local cleanup)
+  app.delete("/api/admin/gallery/:id", requireAdmin, async (req, res) => {
     try {
-      if (fs.existsSync(uploadsDir)) {
-        const files = fs.readdirSync(uploadsDir);
-        for (const file of files) {
-          if (file.startsWith(id) || file.startsWith(`gal-${id}`)) {
-            try {
-              fs.unlinkSync(path.join(uploadsDir, file));
-            } catch (unlinkErr) {}
+      const { id } = req.params;
+      const targetItem = await deleteGalleryItemDb(id);
+      if (!targetItem) {
+        return res.status(404).json({ error: "Gallery item not found." });
+      }
+
+      // 1. Safely clean up local disk files
+      try {
+        if (fs.existsSync(uploadsDir)) {
+          const files = fs.readdirSync(uploadsDir);
+          for (const file of files) {
+            if (file.startsWith(id) || file.startsWith(`gal-${id}`)) {
+              try {
+                fs.unlinkSync(path.join(uploadsDir, file));
+              } catch (unlinkErr) {}
+            }
           }
         }
+      } catch (cleanErr) {
+        console.warn("[Gallery] Local file cleanup error:", cleanErr);
       }
-    } catch (cleanErr) {
-      console.warn("[Gallery] Local file cleanup error:", cleanErr);
-    }
 
-    // 3. Clean up B2 storage object safely in background
-    if (targetItem.b2FileId || targetItem.b2FileName) {
-      deleteFileFromB2(targetItem.b2FileId, targetItem.b2FileName).catch(b2Err => {
-        console.warn("[Gallery] B2 file delete error:", b2Err);
+      // 2. Clean up B2 storage object safely
+      const galFileId = targetItem.b2FileId || (targetItem as any).b2_file_id;
+      const galFileName = targetItem.b2FileName || (targetItem as any).b2_file_name;
+      if (galFileId || galFileName) {
+        try {
+          await deleteFileFromB2(galFileId, galFileName);
+        } catch (b2Err) {
+          console.warn("[Gallery] B2 file delete error:", b2Err);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: "Gallery image deleted successfully."
       });
+    } catch (err: any) {
+      console.error("[Gallery] Delete failed in Neon:", err);
+      res.status(500).json({ error: "Failed to delete gallery item." });
     }
-
-    res.json({
-      success: true,
-      message: "Gallery image deleted successfully."
-    });
   });
 
-  // 7. Stream Gallery Image (Local disk cache or fallback)
+  // 7. Stream Gallery Image (Local disk cache or B2 fallback)
   app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
     const { id, filename } = req.params;
     
@@ -4741,8 +4714,14 @@ www.witslingo.com`;
       return fs.createReadStream(foundPath).pipe(res);
     }
 
-    // If not on disk, check if item has B2 record and stream from B2
-    const item = galleryItems.find(g => g.id === id);
+    // If not on disk, check if item has B2 record in Neon and stream from B2
+    let item: GalleryItem | null = null;
+    try {
+      item = await getGalleryItemByIdDb(id);
+    } catch (e) {
+      console.warn("[Gallery] Error fetching item for streaming:", e);
+    }
+
     if (item && (item.b2FileId || item.b2FileName)) {
       try {
         const b2Res = await downloadBufferFromB2(item.b2FileId, item.b2FileName);
@@ -5211,38 +5190,36 @@ www.witslingo.com`
     });
   });
 
-  // 16. ADMIN: Batch Management (Create Batch)
-  app.post("/api/admin/batches", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Access Denied: Admin authorization required." });
+  // 16. ADMIN: Batch Management (Create Batch, Neon PostgreSQL)
+  app.post("/api/admin/batches", requireAdmin, async (req, res) => {
+    try {
+      const { name, courseId, courseName, batchCode, startDate, endDate, teacherName, scheduleTime, maxStudents, status, googleMeetLink, isVisibleOnWebsite } = req.body;
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ success: false, error: "Batch name is required." });
+      }
+
+      const created = await createBatchDb({
+        id: req.body.id || `batch-${(batchCode || name).toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`,
+        name: name.trim(),
+        courseId: courseId || null,
+        courseName: courseName || null,
+        batchCode: batchCode || "",
+        startDate: startDate || "",
+        endDate: endDate || "",
+        teacherName: teacherName || "",
+        scheduleTime: scheduleTime || "",
+        maxStudents: Number(maxStudents) || 30,
+        status: status || "Upcoming",
+        isVisibleOnWebsite: isVisibleOnWebsite !== false,
+        googleMeetLink: googleMeetLink ? googleMeetLink.trim() : null
+      });
+
+      const freshBatches = await getBatchesDb(true);
+      return res.status(201).json({ success: true, batch: created, batches: freshBatches });
+    } catch (err: any) {
+      console.error("[Batches POST] Database insertion failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to create batch in database." });
     }
-
-    const { name, courseId, courseName, batchCode, startDate, endDate, teacherName, scheduleTime, maxStudents, status, googleMeetLink } = req.body;
-    if (!name || !batchCode) {
-      return res.status(400).json({ error: "Batch name and code are required." });
-    }
-
-    const newBatch: DBBatch = {
-      id: `batch-${batchCode.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`,
-      name,
-      courseId: courseId || "course-spoken-english",
-      courseName: courseName || "Spoken English",
-      batchCode,
-      startDate: startDate || "2026-10-01",
-      endDate: endDate || "2026-12-31",
-      teacherName: teacherName || "Ziyaur Rehman Zia",
-      scheduleTime: scheduleTime || "Mon, Wed, Fri 7:00 PM - 8:00 PM IST",
-      maxStudents: Number(maxStudents) || 35,
-      currentStudentsCount: 0,
-      status: status || "Upcoming",
-      isVisibleOnWebsite: req.body.isVisibleOnWebsite !== false,
-      googleMeetLink: googleMeetLink ? googleMeetLink.trim() : ""
-    };
-
-    batches.unshift(newBatch);
-    await saveBatches();
-    res.json({ success: true, batch: newBatch, batches });
   });
 
   // 17. ADMIN: Schedule New Class or Toggle Live
@@ -5460,241 +5437,158 @@ www.witslingo.com`
     });
   }
 
-  // 20a. PUBLIC: Get All Live Website Study Materials & PDF / YouTube Resources
+  // 20a. PUBLIC: Get All Live Website Study Materials & PDF / YouTube Resources (Neon PostgreSQL)
   app.get(["/api/materials", "/api/learning-resources"], async (req, res) => {
-    if (!materialsInitialized && studyMaterials.length === 0) {
-      try {
-        const durableMaterials = await durableStorageService.getCollection<DBStudyMaterial>("materials", []);
-        if (Array.isArray(durableMaterials)) {
-          studyMaterials.length = 0;
-          studyMaterials.push(...durableMaterials);
-          materialsInitialized = true;
-        }
-      } catch (e) {}
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const materials = await getStudyMaterialsDb({ includeUnpublished: false });
+      return res.json({ success: true, materials, resources: materials });
+    } catch (err: any) {
+      console.error("[Materials GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve study materials from database." });
     }
-
-    const publicMaterials = sortLearningMaterials(studyMaterials)
-      .filter(m => m.isVisibleOnWebsite !== false && m.isPublished !== false)
-      .map(m => ({
-        ...m,
-        downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
-      }));
-    res.json({ materials: publicMaterials, resources: publicMaterials });
   });
 
-  // 20b. ADMIN: Get All Study Materials & Learning Resources
-  app.get(["/api/admin/materials", "/api/admin/learning-resources"], async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  // 20b. ADMIN: Get All Study Materials & Learning Resources (Neon PostgreSQL)
+  app.get(["/api/admin/materials", "/api/admin/learning-resources"], requireAdmin, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const materials = await getStudyMaterialsDb({ includeUnpublished: true });
+      return res.json({ success: true, materials, resources: materials });
+    } catch (err: any) {
+      console.error("[Admin Materials GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve study materials from database." });
     }
-    if (!materialsInitialized && studyMaterials.length === 0) {
-      try {
-        const durableMaterials = await durableStorageService.getCollection<DBStudyMaterial>("materials", []);
-        if (Array.isArray(durableMaterials)) {
-          studyMaterials.length = 0;
-          studyMaterials.push(...durableMaterials);
-          materialsInitialized = true;
-        }
-      } catch (e) {}
-    }
-
-    const allMaterials = sortLearningMaterials(studyMaterials).map(m => ({
-      ...m,
-      downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
-    }));
-    res.json({ materials: allMaterials, resources: allMaterials });
   });
 
-  // 20c. ADMIN: Create Learning Resource (PDF or YouTube)
-  app.post(["/api/admin/materials", "/api/admin/learning-resources"], async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
+  // 20c. ADMIN: Create Learning Resource (PDF or YouTube, Neon PostgreSQL)
+  app.post(["/api/admin/materials", "/api/admin/learning-resources"], requireAdmin, async (req, res) => {
+    try {
+      const { 
+        resourceType, batchId, classId, title, description, fileType, fileSize, 
+        pdfUrl, downloadUrl, b2FileId, b2FileName, mimeType,
+        isViewOnly, allowDownload, isVisibleOnWebsite, isPublished, displayOrder,
+        category, level, youtubeUrl, thumbnailUrl, b2ThumbnailId, b2ThumbnailName,
+        duration, views
+      } = req.body;
 
-    const { 
-      resourceType, batchId, classId, title, description, fileType, fileSize, 
-      pdfUrl, downloadUrl, b2FileId, b2FileName, mimeType,
-      isViewOnly, allowDownload, isVisibleOnWebsite, isPublished, displayOrder,
-      category, level, youtubeUrl, thumbnailUrl, b2ThumbnailId, b2ThumbnailName,
-      duration, views
-    } = req.body;
-
-    const newId = `mat-${Date.now()}`;
-    const resType = resourceType === "youtube" || fileType === "youtube" ? "youtube" : "pdf";
-    
-    let safeTitle = (title || (resType === "youtube" ? "YouTube Video Lesson" : "Study Material.pdf")).trim();
-    let finalFileType = fileType || (resType === "youtube" ? "youtube" : (safeTitle.toLowerCase().endsWith(".pdf") ? "pdf" : "doc"));
-    let finalDownloadUrl = (downloadUrl && downloadUrl !== "#") ? downloadUrl : `/api/files/download/${newId}`;
-    let finalPdfUrl = pdfUrl || (resType === "pdf" ? `/api/files/pdf/${newId}/${encodeURIComponent(safeTitle)}` : undefined);
-    
-    let finalYoutubeUrl = youtubeUrl;
-    let finalThumbnailUrl = thumbnailUrl;
-
-    if (resType === "youtube") {
-      if (youtubeUrl) {
+      const newId = req.body.id || `mat-${Date.now()}`;
+      const resType = resourceType === "youtube" || fileType === "youtube" ? "youtube" : "pdf";
+      
+      const safeTitle = (title || (resType === "youtube" ? "YouTube Video Lesson" : "Study Material.pdf")).trim();
+      const finalFileType = fileType || (resType === "youtube" ? "youtube" : (safeTitle.toLowerCase().endsWith(".pdf") ? "pdf" : "doc"));
+      const finalDownloadUrl = (downloadUrl && downloadUrl !== "#") ? downloadUrl : `/api/files/download/${newId}`;
+      const finalPdfUrl = pdfUrl || (resType === "pdf" ? `/api/files/pdf/${newId}/${encodeURIComponent(safeTitle)}` : null);
+      
+      let finalThumbnailUrl = thumbnailUrl || null;
+      if (resType === "youtube" && youtubeUrl && !finalThumbnailUrl) {
         const vidId = extractYouTubeVideoId(youtubeUrl);
-        if (vidId && !finalThumbnailUrl) {
+        if (vidId) {
           finalThumbnailUrl = `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`;
         }
       }
+
+      const created = await createStudyMaterialDb({
+        id: newId,
+        resourceType: resType,
+        batchId: batchId || "all",
+        classId: classId || null,
+        title: safeTitle,
+        description: description || "",
+        fileType: finalFileType,
+        fileSize: fileSize || (resType === "youtube" ? "Video" : "1.5 MB"),
+        downloadUrl: finalDownloadUrl,
+        pdfUrl: finalPdfUrl,
+        b2FileId: b2FileId || null,
+        b2FileName: b2FileName || null,
+        mimeType: mimeType || (resType === "youtube" ? "video/youtube" : getSafeFileMimeType(safeTitle)),
+        isViewOnly: isViewOnly !== undefined ? Boolean(isViewOnly) : true,
+        allowDownload: Boolean(allowDownload),
+        isVisibleOnWebsite: isVisibleOnWebsite !== undefined ? Boolean(isVisibleOnWebsite) : (isPublished !== undefined ? Boolean(isPublished) : true),
+        isPublished: isPublished !== undefined ? Boolean(isPublished) : (isVisibleOnWebsite !== undefined ? Boolean(isVisibleOnWebsite) : true),
+        displayOrder: displayOrder !== undefined ? Number(displayOrder) : 0,
+        category: category || (resType === "youtube" ? "Daily English" : "Worksheets"),
+        level: level || "All Levels",
+        youtubeUrl: youtubeUrl || null,
+        thumbnailUrl: finalThumbnailUrl,
+        b2ThumbnailId: b2ThumbnailId || null,
+        b2ThumbnailName: b2ThumbnailName || null,
+        duration: duration || "12:00",
+        views: views || "0"
+      });
+
+      const freshMaterials = await getStudyMaterialsDb({ includeUnpublished: true });
+      return res.status(201).json({ success: true, material: created, materials: freshMaterials, resources: freshMaterials });
+    } catch (err: any) {
+      console.error("[Materials POST] Database insertion failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to save study material to database." });
     }
-
-    const newMat: DBStudyMaterial = {
-      id: newId,
-      resourceType: resType,
-      batchId: batchId || "all",
-      classId,
-      title: safeTitle,
-      description: description || (resType === "youtube" ? "Video lesson for practical spoken English fluency." : "Study materials uploaded by academy instructor."),
-      fileType: finalFileType,
-      fileSize: fileSize || (resType === "youtube" ? "Video" : "1.5 MB"),
-      downloadUrl: finalDownloadUrl,
-      pdfUrl: finalPdfUrl,
-      b2FileId,
-      b2FileName,
-      mimeType: mimeType || (resType === "youtube" ? "video/youtube" : getSafeFileMimeType(safeTitle)),
-      isViewOnly: isViewOnly !== undefined ? Boolean(isViewOnly) : true,
-      allowDownload: Boolean(allowDownload),
-      isVisibleOnWebsite: isVisibleOnWebsite !== undefined ? Boolean(isVisibleOnWebsite) : (isPublished !== undefined ? Boolean(isPublished) : true),
-      isPublished: isPublished !== undefined ? Boolean(isPublished) : (isVisibleOnWebsite !== undefined ? Boolean(isVisibleOnWebsite) : true),
-      displayOrder: displayOrder !== undefined ? Number(displayOrder) : studyMaterials.length + 1,
-      category: category || (resType === "youtube" ? "Daily English" : "Worksheets"),
-      level: level || "All Levels",
-      uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      uploadedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      youtubeUrl: finalYoutubeUrl,
-      thumbnailUrl: finalThumbnailUrl,
-      b2ThumbnailId,
-      b2ThumbnailName,
-      duration: duration || "12:00",
-      views: views || "1.2K views",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    studyMaterials.unshift(newMat);
-    materialsInitialized = true;
-    if (classId) {
-      const cls = classes.find(c => c.id === classId);
-      if (cls) cls.hasStudyMaterial = true;
-    }
-    await savePersistedMaterials();
-
-    const sorted = sortLearningMaterials(studyMaterials);
-    res.json({ success: true, material: newMat, materials: sorted, resources: sorted });
   });
 
-  // 20d. ADMIN: Update Learning Resource (PDF / YouTube / B2 references & Permissions)
-  app.put(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
-
-    const { id } = req.params;
-    const mat = studyMaterials.find(m => m.id === id);
-    if (!mat) {
-      return res.status(404).json({ error: "Study material or learning resource not found." });
-    }
-
-    const { 
-      resourceType, title, description, batchId, classId, fileType, fileSize, 
-      pdfUrl, downloadUrl, b2FileId, b2FileName, mimeType,
-      isViewOnly, allowDownload, isVisibleOnWebsite, isPublished, displayOrder,
-      category, level, youtubeUrl, thumbnailUrl, b2ThumbnailId, b2ThumbnailName,
-      duration, views
-    } = req.body;
-
-    // If replacing PDF file with a new B2 upload, safely cleanup old B2 file if different
-    if (b2FileId && mat.b2FileId && b2FileId !== mat.b2FileId) {
-      deleteFileFromB2(mat.b2FileId, mat.b2FileName).catch(() => {});
-    }
-
-    // If replacing custom thumbnail with a new B2 upload, safely cleanup old B2 thumbnail if different
-    if (b2ThumbnailId && mat.b2ThumbnailId && b2ThumbnailId !== mat.b2ThumbnailId) {
-      deleteFileFromB2(mat.b2ThumbnailId, mat.b2ThumbnailName).catch(() => {});
-    }
-
-    if (resourceType !== undefined) mat.resourceType = resourceType;
-    if (title !== undefined) mat.title = title;
-    if (description !== undefined) mat.description = description;
-    if (batchId !== undefined) mat.batchId = batchId;
-    if (classId !== undefined) mat.classId = classId;
-    if (fileType !== undefined) mat.fileType = fileType;
-    if (fileSize !== undefined) mat.fileSize = fileSize;
-    if (pdfUrl !== undefined) mat.pdfUrl = pdfUrl;
-    if (downloadUrl !== undefined && downloadUrl !== "#") mat.downloadUrl = downloadUrl;
-    if (b2FileId !== undefined) mat.b2FileId = b2FileId;
-    if (b2FileName !== undefined) mat.b2FileName = b2FileName;
-    if (mimeType !== undefined) mat.mimeType = mimeType;
-    if (isViewOnly !== undefined) mat.isViewOnly = Boolean(isViewOnly);
-    if (allowDownload !== undefined) mat.allowDownload = Boolean(allowDownload);
-    if (isVisibleOnWebsite !== undefined) mat.isVisibleOnWebsite = Boolean(isVisibleOnWebsite);
-    if (isPublished !== undefined) {
-      mat.isPublished = Boolean(isPublished);
-      mat.isVisibleOnWebsite = Boolean(isPublished);
-    }
-    if (displayOrder !== undefined) mat.displayOrder = Number(displayOrder);
-    if (category !== undefined) mat.category = category;
-    if (level !== undefined) mat.level = level;
-    if (youtubeUrl !== undefined) {
-      mat.youtubeUrl = youtubeUrl;
-      const vidId = extractYouTubeVideoId(youtubeUrl);
-      if (vidId && !thumbnailUrl && !mat.thumbnailUrl) {
-        mat.thumbnailUrl = `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`;
-      }
-    }
-    if (thumbnailUrl !== undefined) mat.thumbnailUrl = thumbnailUrl;
-    if (b2ThumbnailId !== undefined) mat.b2ThumbnailId = b2ThumbnailId;
-    if (b2ThumbnailName !== undefined) mat.b2ThumbnailName = b2ThumbnailName;
-    if (duration !== undefined) mat.duration = duration;
-    if (views !== undefined) mat.views = views;
-    mat.updatedAt = new Date().toISOString();
-
-    await savePersistedMaterials();
-    const sorted = sortLearningMaterials(studyMaterials);
-    res.json({ success: true, material: mat, materials: sorted, resources: sorted });
-  });
-
-  // 20e. ADMIN: Delete Learning Resource with B2 Object Cleanup
-  app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
-
-    const { id } = req.params;
-    const idx = studyMaterials.findIndex(m => m.id === id);
-    if (idx === -1) {
-      return res.status(404).json({ error: "Study material or resource not found." });
-    }
-
-    const mat = studyMaterials[idx];
-    if (mat.b2FileId || mat.b2FileName) {
-      deleteFileFromB2(mat.b2FileId, mat.b2FileName).catch(() => {});
-    }
-    if (mat.b2ThumbnailId || mat.b2ThumbnailName) {
-      deleteFileFromB2(mat.b2ThumbnailId, mat.b2ThumbnailName).catch(() => {});
-    }
-
-    // Cleanup local disk copy if exists
+  // 20d. ADMIN: Update Learning Resource (Neon PostgreSQL)
+  app.put(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], requireAdmin, async (req, res) => {
     try {
-      const diskPath1 = path.join(uploadsDir, `${id}.pdf`);
-      if (fs.existsSync(diskPath1)) fs.unlinkSync(diskPath1);
-      if (mat.b2FileName) {
-        const diskPath2 = path.join(uploadsDir, path.basename(mat.b2FileName));
-        if (fs.existsSync(diskPath2)) fs.unlinkSync(diskPath2);
+      const { id } = req.params;
+      const existingRaw = await getStudyMaterialByIdDb(id);
+      if (!existingRaw) {
+        return res.status(404).json({ success: false, error: "Study material or learning resource not found." });
       }
-    } catch (e) {}
 
-    studyMaterials.splice(idx, 1);
-    materialsInitialized = true;
-    await savePersistedMaterials();
+      // If replacing PDF file with a new B2 upload, cleanup old B2 file
+      if (req.body.b2FileId && existingRaw.b2FileId && req.body.b2FileId !== existingRaw.b2FileId) {
+        deleteFileFromB2(existingRaw.b2FileId, existingRaw.b2FileName).catch(() => {});
+      }
+      // If replacing custom thumbnail with a new B2 upload, cleanup old B2 thumbnail
+      if (req.body.b2ThumbnailId && existingRaw.b2ThumbnailId && req.body.b2ThumbnailId !== existingRaw.b2ThumbnailId) {
+        deleteFileFromB2(existingRaw.b2ThumbnailId, existingRaw.b2ThumbnailName).catch(() => {});
+      }
 
-    const sorted = sortLearningMaterials(studyMaterials);
-    res.json({ success: true, message: "Resource deleted.", materials: sorted, resources: sorted });
+      const updated = await updateStudyMaterialDb(id, req.body);
+      const freshMaterials = await getStudyMaterialsDb({ includeUnpublished: true });
+      return res.json({ success: true, material: updated, materials: freshMaterials, resources: freshMaterials });
+    } catch (err: any) {
+      console.error("[Materials PUT] Database update failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to update study material in database." });
+    }
+  });
+
+  // 20e. ADMIN: Delete Learning Resource with B2 Object Cleanup (Neon PostgreSQL)
+  app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deletedRow = await deleteStudyMaterialDb(id);
+      if (!deletedRow) {
+        return res.status(404).json({ success: false, error: "Study material or resource not found." });
+      }
+
+      // When deleting a PDF or thumbnail, also delete the file from Backblaze B2
+      const fileId = deletedRow.b2_file_id || deletedRow.b2FileId;
+      const fileName = deletedRow.b2_file_name || deletedRow.b2FileName;
+      if (fileId || fileName) {
+        await deleteFileFromB2(fileId, fileName);
+      }
+      const thumbId = deletedRow.b2_thumbnail_id || deletedRow.b2ThumbnailId;
+      const thumbName = deletedRow.b2_thumbnail_name || deletedRow.b2ThumbnailName;
+      if (thumbId || thumbName) {
+        await deleteFileFromB2(thumbId, thumbName);
+      }
+
+      // Cleanup local disk copy if exists
+      try {
+        const diskPath1 = path.join(uploadsDir, `${id}.pdf`);
+        if (fs.existsSync(diskPath1)) fs.unlinkSync(diskPath1);
+        if (deletedRow.b2_file_name) {
+          const diskPath2 = path.join(uploadsDir, path.basename(deletedRow.b2_file_name));
+          if (fs.existsSync(diskPath2)) fs.unlinkSync(diskPath2);
+        }
+      } catch (e) {}
+
+      const freshMaterials = await getStudyMaterialsDb({ includeUnpublished: true });
+      return res.json({ success: true, message: "Resource deleted.", materials: freshMaterials, resources: freshMaterials });
+    } catch (err: any) {
+      console.error("[Materials DELETE] Database deletion failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to delete study material from database." });
+    }
   });
 
   // 20f. ADMIN: Check Backblaze B2 Connection Status
@@ -5834,7 +5728,12 @@ www.witslingo.com`
     let mimeType = "application/pdf";
 
     // 1. Check if ID matches a DB study material
-    const mat = studyMaterials.find(m => m.id === id || m.pdfUrl?.includes(id));
+    let mat: StudyMaterial | null = null;
+    try {
+      mat = await getStudyMaterialByIdDb(id);
+    } catch (e) {
+      console.warn("Error fetching material by ID from Neon:", e);
+    }
     const memFile = uploadedPdfFiles.get(id);
 
     if (mat) {
@@ -5920,12 +5819,16 @@ www.witslingo.com`
   app.get("/api/files/download/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const rawToken = (req.headers.authorization?.replace(/^Bearer\s+/i, "") || req.query.token as string || "").trim();
-      const auth = rawToken ? verifyAuthToken(rawToken) : null;
+      const auth = verifyAuthToken(req);
       const isAdmin = auth?.role === "admin";
 
       // Find target material or uploaded file
-      const mat = studyMaterials.find(m => m.id === id || m.pdfUrl?.includes(id) || m.downloadUrl?.includes(id));
+      let mat: StudyMaterial | null = null;
+      try {
+        mat = await getStudyMaterialByIdDb(id);
+      } catch (e) {
+        console.warn("Error fetching material by ID for download:", e);
+      }
       const memFile = uploadedPdfFiles.get(id);
 
       if (!mat && !memFile && !isAdmin) {
@@ -6018,6 +5921,15 @@ www.witslingo.com`
         return res.status(404).json({ error: "File content could not be retrieved." });
       }
 
+      // Atomic download counter increment in Neon Postgres
+      if (mat) {
+        try {
+          await incrementMaterialDownloadCountDb(mat.id);
+        } catch (cntErr) {
+          console.warn("Failed to increment material download count:", cntErr);
+        }
+      }
+
       const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
       res.setHeader("Content-Type", mimeType);
       res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -6103,85 +6015,98 @@ www.witslingo.com`
   });
 
   // 21. ADMIN: Post Batch Announcement
-  app.post("/api/admin/announcements", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  app.post("/api/admin/announcements", requireAdmin, async (req, res) => {
+    try {
+      const { batchId, title, message, priority, category, effectiveDate, isPinned } = req.body;
+      let batchName = "All Batches (Academy-wide)";
+      if (batchId && batchId !== "all") {
+        const batch = await getBatchByIdDb(batchId);
+        if (batch) batchName = batch.name;
+      }
+
+      const newAnn = await createAnnouncementDb({
+        batchId: (batchId && batchId !== "all") ? batchId : undefined,
+        batchName,
+        title: title || "Official Academy Announcement",
+        message: message || "",
+        priority: priority || "Normal",
+        category: category || "General",
+        effectiveDate: effectiveDate || undefined,
+        isPinned: Boolean(isPinned)
+      });
+
+      const announcements = await getAnnouncementsDb();
+      res.json({ success: true, announcement: newAnn, announcements });
+    } catch (err: any) {
+      console.error("Error creating announcement in Neon:", err);
+      res.status(500).json({ error: "Failed to create announcement." });
     }
-
-    const { batchId, title, message, priority, category, effectiveDate, isPinned } = req.body;
-    const batch = batches.find(b => b.id === batchId);
-
-    const newAnn: DBAnnouncement = {
-      id: `ann-${Date.now()}`,
-      batchId: batchId === 'all' ? 'all' : (batchId || (batch ? batch.id : "all")),
-      batchName: batchId === 'all' ? "All Batches (Academy-wide)" : (batch ? batch.name : "All Batches (Academy-wide)"),
-      title: title || "Official Academy Announcement",
-      message: message || "",
-      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      author: "Ziyaur Rehman Zia",
-      priority: priority || "Normal",
-      category: category || "General",
-      effectiveDate: effectiveDate || "",
-      isPinned: Boolean(isPinned)
-    };
-
-    announcements.unshift(newAnn);
-    await saveAnnouncements();
-    res.json({ success: true, announcement: newAnn, announcements });
   });
 
-  // 21b. PUBLIC: Get All Active Announcements & Notices
-  app.get("/api/announcements", (req, res) => {
-    res.json({ announcements });
+  // 21b. PUBLIC & ADMIN: Get All Active Announcements & Notices
+  app.get(["/api/announcements", "/api/admin/announcements"], async (_req, res) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      const announcements = await getAnnouncementsDb();
+      res.json({ announcements });
+    } catch (err: any) {
+      console.error("Error fetching announcements from Neon:", err);
+      res.status(500).json({ error: "Failed to fetch announcements." });
+    }
   });
 
   // 21c. ADMIN: Update Announcement
-  app.put("/api/admin/announcements/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  app.put("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, message, priority, category, effectiveDate, isPinned, batchId } = req.body;
+      let batchName: string | undefined;
+      if (batchId !== undefined) {
+        if (batchId === "all" || !batchId) {
+          batchName = "All Batches (Academy-wide)";
+        } else {
+          const batch = await getBatchByIdDb(batchId);
+          batchName = batch ? batch.name : undefined;
+        }
+      }
+
+      const updated = await updateAnnouncementDb(id, {
+        title,
+        message,
+        priority,
+        category,
+        effectiveDate,
+        isPinned,
+        batchId,
+        batchName
+      });
+
+      if (!updated) {
+        return res.status(404).json({ error: "Announcement not found." });
+      }
+
+      const announcements = await getAnnouncementsDb();
+      res.json({ success: true, announcement: updated, announcements });
+    } catch (err: any) {
+      console.error("Error updating announcement in Neon:", err);
+      res.status(500).json({ error: "Failed to update announcement." });
     }
-
-    const { id } = req.params;
-    const annIndex = announcements.findIndex(a => a.id === id);
-    if (annIndex === -1) {
-      return res.status(404).json({ error: "Announcement not found." });
-    }
-
-    const { title, message, priority, category, effectiveDate, isPinned, batchId } = req.body;
-    const batch = batches.find(b => b.id === batchId);
-
-    announcements[annIndex] = {
-      ...announcements[annIndex],
-      title: title !== undefined ? title : announcements[annIndex].title,
-      message: message !== undefined ? message : announcements[annIndex].message,
-      priority: priority !== undefined ? priority : announcements[annIndex].priority,
-      category: category !== undefined ? category : announcements[annIndex].category,
-      effectiveDate: effectiveDate !== undefined ? effectiveDate : announcements[annIndex].effectiveDate,
-      isPinned: isPinned !== undefined ? Boolean(isPinned) : announcements[annIndex].isPinned,
-      batchId: batchId !== undefined ? (batchId === 'all' ? 'all' : (batch ? batch.id : batchId)) : announcements[annIndex].batchId,
-      batchName: batchId === 'all' ? "All Batches (Academy-wide)" : (batch ? batch.name : announcements[annIndex].batchName)
-    };
-
-    await saveAnnouncements();
-    res.json({ success: true, announcement: announcements[annIndex], announcements });
   });
 
   // 21d. ADMIN: Delete Announcement
-  app.delete("/api/admin/announcements/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  app.delete("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await deleteAnnouncementDb(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Announcement not found." });
+      }
+      const announcements = await getAnnouncementsDb();
+      res.json({ success: true, announcements });
+    } catch (err: any) {
+      console.error("Error deleting announcement in Neon:", err);
+      res.status(500).json({ error: "Failed to delete announcement." });
     }
-
-    const { id } = req.params;
-    const idx = announcements.findIndex(a => a.id === id);
-    if (idx !== -1) {
-      announcements.splice(idx, 1);
-      await saveAnnouncements();
-    }
-    res.json({ success: true, announcements });
   });
 
   // 22. ADMIN: View Attendance Logs (Batch-wise)
@@ -6314,35 +6239,36 @@ www.witslingo.com`
     res.json({ success: true, student: reg });
   });
 
-  // UPDATE Batch
-  app.put("/api/admin/batches/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  // UPDATE Batch (Neon PostgreSQL)
+  app.put("/api/admin/batches/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updated = await updateBatchDb(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ success: false, error: "Batch not found." });
+      }
+      const freshBatches = await getBatchesDb(true);
+      return res.json({ success: true, batch: updated, batches: freshBatches });
+    } catch (err: any) {
+      console.error("[Batches PUT] Database update failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to update batch in database." });
     }
-    const { id } = req.params;
-    const batch = batches.find(b => b.id === id);
-    if (!batch) return res.status(404).json({ error: "Batch not found." });
-
-    Object.assign(batch, req.body);
-    await saveBatches();
-    res.json({ success: true, batch, batches });
   });
 
-  // DELETE Batch
-  app.delete("/api/admin/batches/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  // DELETE Batch (Neon PostgreSQL)
+  app.delete("/api/admin/batches/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await deleteBatchDb(id);
+      if (!deleted) {
+        return res.status(404).json({ success: false, error: "Batch not found." });
+      }
+      const freshBatches = await getBatchesDb(true);
+      return res.json({ success: true, message: "Batch deleted successfully.", deleted, batches: freshBatches });
+    } catch (err: any) {
+      console.error("[Batches DELETE] Database deletion failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to delete batch from database." });
     }
-    const { id } = req.params;
-    const idx = batches.findIndex(b => b.id === id);
-    if (idx !== -1) {
-      batches.splice(idx, 1);
-      await saveBatches();
-      return res.json({ success: true, message: "Batch deleted successfully.", batches });
-    }
-    res.status(404).json({ error: "Batch not found." });
   });
 
   // UPDATE Class
@@ -6414,9 +6340,10 @@ www.witslingo.com`
     res.setHeader("Cache-Control", "no-store");
     try {
       const settings = await getSiteSettingsDb();
+      const courses = await getCoursesDb(false);
 
       const contentPayload = {
-        courses: cmsContent.courses || [],
+        courses,
         settings,
         academyName: settings.academyName || "WITS LINGO",
         tagline: settings.tagline || "A Global Language Platform",
@@ -6455,8 +6382,11 @@ www.witslingo.com`
       } = req.body;
 
       if (courses && Array.isArray(courses)) {
-        cmsContent.courses = courses;
-        await saveCmsContent();
+        for (const c of courses) {
+          if (c && c.name) {
+            await createCourseDb(c);
+          }
+        }
       }
 
       // Convert site_settings to Neon PostgreSQL without storing in memory variables
@@ -6474,8 +6404,10 @@ www.witslingo.com`
 
       const updatedSettings = await updateSiteSettingsDb(patch);
 
+      const freshCourses = await getCoursesDb(false);
+
       const contentPayload = {
-        courses: cmsContent.courses || [],
+        courses: freshCourses,
         settings: updatedSettings,
         academyName: updatedSettings.academyName,
         tagline: updatedSettings.tagline,
@@ -6561,136 +6493,106 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     });
   });
 
-  // 24B. COURSES MANAGEMENT & PUBLICATION CMS (Edit anytime, past or post publication)
-  app.get("/api/courses", (req, res) => {
-    const auth = verifyAuthToken(req);
-    const includeAll = req.query.includeAll === "true" || (auth && auth.role === "admin");
-    
-    if (includeAll) {
-      return res.json({ courses: cmsContent.courses });
+  // 24B. COURSES MANAGEMENT & PUBLICATION CMS (Neon PostgreSQL)
+  app.get("/api/courses", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const auth = verifyAuthToken(req);
+      const includeAll = req.query.includeAll === "true" || Boolean(auth && auth.role === "admin");
+      const courses = await getCoursesDb(includeAll);
+      return res.json({ success: true, courses });
+    } catch (err: any) {
+      console.error("[Courses GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve courses from database." });
     }
-    // Public visitors see published courses (isPublished !== false)
-    const publishedCourses = cmsContent.courses.filter((c: any) => c.isPublished !== false);
-    res.json({ courses: publishedCourses });
   });
 
-  app.post("/api/courses", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required to create courses." });
+  app.get("/api/admin/courses", requireAdmin, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const courses = await getCoursesDb(true);
+      return res.json({ success: true, courses });
+    } catch (err: any) {
+      console.error("[Admin Courses GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve courses from database." });
     }
-
-    const { name, level, shortDescription, whatYouWillLearn, duration, learningFormat, fee, badge, isPublished } = req.body;
-    if (!name) {
-      return res.status(400).json({ error: "Course name is required." });
-    }
-
-    const newCourse = {
-      id: req.body.id || `course-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`,
-      name,
-      level: level || "Beginner to Intermediate",
-      shortDescription: shortDescription || "Practical language training.",
-      whatYouWillLearn: Array.isArray(whatYouWillLearn) && whatYouWillLearn.length > 0 ? whatYouWillLearn : [
-        'Master natural conversational speaking',
-        'Overcome public hesitation and stage fear',
-        'Daily vocabulary in context',
-        'Pronunciation and accent clarity'
-      ],
-      facilities: Array.isArray(req.body.facilities) && req.body.facilities.length > 0 ? req.body.facilities : [
-        'Live Interactive Online Classes on Google Meet',
-        'Digital PDF Study Notes & Practice Workbooks',
-        'Telegram & WhatsApp Student Practice Community',
-        'Course Completion Certificate',
-        'Class Recording Access for Revision'
-      ],
-      duration: duration || "2 Months (40 Sessions)",
-      learningFormat: learningFormat || "Live Online Classroom",
-      fee: Number(fee) || 1499,
-      badge: badge || "Live",
-      isPublished: isPublished !== false
-    };
-
-    if (!Array.isArray(cmsContent.courses)) cmsContent.courses = [];
-    const existingIndex = cmsContent.courses.findIndex((c: any) => c.id === newCourse.id || c.name.toLowerCase() === newCourse.name.toLowerCase());
-    if (existingIndex !== -1) {
-      cmsContent.courses[existingIndex] = { ...cmsContent.courses[existingIndex], ...newCourse };
-    } else {
-      cmsContent.courses.push(newCourse);
-    }
-    await saveCmsContent();
-    res.status(201).json({ success: true, course: newCourse, courses: cmsContent.courses });
   });
 
-  app.put("/api/courses/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required to edit courses." });
+  app.post(["/api/courses", "/api/admin/courses"], requireAdmin, async (req, res) => {
+    try {
+      const { name, level, shortDescription, whatYouWillLearn, facilities, duration, learningFormat, fee, badge, isPublished, order } = req.body;
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ success: false, error: "Course name is required." });
+      }
+
+      const created = await createCourseDb({
+        id: req.body.id || `course-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`,
+        name: name.trim(),
+        level: level || "Beginner to Intermediate",
+        shortDescription: shortDescription || "",
+        whatYouWillLearn: Array.isArray(whatYouWillLearn) ? whatYouWillLearn : [],
+        facilities: Array.isArray(facilities) ? facilities : [],
+        duration: duration || "2 Months (40 Sessions)",
+        learningFormat: learningFormat || "Live Online Classroom",
+        fee: Number(fee) || 0,
+        badge: badge || undefined,
+        isPublished: isPublished !== false,
+        order: typeof order === "number" ? order : 0,
+      });
+
+      const freshCourses = await getCoursesDb(true);
+      return res.status(201).json({ success: true, course: created, courses: freshCourses });
+    } catch (err: any) {
+      console.error("[Courses POST] Database insertion failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to create course in database." });
     }
-
-    const courseIndex = cmsContent.courses.findIndex((c: any) => c.id === req.params.id);
-    if (courseIndex === -1) {
-      return res.status(404).json({ error: "Course not found." });
-    }
-
-    const currentCourse = cmsContent.courses[courseIndex];
-    const { name, level, shortDescription, whatYouWillLearn, duration, learningFormat, fee, badge, isPublished } = req.body;
-
-    const updatedCourse = {
-      ...currentCourse,
-      name: name !== undefined ? name : currentCourse.name,
-      level: level !== undefined ? level : currentCourse.level,
-      shortDescription: shortDescription !== undefined ? shortDescription : currentCourse.shortDescription,
-      whatYouWillLearn: Array.isArray(whatYouWillLearn) ? whatYouWillLearn : currentCourse.whatYouWillLearn,
-      duration: duration !== undefined ? duration : currentCourse.duration,
-      learningFormat: learningFormat !== undefined ? learningFormat : currentCourse.learningFormat,
-      fee: fee !== undefined ? Number(fee) : currentCourse.fee,
-      badge: badge !== undefined ? badge : currentCourse.badge,
-      isPublished: isPublished !== undefined ? isPublished : currentCourse.isPublished
-    };
-
-    cmsContent.courses[courseIndex] = updatedCourse;
-    await saveCmsContent();
-    res.json({ success: true, course: updatedCourse, courses: cmsContent.courses });
   });
 
-  app.patch("/api/courses/:id/publish", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  app.put(["/api/courses/:id", "/api/admin/courses/:id"], requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updated = await updateCourseDb(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ success: false, error: "Course not found." });
+      }
+      const freshCourses = await getCoursesDb(true);
+      return res.json({ success: true, course: updated, courses: freshCourses });
+    } catch (err: any) {
+      console.error("[Courses PUT] Database update failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to update course in database." });
     }
-
-    const courseIndex = cmsContent.courses.findIndex((c: any) => c.id === req.params.id);
-    if (courseIndex === -1) {
-      return res.status(404).json({ error: "Course not found." });
-    }
-
-    const currentCourse = cmsContent.courses[courseIndex];
-    const newStatus = req.body.isPublished !== undefined ? Boolean(req.body.isPublished) : !Boolean(currentCourse.isPublished);
-    currentCourse.isPublished = newStatus;
-    await saveCmsContent();
-    res.json({ success: true, course: currentCourse, isPublished: newStatus, courses: cmsContent.courses });
   });
 
-  app.delete("/api/courses/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required to delete courses." });
+  app.patch(["/api/courses/:id/publish", "/api/admin/courses/:id/publish"], requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const target = await getCourseByIdDb(id);
+      if (!target) {
+        return res.status(404).json({ success: false, error: "Course not found." });
+      }
+      const nextPublished = req.body.isPublished !== undefined ? Boolean(req.body.isPublished) : !Boolean(target.isPublished);
+      const updated = await setCoursePublishedDb(id, nextPublished);
+      const freshCourses = await getCoursesDb(true);
+      return res.json({ success: true, course: updated, isPublished: nextPublished, courses: freshCourses });
+    } catch (err: any) {
+      console.error("[Courses PATCH] Database publication update failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to update publication status in database." });
     }
-
-    const courseIndex = cmsContent.courses.findIndex((c: any) => c.id === req.params.id);
-    if (courseIndex === -1) {
-      return res.status(404).json({ error: "Course not found." });
-    }
-
-    const deleted = cmsContent.courses.splice(courseIndex, 1)[0];
-    await saveCmsContent();
-    res.json({ success: true, deleted, courses: cmsContent.courses });
   });
 
-  // Save on course creation
-  app.post("/api/courses", (req, res, next) => {
-    // will be caught by route handler
-    next();
+  app.delete(["/api/courses/:id", "/api/admin/courses/:id"], requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await deleteCourseDb(id);
+      if (!deleted) {
+        return res.status(404).json({ success: false, error: "Course not found." });
+      }
+      const freshCourses = await getCoursesDb(true);
+      return res.json({ success: true, message: "Course deleted successfully.", deleted, courses: freshCourses });
+    } catch (err: any) {
+      console.error("[Courses DELETE] Database deletion failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to delete course from database." });
+    }
   });
 
   // =========================================================================

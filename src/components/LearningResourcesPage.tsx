@@ -35,15 +35,7 @@ export const LearningResourcesPage: React.FC<LearningResourcesPageProps> = ({
   siteSettings
 }) => {
   const [backendMaterials, setBackendMaterials] = useState<StudyMaterial[]>(() => {
-    if (propMaterials && propMaterials.length > 0) return propMaterials;
-    try {
-      const saved = localStorage.getItem('wits_lingo_materials');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return [];
+    return Array.isArray(propMaterials) ? propMaterials : [];
   });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -52,13 +44,17 @@ export const LearningResourcesPage: React.FC<LearningResourcesPageProps> = ({
 
   // Sync propMaterials when changed
   useEffect(() => {
-    if (propMaterials && propMaterials.length > 0) {
+    if (Array.isArray(propMaterials)) {
       setBackendMaterials(propMaterials);
     }
   }, [propMaterials]);
 
   // Fetch latest public materials from server
   useEffect(() => {
+    try {
+      localStorage.removeItem('wits_lingo_materials');
+    } catch (e) {}
+
     const fetchPublicMaterials = async () => {
       try {
         const res = await fetch('/api/materials');
@@ -66,9 +62,6 @@ export const LearningResourcesPage: React.FC<LearningResourcesPageProps> = ({
           const data = await res.json();
           if (data && Array.isArray(data.materials)) {
             setBackendMaterials(data.materials);
-            try {
-              localStorage.setItem('wits_lingo_materials', JSON.stringify(data.materials));
-            } catch (e) {}
           }
         }
       } catch (err) {
@@ -81,19 +74,12 @@ export const LearningResourcesPage: React.FC<LearningResourcesPageProps> = ({
     const handleUpdate = (e: any) => {
       if (e?.detail && Array.isArray(e.detail)) {
         setBackendMaterials(e.detail);
-      } else {
-        try {
-          const saved = localStorage.getItem('wits_lingo_materials');
-          if (saved) setBackendMaterials(JSON.parse(saved));
-        } catch (e) {}
       }
     };
 
     window.addEventListener('wits_lingo_material_updated', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
     return () => {
       window.removeEventListener('wits_lingo_material_updated', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
     };
   }, []);
 

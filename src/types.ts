@@ -147,6 +147,7 @@ export interface StudyMaterial {
   b2ThumbnailName?: string;
   duration?: string;
   views?: string;
+  downloadCount?: number;
   createdAt?: string;
   updatedAt?: string;
 }

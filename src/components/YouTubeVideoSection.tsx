@@ -57,14 +57,6 @@ export const YouTubeVideoSection: React.FC<YouTubeVideoSectionProps> = ({
   siteSettings,
 }) => {
   const [backendMaterials, setBackendMaterials] = useState<StudyMaterial[]>(() => {
-    if (Array.isArray(propMaterials) && propMaterials.length > 0) return propMaterials;
-    try {
-      const saved = localStorage.getItem('wits_lingo_materials');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {}
     return Array.isArray(propMaterials) ? propMaterials : [];
   });
 
@@ -75,6 +67,10 @@ export const YouTubeVideoSection: React.FC<YouTubeVideoSectionProps> = ({
   }, [propMaterials]);
 
   useEffect(() => {
+    try {
+      localStorage.removeItem('wits_lingo_materials');
+    } catch (e) {}
+
     const fetchMaterials = async () => {
       try {
         const res = await fetch('/api/materials');
@@ -82,9 +78,6 @@ export const YouTubeVideoSection: React.FC<YouTubeVideoSectionProps> = ({
           const data = await res.json();
           if (data && Array.isArray(data.materials)) {
             setBackendMaterials(data.materials);
-            try {
-              localStorage.setItem('wits_lingo_materials', JSON.stringify(data.materials));
-            } catch (e) {}
           }
         }
       } catch (e) {}
@@ -95,19 +88,12 @@ export const YouTubeVideoSection: React.FC<YouTubeVideoSectionProps> = ({
     const handleUpdate = (e: any) => {
       if (e?.detail && Array.isArray(e.detail)) {
         setBackendMaterials(e.detail);
-      } else {
-        try {
-          const saved = localStorage.getItem('wits_lingo_materials');
-          if (saved) setBackendMaterials(JSON.parse(saved));
-        } catch (e) {}
       }
     };
 
     window.addEventListener('wits_lingo_material_updated', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
     return () => {
       window.removeEventListener('wits_lingo_material_updated', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
     };
   }, []);
 

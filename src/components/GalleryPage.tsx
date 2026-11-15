@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GalleryItem, SiteSettings } from '../types';
-import { INITIAL_GALLERY_ITEMS } from '../data/initialData';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { 
   ArrowLeft, X, ChevronLeft, ChevronRight, Eye, 
@@ -19,16 +18,7 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({
   onOpenAdmission,
   siteSettings
 }) => {
-  const [items, setItems] = useState<GalleryItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('wits_lingo_gallery_items');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return INITIAL_GALLERY_ITEMS;
-  });
+  const [items, setItems] = useState<GalleryItem[]>([]);
 
   const [categories, setCategories] = useState<string[]>([
     'All Moments',
@@ -56,20 +46,22 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({
         const data = await res.json();
         if (data.success && Array.isArray(data.items)) {
           setItems(data.items);
-          localStorage.setItem('wits_lingo_gallery_items', JSON.stringify(data.items));
           if (Array.isArray(data.categories) && data.categories.length > 0) {
             setCategories(data.categories);
           }
         }
       }
     } catch (err) {
-      console.warn('Could not load gallery from server, using local fallback:', err);
+      console.warn('Could not load gallery from server:', err);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    try {
+      localStorage.removeItem('wits_lingo_gallery_items');
+    } catch (e) {}
     fetchGallery();
     // Scroll to top on mount
     window.scrollTo({ top: 0, behavior: 'smooth' });

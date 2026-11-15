@@ -33,22 +33,8 @@ export const adminFetch = async (input: RequestInfo | URL, init: RequestInit = {
   headers.set('x-auth-token', token);
   headers.set('x-access-token', token);
 
-  // 2. Prepare URL with ?token= if relative /api/
-  let rawUrl = typeof input === 'string' ? input : input.toString();
-  let fullUrl = rawUrl;
-  if (rawUrl.startsWith('/api/') || rawUrl.includes('/api/')) {
-    try {
-      const base = typeof window !== 'undefined' ? window.location.origin : 'https://www.witslingo.com';
-      const urlObj = new URL(rawUrl, base);
-      if (!urlObj.searchParams.has('token')) {
-        urlObj.searchParams.set('token', token);
-      }
-      fullUrl = urlObj.pathname + urlObj.search;
-    } catch {
-      const sep = rawUrl.includes('?') ? '&' : '?';
-      fullUrl = `${rawUrl}${sep}token=${encodeURIComponent(token)}`;
-    }
-  }
+  // 2. Clean URL without ?token= query parameter; use httpOnly cookie & headers only
+  const fullUrl = typeof input === 'string' ? input : input.toString();
 
   // 3. Inject adminToken into JSON body if present
   let body = init.body;
@@ -69,6 +55,6 @@ export const adminFetch = async (input: RequestInfo | URL, init: RequestInit = {
     ...init,
     headers,
     body,
-    credentials: 'same-origin'
+    credentials: init.credentials || 'include'
   });
 };

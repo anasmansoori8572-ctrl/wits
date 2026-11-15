@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, CourseData, Batch, TestimonialData, SiteSettings, Announcement, StudyMaterial } from './types';
-import { INITIAL_COURSES, INITIAL_BATCHES, INITIAL_TESTIMONIALS, INITIAL_SITE_SETTINGS, INITIAL_ANNOUNCEMENTS } from './data/initialData';
+import { INITIAL_SITE_SETTINGS } from './data/initialData';
 
 // Components
 import { Navbar } from './components/Navbar';
@@ -168,23 +168,9 @@ export default function App() {
     setIsCheckoutOpen(true);
   };
 
-  // Live CMS Course, Batch, Testimonial, and Site Settings State with LocalStorage Caching
-  const [courses, setCourses] = useState<CourseData[]>(() => {
-    try {
-      const saved = localStorage.getItem('wits_lingo_courses');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_COURSES;
-  });
-
-  const [batches, setBatches] = useState<Batch[]>(() => {
-    try {
-      const saved = localStorage.getItem('wits_lingo_batches');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_BATCHES;
-  });
-
+  // Live CMS Course, Batch, Testimonial, and Site Settings State (Empty by default, fetched from Neon)
+  const [courses, setCourses] = useState<CourseData[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
   const [testimonials, setTestimonials] = useState<TestimonialData[]>([]);
 
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
@@ -210,28 +196,11 @@ export default function App() {
     return INITIAL_SITE_SETTINGS;
   });
 
-  const [announcements, setAnnouncements] = useState<Announcement[]>(() => {
-    try {
-      const saved = localStorage.getItem('wits_lingo_announcements');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_ANNOUNCEMENTS;
-  });
-
-  const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
-    try {
-      const saved = localStorage.getItem('wits_lingo_materials');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {}
-    return [];
-  });
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
 
   const handleUpdateCourses = async (newCourses: CourseData[]) => {
     setCourses(newCourses);
-    localStorage.setItem('wits_lingo_courses', JSON.stringify(newCourses));
     try {
       await adminFetch('/api/cms/content', {
         method: 'POST',
@@ -245,7 +214,6 @@ export default function App() {
 
   const handleUpdateBatches = (newBatches: Batch[]) => {
     setBatches(newBatches);
-    localStorage.setItem('wits_lingo_batches', JSON.stringify(newBatches));
   };
 
   const handleUpdateTestimonials = async (newTestimonials: TestimonialData[]) => {
@@ -268,12 +236,10 @@ export default function App() {
 
   const handleUpdateAnnouncements = (newAnnouncements: Announcement[]) => {
     setAnnouncements(newAnnouncements);
-    localStorage.setItem('wits_lingo_announcements', JSON.stringify(newAnnouncements));
   };
 
   const handleUpdateMaterials = (newMaterials: StudyMaterial[]) => {
     setMaterials(newMaterials);
-    localStorage.setItem('wits_lingo_materials', JSON.stringify(newMaterials));
     window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: newMaterials }));
   };
 
@@ -362,13 +328,21 @@ export default function App() {
         });
     }
 
+    // Purge any stale client-cached lists from localStorage
+    try {
+      localStorage.removeItem('wits_lingo_testimonials');
+      localStorage.removeItem('wits_lingo_courses');
+      localStorage.removeItem('wits_lingo_batches');
+      localStorage.removeItem('wits_lingo_materials');
+      localStorage.removeItem('wits_lingo_announcements');
+    } catch (e) {}
+
     // Fetch live courses catalog from backend
     fetch('/api/courses?includeAll=true')
       .then(res => res.json())
       .then(data => {
         if (data && Array.isArray(data.courses)) {
           setCourses(data.courses);
-          localStorage.setItem('wits_lingo_courses', JSON.stringify(data.courses));
         }
       })
       .catch(err => console.warn('Could not load courses from backend:', err));
@@ -379,7 +353,6 @@ export default function App() {
       .then(data => {
         if (data && Array.isArray(data.batches)) {
           setBatches(data.batches);
-          localStorage.setItem('wits_lingo_batches', JSON.stringify(data.batches));
         }
       })
       .catch(err => console.warn('Could not load batches from backend:', err));
@@ -390,7 +363,6 @@ export default function App() {
       .then(data => {
         if (data && Array.isArray(data.materials)) {
           setMaterials(data.materials);
-          localStorage.setItem('wits_lingo_materials', JSON.stringify(data.materials));
         }
       })
       .catch(err => console.warn('Could not load materials in App:', err));
@@ -401,15 +373,9 @@ export default function App() {
       .then(data => {
         if (data && Array.isArray(data.announcements)) {
           setAnnouncements(data.announcements);
-          localStorage.setItem('wits_lingo_announcements', JSON.stringify(data.announcements));
         }
       })
       .catch(err => console.warn('Could not load announcements in App:', err));
-
-    // Purge any stale client-cached reviews from localStorage
-    try {
-      localStorage.removeItem('wits_lingo_testimonials');
-    } catch (e) {}
 
     // Fetch official student reviews ONLY from Neon PostgreSQL
     fetch('/api/reviews')
@@ -435,7 +401,6 @@ export default function App() {
         if (data?.content) {
           if (Array.isArray(data.content.courses)) {
             setCourses(data.content.courses);
-            localStorage.setItem('wits_lingo_courses', JSON.stringify(data.content.courses));
           }
           setSiteSettings(prev => {
             const incomingEmail = data.content.email || data.content.settings?.email;
