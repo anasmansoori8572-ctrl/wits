@@ -16,98 +16,7 @@ interface LearningResourcesPageProps {
   siteSettings?: SiteSettings;
 }
 
-const DEFAULT_FALLBACK_RESOURCES: ResourceItem[] = [
-  {
-    id: 'res-default-1',
-    title: '50 Daily Routine Sentences Used in Real Life',
-    category: 'Daily Sentences',
-    description: 'High-frequency English sentence structures for morning routines, workplace interactions, and casual social conversations.',
-    level: 'Beginner & Intermediate',
-    downloadCount: 2450,
-    fileType: 'PDF',
-    pdfUrl: 'https://cdn.witslingo.com/resources/50-daily-routine-sentences.pdf',
-    downloadUrl: '#',
-    isViewOnly: true,
-    allowDownload: false,
-    uploadedDate: '12 Nov 2026',
-    isUploaded: true
-  },
-  {
-    id: 'res-default-2',
-    title: 'Essential Spoken English Pronunciation & Sound Drills',
-    category: 'Speaking Practice',
-    description: 'Practical phonetic breakdowns, mouth positioning guides, and stress patterns to neutralize hesitation and speak clearly.',
-    level: 'All Levels',
-    downloadCount: 1980,
-    fileType: 'PDF',
-    pdfUrl: 'https://cdn.witslingo.com/resources/pronunciation-drills.pdf',
-    downloadUrl: '#',
-    isViewOnly: true,
-    allowDownload: false,
-    uploadedDate: '10 Nov 2026',
-    isUploaded: true
-  },
-  {
-    id: 'res-default-3',
-    title: '500 Most Essential Spoken Vocabulary Handbook',
-    category: 'English Vocabulary',
-    description: 'Comprehensive thematic vocabulary with real-life context examples, collocations, and natural conversation usage.',
-    level: 'Intermediate',
-    downloadCount: 3120,
-    fileType: 'PDF',
-    pdfUrl: 'https://cdn.witslingo.com/resources/500-essential-vocabulary.pdf',
-    downloadUrl: '#',
-    isViewOnly: true,
-    allowDownload: false,
-    uploadedDate: '08 Nov 2026',
-    isUploaded: true
-  },
-  {
-    id: 'res-default-4',
-    title: 'Natural Grammar Framework: English Tenses Simplified',
-    category: 'Grammar Guides',
-    description: 'Learn when to use Past, Present, and Future tenses naturally in conversation without getting stuck in mechanical rules.',
-    level: 'Beginner to Advanced',
-    downloadCount: 2890,
-    fileType: 'PDF',
-    pdfUrl: 'https://cdn.witslingo.com/resources/natural-grammar-framework.pdf',
-    downloadUrl: '#',
-    isViewOnly: true,
-    allowDownload: false,
-    uploadedDate: '05 Nov 2026',
-    isUploaded: true
-  },
-  {
-    id: 'res-default-5',
-    title: 'Interactive Conversation Dialogue Worksheets',
-    category: 'Worksheets',
-    description: 'Guided 2-person speaking prompts, role-play scenarios, and sentence completion exercises for real-world confidence.',
-    level: 'All Levels',
-    downloadCount: 1640,
-    fileType: 'PDF',
-    pdfUrl: 'https://cdn.witslingo.com/resources/conversation-dialogue-worksheets.pdf',
-    downloadUrl: '#',
-    isViewOnly: true,
-    allowDownload: false,
-    uploadedDate: '03 Nov 2026',
-    isUploaded: true
-  },
-  {
-    id: 'res-default-6',
-    title: 'Confidence Blueprint: Overcoming Speaking Hesitation',
-    category: 'Study Notes',
-    description: 'Psychological strategies, breathing exercises, and speaking habits to stop translating in your head and speak fluidly.',
-    level: 'All Levels',
-    downloadCount: 2210,
-    fileType: 'PDF',
-    pdfUrl: 'https://cdn.witslingo.com/resources/confidence-blueprint.pdf',
-    downloadUrl: '#',
-    isViewOnly: true,
-    allowDownload: false,
-    uploadedDate: '01 Nov 2026',
-    isUploaded: true
-  }
-];
+const DEFAULT_FALLBACK_RESOURCES: ResourceItem[] = [];
 
 const CATEGORIES = [
   'All',
@@ -197,7 +106,7 @@ export const LearningResourcesPage: React.FC<LearningResourcesPageProps> = ({
     );
 
     if (pdfMaterials.length === 0) {
-      return DEFAULT_FALLBACK_RESOURCES;
+      return [];
     }
 
     const mapped = pdfMaterials.map((m): ResourceItem => {

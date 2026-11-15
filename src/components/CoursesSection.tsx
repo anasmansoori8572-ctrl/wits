@@ -98,7 +98,18 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
             COURSES GRID (Matches First Reference Image: Text Top, Image Bottom, Clean Metadata)
             ========================================================================= */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7 sm:gap-8">
-          {filteredCourses.map((course) => {
+          {filteredCourses.length === 0 ? (
+            <div className="col-span-full py-16 px-4 text-center bg-white rounded-3xl border border-dashed border-purple-200 max-w-xl mx-auto space-y-3">
+              <div className="w-16 h-16 rounded-2xl bg-purple-50 text-[#4A1D96] flex items-center justify-center mx-auto shadow-2xs">
+                <BookOpen className="w-8 h-8 text-purple-400" />
+              </div>
+              <h3 className="font-['Outfit'] font-bold text-slate-800 text-lg">No courses available yet</h3>
+              <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto">
+                New language courses and live training modules will be published soon.
+              </p>
+            </div>
+          ) : (
+            filteredCourses.map((course) => {
             const isLive = (course.badge || '').toLowerCase() === 'live';
             const courseImage = course.imageUrl || DEFAULT_COURSE_IMAGES[course.id] || FALLBACK_COURSE_IMAGE;
 
@@ -195,7 +206,8 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
                 </div>
               </div>
             );
-          })}
+          })
+        )}
         </div>
 
         {/* =========================================================================

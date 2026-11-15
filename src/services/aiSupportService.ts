@@ -41,96 +41,7 @@ const DATA_DIR = path.join(process.cwd(), 'uploads', 'data');
 const KB_FILE = path.join(DATA_DIR, 'knowledge-base.json');
 
 // Default initial knowledge base articles
-export const DEFAULT_KNOWLEDGE_BASE: KnowledgeItem[] = [
-  {
-    id: 'kb-course-foundation',
-    category: 'course',
-    title: 'English Foundation Course',
-    keywords: ['foundation', 'basic', 'beginner', 'alphabet', 'grammar basics', 'start from zero', 'zero level'],
-    content: 'English Foundation is designed for learners starting from absolute basics. Fee: ₹1,199. Duration: 2 Months (40 Live Sessions). Includes basic phonetics, alphabet articulation, simple sentence framing without translation, overcoming stage fear, and foundation grammar workbook (PDF).',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-course-spoken',
-    category: 'course',
-    title: 'Spoken English Course',
-    keywords: ['spoken', 'spoken english', 'speaking', 'fluency', 'hesitation', 'breakout rooms', 'conversational'],
-    content: 'Spoken English is our most popular practical speaking course with Zia Sir. Fee: ₹1,499. Duration: 2.5 Months (50 Live Sessions). Focuses on eliminating hesitation, daily conversational drills, removal of Mother Tongue Influence (MTI), and thinking directly in English.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-course-vocabulary',
-    category: 'course',
-    title: 'English Vocabulary Course',
-    keywords: ['vocab', 'vocabulary', 'words', 'idioms', 'phrases', 'collocations'],
-    content: 'English Vocabulary course covers 1,000+ active conversational words, idioms, and smart alternatives. Fee: ₹999. Duration: 1.5 Months (30 Interactive Workshops). Includes weekly quizzes and memory retention techniques.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-course-communication',
-    category: 'course',
-    title: 'Communication Skills Course',
-    keywords: ['communication', 'interview', 'public speaking', 'presentation', 'corporate', 'email etiquette'],
-    content: 'Communication Skills is designed for career boost and interview preparation. Fee: ₹1,699. Duration: 2 Months (35 Masterclass Sessions). Includes job interview simulations, stage presence, email writing, and 1-on-1 mentor feedback.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-course-advanced',
-    category: 'course',
-    title: 'Advanced English Course',
-    keywords: ['advanced', 'executive', 'debate', 'leadership', 'nuanced', 'rhetoric'],
-    content: 'Advanced English is for learners seeking executive fluency and leadership speech. Fee: ₹1,999. Duration: 3 Months (60 Executive Sessions). Includes spontaneous debate rounds, tone control, and complex synthesis.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-fees-all',
-    category: 'fee',
-    title: 'Wits Lingo Course Fees Overview',
-    keywords: ['fees', 'fee', 'price', 'pricing', 'cost', 'kitna hai', 'kitne paise', 'discount'],
-    content: 'Wits Lingo Course Fees:\n• English Foundation: ₹1,199\n• Spoken English: ₹1,499\n• English Vocabulary: ₹999\n• English Conversation: ₹1,299\n• Communication Skills: ₹1,699\n• Advanced English: ₹1,999\nAll fees include live sessions, study materials (PDF), and 60-day class recordings access.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-schedule-timings',
-    category: 'schedule',
-    title: 'Class Timings & Batch Schedules',
-    keywords: ['timing', 'timings', 'schedule', 'time', 'kab hoti hai', 'start date', 'batch start', 'class time'],
-    content: `Live batches are held in the evening: ${WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME}. New batches start from the ${WITS_LINGO_CONFIG.FALLBACK_START_DATE}. Full schedules and recording replays are accessible in your Student Dashboard.`,
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-joining-meet',
-    category: 'joining_link',
-    title: 'Live Class Joining Link & Google Meet',
-    keywords: ['meet', 'link', 'google meet', 'join', 'class link', 'kaise join karein', 'session link'],
-    content: `Official live classes are conducted online via Google Meet.\nPermanent Joining Link: ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}\nPlease ensure you are logged in with your registered email before joining the class room.`,
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-certificate-policy',
-    category: 'certificate',
-    title: 'Course Completion Certificate',
-    keywords: ['certificate', 'cert', 'completion', 'marksheet', 'diploma'],
-    content: 'Students receive an official verifiable Wits Lingo Academy Certificate upon completing the course with at least 80% attendance in live sessions and passing the final practical speaking evaluation.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-refund-policy',
-    category: 'refund',
-    title: 'Refund & Cancellation Policy',
-    keywords: ['refund', 'money back', 'cancel', 'cancellation', 'wapas', 'return'],
-    content: 'Wits Lingo offers a 100% money-back guarantee within the first 7 days of batch commencement if you are not fully satisfied with the teaching quality. To initiate a refund, simply request support here or email hello@witslingo.com with your transaction ID.',
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'kb-founder-zia',
-    category: 'general',
-    title: 'About Founder Ziyaur Rehman Zia',
-    keywords: ['mentor', 'teacher', 'founder', 'zia', 'sir', 'trainer', 'who teaches'],
-    content: 'All primary live sessions are personally conducted by Ziyaur Rehman Zia (Zia Sir), celebrated English language educator and founder of Wits Lingo, known for his zero-hesitation, conversational speaking pedagogy.',
-    updatedAt: new Date().toISOString()
-  }
-];
+export const DEFAULT_KNOWLEDGE_BASE: KnowledgeItem[] = [];
 
 export class AiSupportService {
   private knowledgeBase: KnowledgeItem[] = [];
@@ -144,7 +55,7 @@ export class AiSupportService {
       if (fs.existsSync(KB_FILE)) {
         const raw = fs.readFileSync(KB_FILE, 'utf-8');
         const data = JSON.parse(raw);
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           this.knowledgeBase = data;
           return;
         }

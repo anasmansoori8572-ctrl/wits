@@ -1036,7 +1036,14 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
 
             {/* Articles Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredKb.map(item => (
+              {filteredKb.length === 0 ? (
+                <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-dashed border-purple-200 space-y-2">
+                  <BookOpen className="w-10 h-10 text-purple-300 mx-auto" />
+                  <p className="font-bold text-slate-800 text-sm">No knowledge base articles found</p>
+                  <p className="text-xs text-slate-500">Click "+ Add Article / FAQ" above to add your first knowledge article.</p>
+                </div>
+              ) : (
+                filteredKb.map(item => (
                 <div
                   key={item.id}
                   className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-purple-200 transition-all space-y-3 flex flex-col justify-between"
@@ -1084,7 +1091,8 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
                     ))}
                   </div>
                 </div>
-              ))}
+              ))
+            )}
             </div>
           </div>
 

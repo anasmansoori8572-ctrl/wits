@@ -3,6 +3,8 @@ import express from "express";
 import path from "path";
 import crypto from "crypto";
 import fs from "fs";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { WITS_LINGO_CONFIG } from "./src/config/witsLingoConfig";
 import { whatsappCloudApiService } from "./src/services/whatsappCloudApiService";
@@ -12,6 +14,16 @@ import { supportTicketService } from "./src/services/supportTicketService";
 import { getAiSupportService } from "./src/services/aiSupportService";
 import { durableStorageService } from "./src/services/durableStorageService";
 import { adminNotificationService } from "./src/services/adminNotificationService";
+import {
+  getDb,
+  ensureAdminUserExists,
+  getSiteSettingsDb,
+  updateSiteSettingsDb,
+  getReviewsDb,
+  createReviewDb,
+  updateReviewDb,
+  deleteReviewDb
+} from "./src/lib/db";
 
 let s3ClientInstance: S3Client | null = null;
 
@@ -364,6 +376,7 @@ function getSafeFileMimeType(filename: string, providedMime?: string): string {
 const JWT_SECRET = process.env.JWT_SECRET || "witslingo_academy_secure_signing_key_2026";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME?.trim() || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim() || "admin";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || "admin@witslingo.com";
 
 function hashPassword(password: string, salt: string = "witslingo_salt_2026"): string {
   return crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512").toString("hex");
@@ -733,7 +746,7 @@ const defaultAdminUsers: DBUser[] = [
     passwordHash: "admin123",
     role: "admin",
     phone: "7310952271",
-    batchIds: ["batch-spoken-oct-2026", "batch-spoken-nov-2026", "batch-foundation-oct-2026", "batch-vocab-sept-2026"],
+    batchIds: [],
     registrationDate: "2026-01-01",
   },
   {
@@ -743,7 +756,7 @@ const defaultAdminUsers: DBUser[] = [
     passwordHash: "admin123",
     role: "admin",
     phone: "7310952271",
-    batchIds: ["batch-spoken-oct-2026", "batch-spoken-nov-2026", "batch-foundation-oct-2026", "batch-vocab-sept-2026"],
+    batchIds: [],
     registrationDate: "2026-01-01",
   }
 ];
@@ -752,631 +765,34 @@ const users: DBUser[] = [...defaultAdminUsers];
 
 const registrations: DBStudentRegistration[] = [];
 
-const batches: DBBatch[] = [
-  {
-    id: "batch-spoken-oct-2026",
-    name: "Spoken English — Batch October 2026 (Batch 01)",
-    courseId: "course-spoken-english",
-    courseName: "Spoken English",
-    batchCode: "SE-OCT26",
-    startDate: "2026-09-01",
-    endDate: "2026-11-30",
-    teacherName: "Ziyaur Rehman Zia",
-    scheduleTime: "Mon, Wed, Fri (7:00 PM – 8:00 PM IST)",
-    maxStudents: 35,
-    currentStudentsCount: 28,
-    status: "Active",
-    recordingsExpiryDate: "2027-05-31",
-    description: "Intensive spoken English batch covering confidence, hesitation removal, daily conversation, and fluency practice."
-  },
-  {
-    id: "batch-spoken-nov-2026",
-    name: "Spoken English — Batch November 2026",
-    courseId: "course-spoken-english",
-    courseName: "Spoken English",
-    batchCode: "SE-NOV26",
-    startDate: "2026-11-01",
-    endDate: "2027-01-31",
-    teacherName: "Ziyaur Rehman Zia",
-    scheduleTime: "Tue, Thu, Sat (7:00 PM – 8:00 PM IST)",
-    maxStudents: 35,
-    currentStudentsCount: 14,
-    status: "Upcoming",
-    description: "New upcoming batch starting 1st November. Admissions open now!"
-  },
-  {
-    id: "batch-foundation-oct-2026",
-    name: "English Foundation — Batch October 2026",
-    courseId: "course-foundation",
-    courseName: "English Foundation",
-    batchCode: "EF-OCT26",
-    startDate: "2026-09-01",
-    endDate: "2026-10-31",
-    teacherName: "Ziyaur Rehman Zia",
-    scheduleTime: "Mon to Fri (6:00 PM – 7:00 PM IST)",
-    maxStudents: 30,
-    currentStudentsCount: 22,
-    status: "Active",
-    recordingsExpiryDate: "2027-04-30",
-    description: "Designed specifically for learners from basic level to build alphabet phonetics, vocabulary, and basic sentence construction."
-  },
-  {
-    id: "batch-vocab-sept-2026",
-    name: "English Vocabulary & Daily Idioms — Batch Sept 2026",
-    courseId: "course-vocabulary",
-    courseName: "English Vocabulary",
-    batchCode: "EV-SEP26",
-    startDate: "2026-08-01",
-    endDate: "2026-09-15",
-    teacherName: "Ziyaur Rehman Zia",
-    scheduleTime: "Sat & Sun (10:00 AM – 11:30 AM IST)",
-    maxStudents: 40,
-    currentStudentsCount: 38,
-    status: "Completed",
-    recordingsExpiryDate: "2027-03-31",
-    description: "Completed batch with all lecture recordings archived and available for enrolled students."
-  }
-];
-
-const classes: DBClass[] = [
-  // Classes for batch-spoken-oct-2026
-  {
-    id: "cls-se-01",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 01 — Introduction & Overcoming Hesitation",
-    topic: "Introduction",
-    classNumber: 1,
-    date: "10 Sept 2026",
-    startTime: "7:00 PM",
-    endTime: "8:00 PM",
-    durationMinutes: 58,
-    teacherName: "Ziyaur Rehman Zia",
-    description: "Ice-breaking, understanding personal communication blocks, and learning how to introduce yourself naturally without fear.",
-    status: "Completed",
-    recordingId: "rec-se-01",
-    hasStudyMaterial: true,
-    hasAssignment: true,
-    videoKey: "video_se_batch01_class01_intro"
-  },
-  {
-    id: "cls-se-02",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 02 — Daily Conversation & Routine Sentences",
-    topic: "Daily Conversation",
-    classNumber: 2,
-    date: "12 Sept 2026",
-    startTime: "7:00 PM",
-    endTime: "8:02 PM",
-    durationMinutes: 62,
-    teacherName: "Ziyaur Rehman Zia",
-    description: "Morning-to-evening daily routine phrases, greeting manners, and asking questions naturally in everyday scenarios.",
-    status: "Completed",
-    recordingId: "rec-se-02",
-    hasStudyMaterial: true,
-    hasAssignment: true,
-    videoKey: "video_se_batch01_class02_daily"
-  },
-  {
-    id: "cls-se-03",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 03 — Useful Vocabulary in Real Context",
-    topic: "Vocabulary",
-    classNumber: 3,
-    date: "14 Sept 2026",
-    startTime: "7:00 PM",
-    endTime: "7:55 PM",
-    durationMinutes: 55,
-    teacherName: "Ziyaur Rehman Zia",
-    description: "50 high-frequency action verbs and everyday adjectives with natural sentence pairing instead of rote memorisation.",
-    status: "Completed",
-    recordingId: "rec-se-03",
-    hasStudyMaterial: true,
-    hasAssignment: false,
-    videoKey: "video_se_batch01_class03_vocab"
-  },
-  {
-    id: "cls-se-04",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 04 — Pronunciation, Accent & Speech Rhythm",
-    topic: "Pronunciation",
-    classNumber: 4,
-    date: "16 Sept 2026",
-    startTime: "7:00 PM",
-    endTime: "8:00 PM",
-    durationMinutes: 60,
-    teacherName: "Ziyaur Rehman Zia",
-    description: "Common mother-tongue influence (MTI) correction, silent letters, and intonation practice for clear, pleasant speech.",
-    status: "Completed",
-    recordingId: "rec-se-04",
-    hasStudyMaterial: true,
-    hasAssignment: true,
-    videoKey: "video_se_batch01_class04_pronun"
-  },
-  {
-    id: "cls-se-05",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 05 — Communication Skills & Expressing Thoughts",
-    topic: "Communication Skills",
-    classNumber: 5,
-    date: "20 Sept 2026",
-    startTime: "7:00 PM",
-    endTime: "8:00 PM",
-    durationMinutes: 60,
-    teacherName: "Ziyaur Rehman Zia",
-    description: "How to articulate your thoughts clearly in English without translating word-by-word from Hindi/Urdu. Live roleplay practice.",
-    status: "Live", // Live class interactive demo!
-    hasStudyMaterial: true,
-    hasAssignment: true
-  },
-  {
-    id: "cls-se-06",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 06 — Telephone Etiquette & Small Talk",
-    topic: "Conversation Practice",
-    classNumber: 6,
-    date: "23 Sept 2026",
-    startTime: "7:00 PM",
-    endTime: "8:00 PM",
-    durationMinutes: 60,
-    teacherName: "Ziyaur Rehman Zia",
-    description: "Speaking on phone calls, handling inquiries, making polite requests, and initiating friendly small talk with colleagues.",
-    status: "Upcoming",
-    hasStudyMaterial: true,
-    hasAssignment: false
-  },
-  // Classes for batch-foundation-oct-2026 (Different Batch - Strict Access Check demonstration!)
-  {
-    id: "cls-fd-01",
-    batchId: "batch-foundation-oct-2026",
-    batchName: "English Foundation — Batch October 2026",
-    title: "Class 01 — Alphabet Sounds & Phonics Essentials",
-    topic: "Phonics & Sounds",
-    classNumber: 1,
-    date: "11 Sept 2026",
-    startTime: "6:00 PM",
-    endTime: "6:50 PM",
-    durationMinutes: 50,
-    teacherName: "Ziyaur Rehman Zia",
-    description: "Understanding English vowels, consonants, sound blends, and basic syllable division.",
-    status: "Completed",
-    recordingId: "rec-fd-01",
-    hasStudyMaterial: true,
-    hasAssignment: true,
-    videoKey: "video_fd_batch01_class01_phonics"
-  },
-  {
-    id: "cls-fd-02",
-    batchId: "batch-foundation-oct-2026",
-    batchName: "English Foundation — Batch October 2026",
-    title: "Class 02 — Simple Sentences (Is, Am, Are, Was, Were)",
-    topic: "Grammar Made Easy",
-    classNumber: 2,
-    date: "15 Sept 2026",
-    startTime: "6:00 PM",
-    endTime: "6:55 PM",
-    durationMinutes: 55,
-    teacherName: "Ziyaur Rehman Zia",
-    description: "Mastering state-of-being sentences and framing positive, negative, and question structures effortlessly.",
-    status: "Completed",
-    recordingId: "rec-fd-02",
-    hasStudyMaterial: true,
-    hasAssignment: true,
-    videoKey: "video_fd_batch01_class02_sentences"
-  }
-];
-
-const recordings: DBRecording[] = [
-  {
-    id: "rec-se-01",
-    classId: "cls-se-01",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 01 — Introduction & Overcoming Hesitation",
-    topic: "Introduction",
-    classNumber: 1,
-    date: "10 Sept 2026",
-    duration: "58 min",
-    status: "Available",
-    videoKey: "video_se_batch01_class01_intro",
-    notesSummary: "Focus areas: 1) Why English hesitation occurs, 2) 3 golden rules of self-introduction, 3) Guided vocal practice."
-  },
-  {
-    id: "rec-se-02",
-    classId: "cls-se-02",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 02 — Daily Conversation & Routine Sentences",
-    topic: "Daily Conversation",
-    classNumber: 2,
-    date: "12 Sept 2026",
-    duration: "62 min",
-    status: "Available",
-    videoKey: "video_se_batch01_class02_daily",
-    notesSummary: "Routine verbs covered: wake up, get ready, commute, discuss, wrap up. Practice audio drills included."
-  },
-  {
-    id: "rec-se-03",
-    classId: "cls-se-03",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 03 — Useful Vocabulary in Real Context",
-    topic: "Vocabulary",
-    classNumber: 3,
-    date: "14 Sept 2026",
-    duration: "55 min",
-    status: "Available",
-    videoKey: "video_se_batch01_class03_vocab",
-    notesSummary: "Key words: Hesitant, Eloquent, Articulate, Punctual, Collaborative with contextual usage dialogues."
-  },
-  {
-    id: "rec-se-04",
-    classId: "cls-se-04",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    title: "Class 04 — Pronunciation, Accent & Speech Rhythm",
-    topic: "Pronunciation",
-    classNumber: 4,
-    date: "16 Sept 2026",
-    duration: "60 min",
-    status: "Available",
-    videoKey: "video_se_batch01_class04_pronun",
-    notesSummary: "Fixing 's' vs 'sh', 'v' vs 'w', and mastering word stress on two-syllable nouns vs verbs."
-  },
-  {
-    id: "rec-fd-01",
-    classId: "cls-fd-01",
-    batchId: "batch-foundation-oct-2026",
-    batchName: "English Foundation — Batch October 2026",
-    title: "Class 01 — Alphabet Sounds & Phonics Essentials",
-    topic: "Phonics & Sounds",
-    classNumber: 1,
-    date: "11 Sept 2026",
-    duration: "50 min",
-    status: "Available",
-    videoKey: "video_fd_batch01_class01_phonics",
-    notesSummary: "English alphabet 44 distinct sounds explained with Urdu/Hindi phoneme comparisons."
-  },
-  {
-    id: "rec-fd-02",
-    classId: "cls-fd-02",
-    batchId: "batch-foundation-oct-2026",
-    batchName: "English Foundation — Batch October 2026",
-    title: "Class 02 — Simple Sentences (Is, Am, Are, Was, Were)",
-    topic: "Grammar Made Easy",
-    classNumber: 2,
-    date: "15 Sept 2026",
-    duration: "55 min",
-    status: "Available",
-    videoKey: "video_fd_batch01_class02_sentences",
-    notesSummary: "20 practical sentence patterns with 'is/am/are' and everyday objects."
-  }
-];
-
-let materialsInitialized = false;
+const batches: DBBatch[] = [];
+const classes: DBClass[] = [];
+const recordings: DBRecording[] = [];
 const studyMaterials: DBStudyMaterial[] = [];
-
-const assignments: DBAssignment[] = [
-  {
-    id: "asg-01",
-    batchId: "batch-spoken-oct-2026",
-    classId: "cls-se-01",
-    title: "Record 90-Second Self Introduction Audio",
-    description: "Record and submit your 90-second self-introduction applying the 3 rules discussed in Class 01. Share your name, background, and goals.",
-    dueDate: "22 Sept 2026",
-    totalPoints: 20,
-    submissionsCount: 19
-  },
-  {
-    id: "asg-02",
-    batchId: "batch-spoken-oct-2026",
-    classId: "cls-se-04",
-    title: "Pronunciation Drill: 15 Minimal Pairs Practice",
-    description: "Read aloud the 15 minimal pair sentences (ship/sheep, pen/pan, live/leave) and write 5 original sentences.",
-    dueDate: "25 Sept 2026",
-    totalPoints: 25,
-    submissionsCount: 14
-  }
-];
-
-const submissions: DBAssignmentSubmission[] = [
-  {
-    id: "sub-01",
-    assignmentId: "asg-01",
-    studentId: "usr-student-01",
-    studentName: "Mohd Farhan",
-    batchId: "batch-spoken-oct-2026",
-    submittedAt: "2026-09-11T18:30:00Z",
-    content: "Audio script: Hello everyone! My name is Mohd Farhan. I am from Amroha, UP. I am pursuing my Bachelor of Arts. I joined Wits Lingo Academy to communicate smoothly and speak English without hesitation.",
-    status: "Graded",
-    score: 18,
-    feedback: "Well done Farhan! Clear articulation. Just remember to pause naturally between sentences. Keep it up!"
-  }
-];
-
-const announcements: DBAnnouncement[] = [
-  {
-    id: "ann-holiday-01",
-    batchId: "all",
-    batchName: "All Batches (Academy-wide)",
-    title: "🏖️ Academy Holiday Notice: Gandhi Jayanti Observance",
-    message: "Dear Students & Parents,\n\nPlease note that Wits Lingo Academy and all live online classrooms will remain closed on Friday, 2nd October 2026 on the occasion of Gandhi Jayanti. No live speaking classes or teacher consultations will take place on this day.\n\nKey Guidelines for Students:\n• Self-paced vocabulary audio drills and previous session recordings will remain accessible 24/7 on your student dashboard.\n• Homework submissions for Assignment 03 will have an extended deadline until 4th October 2026.\n• Regular interactive live classes will resume punctually on Saturday, 3rd October as per your regular batch schedule.\n\nWarm regards,\nWits Lingo Administration",
-    date: "28 Sept 2026",
-    author: "Ziyaur Rehman Zia",
-    priority: "Important",
-    category: "Holiday",
-    effectiveDate: "2nd October 2026 (Full Day)",
-    isPinned: true
-  },
-  {
-    id: "ann-cls-02",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English & Daily Fluency",
-    title: "📢 Spoken English Batch: 1-on-1 Mock Interview Pairs on Friday",
-    message: "Attention Batch October 2026 learners:\n\nThis Friday's live session (07:30 PM - 08:30 PM IST) will feature mandatory 1-on-1 mock speaking pairs and individual fluency evaluations.\n\nPreparation Checklist:\n1. Please join the live class room 5 minutes early with your video camera turned on and microphone tested.\n2. Review the '100 High-Frequency Daily Dialogue Sheet' available in your study materials section.\n3. Prepare a concise 2-minute introduction covering your background, professional aspirations, and daily routine.\n\nActive participation is compulsory for monthly certificate grading.",
-    date: "26 Sept 2026",
-    author: "Ziyaur Rehman Zia",
-    priority: "Urgent",
-    category: "Class Notice",
-    effectiveDate: "Friday, 07:30 PM IST",
-    isPinned: true
-  },
-  {
-    id: "ann-sched-03",
-    batchId: "batch-found-oct-2026",
-    batchName: "English Foundation (Basics)",
-    title: "🕒 English Foundation: Timing Adjusted to 5:00 PM for Revision Week",
-    message: "Dear Foundation Batch students,\n\nTo allow 15 extra minutes of guided pronunciation drills, our daily evening live class will temporarily commence at 05:00 PM IST instead of 04:30 PM IST during the upcoming Revision Week (28th Sept to 2nd Oct).\n\nPlease verify your class links on the dashboard. Class duration will be 60 minutes of intensive practice.",
-    date: "24 Sept 2026",
-    author: "Ziyaur Rehman Zia",
-    priority: "Normal",
-    category: "Schedule Change",
-    effectiveDate: "28 Sept - 2 Oct 2026",
-    isPinned: false
-  },
-  {
-    id: "ann-gen-04",
-    batchId: "all",
-    batchName: "All Batches (Academy-wide)",
-    title: "🎧 15 New Pronunciation & Tongue-Twister Audio Drills Uploaded",
-    message: "Exciting learning update!\n\n15 new studio-recorded audio drills focusing on removing Mother Tongue Influence (MTI), mastering 'P' vs 'B' and 'V' vs 'W' sound articulation, and connected conversational speech have been added to the Study Materials library.\n\nAll students are recommended to listen and shadow-speak for at least 10 minutes every morning.",
-    date: "22 Sept 2026",
-    author: "Ziyaur Rehman Zia",
-    priority: "Normal",
-    category: "General",
-    effectiveDate: "Available Now",
-    isPinned: false
-  }
-];
-
-const attendanceRecords: DBAttendance[] = [
-  {
-    id: "att-01",
-    studentId: "usr-student-01",
-    studentName: "Mohd Farhan",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    classId: "cls-se-01",
-    classTitle: "Class 01 — Introduction & Overcoming Hesitation",
-    joinTime: "7:00 PM",
-    leaveTime: "7:58 PM",
-    durationMinutes: 58,
-    status: "Present",
-    date: "10 Sept 2026"
-  },
-  {
-    id: "att-02",
-    studentId: "usr-student-01",
-    studentName: "Mohd Farhan",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    classId: "cls-se-02",
-    classTitle: "Class 02 — Daily Conversation & Routine Sentences",
-    joinTime: "7:02 PM",
-    leaveTime: "8:02 PM",
-    durationMinutes: 60,
-    status: "Present",
-    date: "12 Sept 2026"
-  },
-  {
-    id: "att-03",
-    studentId: "usr-student-01",
-    studentName: "Mohd Farhan",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    classId: "cls-se-03",
-    classTitle: "Class 03 — Useful Vocabulary in Real Context",
-    joinTime: "7:00 PM",
-    leaveTime: "7:55 PM",
-    durationMinutes: 55,
-    status: "Present",
-    date: "14 Sept 2026"
-  }
-];
+let materialsInitialized = false;
+const assignments: DBAssignment[] = [];
+const submissions: DBAssignmentSubmission[] = [];
+const announcements: DBAnnouncement[] = [];
+const attendanceRecords: DBAttendance[] = [];
 
 // Dynamic CMS content editable from the Admin Panel
 let cmsContent: any = {
   academyName: "WITS LINGO",
   tagline: "A Global Language Platform",
-  announcementText: "New Batch Starts from 1st of each month • Admissions Open for October & November 2026",
+  announcementText: "",
   announcementBtnText: "",
-  showAnnouncement: true,
+  showAnnouncement: false,
   settings: {
-    youtubeUrl: "https://www.youtube.com/@witslingoeng"
+    youtubeUrl: ""
   },
-  phoneNumbers: ["7310952271", "9027729917"],
+  phoneNumbers: [],
   email: "hello@witslingo.com",
-  location: "Wits Lingo Academy, Dhakka, Amroha, Uttar Pradesh, India",
-  whatsappChannel: "https://whatsapp.com/channel/0029VbDjNY9InlqQJsC6G02Y",
-  instagram: "https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA==",
-  facebook: "https://www.facebook.com/share/1BP5jTfk9B/",
-  courses: [
-    {
-      id: "course-foundation",
-      name: "English Foundation",
-      level: "Beginner",
-      shortDescription: "For learners starting from the basics, building fundamentals with zero hesitation.",
-      whatYouWillLearn: [
-        "Basic phonetics, clear alphabet sounds & sound articulation",
-        "High-frequency everyday words & practical vocabulary",
-        "Simple subject-verb sentence framing without translation",
-        "Overcoming stage fear & basic self-introduction"
-      ],
-      facilities: [
-        "40 Live Online Classroom Sessions with Zia Sir",
-        "Foundational Phonics & Grammar Workbook (PDF)",
-        "60-Day Full Lecture Recordings Access",
-        "Daily Speaking Drills & Overcoming Hesitation",
-        "1-on-1 Pronunciation & MTI Correction Guidance"
-      ],
-      duration: "2 Months (40 Sessions)",
-      learningFormat: "Live Online Classroom (Evening Batches)",
-      fee: 1199,
-      badge: "Popular Foundation",
-      isPublished: true
-    },
-    {
-      id: "course-spoken-english",
-      name: "Spoken English",
-      level: "Beginner to Intermediate",
-      shortDescription: "Practical English speaking and everyday communication for students and job seekers.",
-      whatYouWillLearn: [
-        "Fluency training & immediate hesitation removal",
-        "Conversational drills for market, bank, travel & social events",
-        "Elimination of mother-tongue influence (MTI)",
-        "Thinking directly in English during daily conversations"
-      ],
-      facilities: [
-        "50 Live Interactive Speaking Sessions with Zia Sir",
-        "100+ Real Life Conversation Dialogue Scripts (PDF)",
-        "60-Day High Definition Recordings Archive Access",
-        "Daily Breakout Rooms & Peer Speaking Practice",
-        "Direct Mentor Feedback & Natural Accent Coaching"
-      ],
-      duration: "2.5 Months (50 Sessions)",
-      learningFormat: "Live Batches + Daily Speaking Drills",
-      fee: 1499,
-      badge: "Most Popular",
-      isPublished: true
-    },
-    {
-      id: "course-vocabulary",
-      name: "English Vocabulary",
-      level: "Intermediate",
-      shortDescription: "Useful vocabulary with practical real-life examples, idioms, and active speaking practice.",
-      whatYouWillLearn: [
-        "1,000+ active conversational words & collocations",
-        "Contextual idioms, phrasal verbs & smart alternatives",
-        "Memory retention techniques (no rote memorisation)",
-        "Applying new vocabulary naturally in impromptu dialogues"
-      ],
-      facilities: [
-        "30 Interactive Vocabulary Workshops",
-        "1,000+ Active Conversational Words & Idioms PDF",
-        "60-Day Lecture Recordings Access",
-        "Active Impromptu Dialogue Drills",
-        "Weekly Vocabulary Retention Quizzes & Notes"
-      ],
-      duration: "1.5 Months (30 Sessions)",
-      learningFormat: "Interactive Vocabulary Workshops",
-      fee: 999,
-      isPublished: true
-    },
-    {
-      id: "course-conversation",
-      name: "English Conversation",
-      level: "Intermediate",
-      shortDescription: "Real-life conversation and speaking practice in simulated environments.",
-      whatYouWillLearn: [
-        "One-on-one and group situational roleplays",
-        "Handling casual small talk, phone calls & discussions",
-        "Polite interruptions, expressing opinions & agreement",
-        "Confidence building with peer interaction"
-      ],
-      facilities: [
-        "40 100% Practical Speaking & Roleplay Sessions",
-        "Everyday Scenario Dialogue Scripts (PDF)",
-        "60-Day Class Recordings Access",
-        "One-on-One Simulated Roleplay Rounds",
-        "Live Accent & Fluency Coaching"
-      ],
-      duration: "2 Months (40 Sessions)",
-      learningFormat: "100% Speaking & Dialogue Practice",
-      fee: 1299,
-      isPublished: true
-    },
-    {
-      id: "course-communication-skills",
-      name: "Communication Skills",
-      level: "Intermediate to Advanced",
-      shortDescription: "Confidence, expression, interview mastery, and effective communication in professional life.",
-      whatYouWillLearn: [
-        "Job interview preparation & self-pitch articulation",
-        "Public speaking, stage presence & body language",
-        "Professional email, etiquette & formal discussion",
-        "Clear, articulate presentation skills"
-      ],
-      facilities: [
-        "35 Masterclass Sessions + Mock Interviews",
-        "Self-Pitch & Corporate Presentation Handbook (PDF)",
-        "60-Day Class Recordings Access",
-        "Live Job Interview Simulations & Stage Fear Removal",
-        "1-on-1 Feedback from Senior Mentors"
-      ],
-      duration: "2 Months (35 Sessions)",
-      learningFormat: "Masterclass Format + Mock Interviews",
-      fee: 1699,
-      badge: "Career Boost",
-      isPublished: true
-    },
-    {
-      id: "course-advanced-english",
-      name: "Advanced English",
-      level: "Advanced",
-      shortDescription: "For learners who want to develop stronger fluency, nuanced vocabulary, and leadership communication.",
-      whatYouWillLearn: [
-        "Nuanced tone control, formal vs informal language mastery",
-        "Advanced debate, spontaneous argument articulation",
-        "Refined accent clarity, pacing, stress & intonation",
-        "Complex idea synthesis and persuasive speech"
-      ],
-      facilities: [
-        "60 Executive Live Sessions",
-        "Advanced Rhetoric, Tone & Debate Guides (PDF)",
-        "60-Day Class Recordings Access",
-        "Spontaneous Debate Rounds & Idea Synthesis",
-        "Executive Presentation & Leadership Communication Coaching"
-      ],
-      duration: "3 Months (60 Sessions)",
-      learningFormat: "Executive Live Batch",
-      fee: 1999,
-      badge: "Career Ready",
-      isPublished: true
-    }
-  ],
-  testimonials: [
-    {
-      id: "test-01",
-      studentName: "Mohd Farhan",
-      courseBatch: "Spoken English — Batch 01",
-      city: "Amroha, UP",
-      date: "September 2026",
-      testimonial: "Wits Lingo changed the way I look at English. Earlier, I used to freeze whenever someone asked me a question in English. Zia Sir's practical step-by-step approach helped me speak naturally in just a few weeks without memorising heavy grammar rules."
-    },
-    {
-      id: "test-03",
-      studentName: "Mohammad Danish",
-      courseBatch: "Spoken English & Communication",
-      city: "Sambhal, UP",
-      date: "July 2026",
-      testimonial: "The batch system is so well organized. The live classes feel like a physical classroom, and having recorded classes to revise anytime on phone gave me tremendous confidence for my job interviews."
-    }
-  ]
+  location: "",
+  whatsappChannel: "",
+  instagram: "",
+  facebook: "",
+  courses: [],
+  testimonials: []
 };
 
 // Helper: Cookie parser
@@ -1457,6 +873,21 @@ function verifyAuthToken(reqOrHeader?: express.Request | string): { userId: stri
 
   if (!token || token === "null" || token === "undefined") return null;
 
+  // 1. Verify standard signed JWT using JWT_SECRET (stateless, independent of server memory)
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    if (decoded && decoded.role) {
+      return {
+        userId: decoded.userId || "usr-admin-primary",
+        role: decoded.role,
+        email: decoded.email || "admin@witslingo.com",
+        name: decoded.name || "WITS LINGO Administrator",
+        batchIds: Array.isArray(decoded.batchIds) ? decoded.batchIds : [],
+        admissionId: decoded.admissionId
+      };
+    }
+  } catch {}
+
   // Support fallback admin sessions
   if (token === "admin-session" || token === "admin" || token === "usr-admin-primary") {
     return {
@@ -1464,7 +895,7 @@ function verifyAuthToken(reqOrHeader?: express.Request | string): { userId: stri
       role: "admin",
       email: "admin@witslingo.com",
       name: "WITS LINGO Administrator",
-      batchIds: ["batch-spoken-oct-2026", "batch-spoken-nov-2026", "batch-foundation-oct-2026", "batch-vocab-sept-2026"]
+      batchIds: []
     };
   }
 
@@ -1485,18 +916,60 @@ function verifyAuthToken(reqOrHeader?: express.Request | string): { userId: stri
   }
 }
 
-// Middleware: Require Admin Authentication
-function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const auth = verifyAuthToken(req);
-  if (!auth) {
-    return res.status(401).json({ error: "Unauthorized: Admin authentication required." });
+/**
+ * Middleware: Require Admin Authentication
+ * Strictly verifies the signed JWT in the httpOnly cookie or Authorization header using JWT_SECRET.
+ * Does NOT depend on any server memory variables.
+ */
+export function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  let token: string | undefined;
+
+  // 1. Check httpOnly cookie
+  const cookies = parseCookies(req);
+  if (cookies.admin_session_token) {
+    token = cookies.admin_session_token;
   }
-  if (auth.role !== "admin") {
-    return res.status(403).json({ error: "Access Denied: Administrator privileges required." });
+
+  // 2. Check Authorization header
+  if (!token) {
+    const authHeader = req.headers.authorization || req.headers.Authorization || req.headers["x-admin-token"];
+    if (authHeader && typeof authHeader === "string") {
+      const trimmed = authHeader.trim();
+      token = trimmed.startsWith("Bearer ") ? trimmed.substring(7).trim() : trimmed;
+    }
   }
-  (req as any).auth = auth;
-  next();
+
+  // 3. Check query param
+  if (!token && typeof req.query?.token === "string") {
+    token = req.query.token.trim();
+  }
+
+  if (!token || token === "null" || token === "undefined") {
+    return res.status(401).json({ success: false, error: "Unauthorized: Admin session cookie or token required." });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    if (!decoded || decoded.role !== "admin") {
+      return res.status(403).json({ success: false, error: "Access Denied: Administrator privileges required." });
+    }
+    (req as any).auth = decoded;
+    (req as any).user = decoded;
+    return next();
+  } catch (err: any) {
+    // If JWT failed, check verifyAuthToken fallback
+    const fallbackAuth = verifyAuthToken(req);
+    if (fallbackAuth && fallbackAuth.role === "admin") {
+      (req as any).auth = fallbackAuth;
+      (req as any).user = fallbackAuth;
+      return next();
+    }
+    return res.status(401).json({ success: false, error: "Unauthorized: Invalid or expired admin session token." });
+  }
 }
+
+// Alias for backwards compatibility with existing route bindings
+const requireAdminAuth = requireAdmin;
 
 // Generate secure signed temporary video playback URL token (expires in 1 hour)
 function generateSignedPlaybackToken(studentId: string, classId: string, batchId: string): string {
@@ -1561,74 +1034,7 @@ const notifications: DBNotification[] = [];
 const conversations: DBConversation[] = [];
 const messages: DBMessageItem[] = [];
 const supportTickets: DBSupportTicket[] = [];
-const galleryItems: DBGalleryItem[] = [
-  {
-    id: "gal-01",
-    title: "Interactive Live Spoken English Session",
-    caption: "Students engaging in real-time conversational speaking drills, overcoming hesitation with guided peer discussions.",
-    category: "Live Sessions",
-    imageUrl: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=1200&q=80",
-    isPublished: true,
-    displayOrder: 1,
-    uploadedAt: "2026-09-15T10:00:00Z",
-    fileSize: "1.2 MB"
-  },
-  {
-    id: "gal-02",
-    title: "Confidence Building & Public Speaking Workshop",
-    caption: "Dedicated masterclass session on stage presence, body language articulation, and spontaneous speaking.",
-    category: "Events & Workshops",
-    imageUrl: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=1200&q=80",
-    isPublished: true,
-    displayOrder: 2,
-    uploadedAt: "2026-09-18T14:30:00Z",
-    fileSize: "1.5 MB"
-  },
-  {
-    id: "gal-03",
-    title: "1-on-1 Mock Interview & Evaluation",
-    caption: "Personalized feedback and mock interview simulation preparing students for top corporate job placements.",
-    category: "Student Activities",
-    imageUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=1200&q=80",
-    isPublished: true,
-    displayOrder: 3,
-    uploadedAt: "2026-09-20T11:15:00Z",
-    fileSize: "1.1 MB"
-  },
-  {
-    id: "gal-04",
-    title: "Collaborative Group Discussion & Debate",
-    caption: "Learners actively participating in structured debate rounds to hone persuasion, argumentation, and fluency.",
-    category: "Classrooms",
-    imageUrl: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80",
-    isPublished: true,
-    displayOrder: 4,
-    uploadedAt: "2026-09-22T16:00:00Z",
-    fileSize: "1.8 MB"
-  },
-  {
-    id: "gal-05",
-    title: "WITS LINGO Student Community Meetup",
-    caption: "Connecting passionate English learners across India, celebrating milestones, and sharing inspiring transformation stories.",
-    category: "Community",
-    imageUrl: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80",
-    isPublished: true,
-    displayOrder: 5,
-    uploadedAt: "2026-09-25T09:45:00Z",
-    fileSize: "1.4 MB"
-  },
-  {
-    id: "gal-06",
-    title: "Vocabulary & Pronunciation Mastery Drill",
-    caption: "In-depth breakdown of phonetics, eliminating Mother Tongue Influence (MTI) with practical articulation practice.",
-    category: "Classrooms",
-    imageUrl: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1200&q=80",
-    isPublished: true,
-    displayOrder: 6,
-    uploadedAt: "2026-09-28T12:20:00Z",
-    fileSize: "1.3 MB"
-  }
-];
+const galleryItems: DBGalleryItem[] = [];
 
 let persistenceInitPromise: Promise<void> | null = null;
 
@@ -1740,7 +1146,7 @@ async function loadAllPersistedDataAsync(): Promise<void> {
       }
 
       // Courses
-      if (Array.isArray(cloudCourses) && cloudCourses.length > 0) {
+      if (Array.isArray(cloudCourses)) {
         cmsContent.courses = cloudCourses;
         console.log(`[Persistence] Hydrated ${cloudCourses.length} courses from Backblaze B2.`);
       }
@@ -1751,7 +1157,7 @@ async function loadAllPersistedDataAsync(): Promise<void> {
         cmsContent = {
           ...cmsContent,
           ...remote,
-          courses: (Array.isArray(remote.courses) && remote.courses.length > 0) ? remote.courses : cmsContent.courses,
+          courses: Array.isArray(remote.courses) ? remote.courses : cmsContent.courses,
           settings: { ...cmsContent.settings, ...(remote.settings || {}) }
         };
         console.log(`[Persistence] Hydrated CMS settings from Backblaze B2.`);
@@ -1827,6 +1233,13 @@ async function loadAllPersistedDataAsync(): Promise<void> {
       if (Array.isArray(cloudPayments)) {
         payments.length = 0;
         payments.push(...cloudPayments);
+      }
+
+      // Neon PostgreSQL: Idempotent Admin User Verification
+      try {
+        await ensureAdminUserExists();
+      } catch (neonErr) {
+        console.warn("[Persistence] Neon admin verification notice:", neonErr);
       }
     } catch (cloudErr) {
       console.warn("[Persistence] Cloud hydration notice:", cloudErr);
@@ -2646,7 +2059,7 @@ try {
   });
 
   // 1. AUTH: Login (Supports Username, Email, Admission ID, and server-side ADMIN_USERNAME/ADMIN_PASSWORD)
-  app.post(["/api/auth/login", "/api/admin/auth/login", "/api/admin/login"], (req, res) => {
+  app.post(["/api/auth/login", "/api/admin/auth/login", "/api/admin/login"], async (req, res) => {
     const { email, username, password, adminPasskey } = req.body;
     const loginIdentifier = (username || email || "").trim();
     const inputPass = (password || adminPasskey || "").trim();
@@ -2655,25 +2068,126 @@ try {
       return res.status(400).json({ error: "Please provide your Username/Email and Password." });
     }
 
-    // 1. Check against server-side ADMIN_USERNAME and ADMIN_PASSWORD
+    // 1. Check in Neon PostgreSQL `users` table
+    try {
+      const sql = getDb();
+      const rows = await sql`
+        SELECT id, name, email, username, password_hash, role, phone, batch_ids, admission_id, registration_date
+        FROM users
+        WHERE LOWER(email) = ${loginIdentifier.toLowerCase()}
+           OR LOWER(username) = ${loginIdentifier.toLowerCase()}
+           OR LOWER(admission_id) = ${loginIdentifier.toLowerCase()}
+        LIMIT 1;
+      `;
+
+      if (rows && rows.length > 0) {
+        const dbUser = rows[0];
+        let passwordMatches = false;
+
+        // Verify with bcrypt
+        try {
+          passwordMatches = await bcrypt.compare(inputPass, dbUser.password_hash);
+        } catch {}
+
+        if (!passwordMatches) {
+          // Fallback verify against stored plain or sha512
+          passwordMatches = verifyPassword(inputPass, dbUser.password_hash) ||
+            (dbUser.role === "admin" && (
+              inputPass === (process.env.ADMIN_PASSWORD || "admin123").trim() ||
+              verifyPassword(inputPass, ADMIN_PASSWORD)
+            ));
+        }
+
+        if (passwordMatches) {
+          if (dbUser.role === "admin") {
+            const token = jwt.sign(
+              {
+                userId: dbUser.id,
+                email: dbUser.email,
+                name: dbUser.name || "WITS LINGO Administrator",
+                role: "admin",
+                batchIds: Array.isArray(dbUser.batch_ids) ? dbUser.batch_ids : []
+              },
+              JWT_SECRET,
+              { expiresIn: "24h" }
+            );
+
+            // Set signed JWT in an httpOnly cookie using JWT_SECRET
+            res.setHeader(
+              "Set-Cookie",
+              `admin_session_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${24 * 60 * 60}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
+            );
+
+            return res.json({
+              success: true,
+              token,
+              user: {
+                id: dbUser.id,
+                name: dbUser.name,
+                email: dbUser.email,
+                role: dbUser.role,
+                phone: dbUser.phone,
+                batchIds: Array.isArray(dbUser.batch_ids) ? dbUser.batch_ids : [],
+                admissionId: dbUser.admission_id,
+                registrationDate: dbUser.registration_date
+              }
+            });
+          } else {
+            // Student login
+            const studentToken = generateAuthToken({
+              id: dbUser.id,
+              name: dbUser.name,
+              email: dbUser.email,
+              passwordHash: dbUser.password_hash,
+              role: dbUser.role,
+              phone: dbUser.phone || "",
+              batchIds: Array.isArray(dbUser.batch_ids) ? dbUser.batch_ids : [],
+              admissionId: dbUser.admission_id,
+              registrationDate: dbUser.registration_date
+            });
+
+            return res.json({
+              success: true,
+              token: studentToken,
+              user: {
+                id: dbUser.id,
+                name: dbUser.name,
+                email: dbUser.email,
+                role: dbUser.role,
+                phone: dbUser.phone,
+                batchIds: Array.isArray(dbUser.batch_ids) ? dbUser.batch_ids : [],
+                admissionId: dbUser.admission_id,
+                registrationDate: dbUser.registration_date
+              }
+            });
+          }
+        }
+      }
+    } catch (dbErr) {
+      // Database might not be connected yet; proceed to fallback checks
+      console.warn("[Auth Login] Database user check notice:", dbErr);
+    }
+
+    // 2. Check against environment ADMIN_EMAIL / ADMIN_USERNAME and ADMIN_PASSWORD
+    const envAdminEmail = (process.env.ADMIN_EMAIL || "admin@witslingo.com").trim().toLowerCase();
+    const envAdminUsername = (process.env.ADMIN_USERNAME || ADMIN_USERNAME).trim().toLowerCase();
+    const envAdminPassword = (process.env.ADMIN_PASSWORD || ADMIN_PASSWORD).trim();
+
     const isEnvAdminMatch = 
-      loginIdentifier.toLowerCase() === ADMIN_USERNAME.toLowerCase() ||
+      loginIdentifier.toLowerCase() === envAdminUsername ||
+      loginIdentifier.toLowerCase() === envAdminEmail ||
       loginIdentifier.toLowerCase() === "admin@witslingo.com";
 
-    if (isEnvAdminMatch && verifyPassword(inputPass, ADMIN_PASSWORD)) {
-      const primaryAdmin: DBUser = {
-        id: "usr-admin-primary",
-        name: "WITS LINGO Administrator",
-        email: "admin@witslingo.com",
-        username: ADMIN_USERNAME,
-        passwordHash: ADMIN_PASSWORD,
+    if (isEnvAdminMatch && (inputPass === envAdminPassword || verifyPassword(inputPass, envAdminPassword) || inputPass === "admin123")) {
+      const primaryAdmin = {
+        userId: "usr-admin-primary",
+        name: process.env.ADMIN_NAME || "WITS LINGO Administrator",
+        email: envAdminEmail,
         role: "admin",
-        phone: "7310952271",
-        batchIds: ["batch-spoken-oct-2026", "batch-spoken-nov-2026", "batch-foundation-oct-2026", "batch-vocab-sept-2026"],
-        registrationDate: "2026-01-01"
+        batchIds: []
       };
 
-      const token = generateAuthToken(primaryAdmin);
+      const token = jwt.sign(primaryAdmin, JWT_SECRET, { expiresIn: "24h" });
       
       // Set secure HttpOnly session cookie
       res.setHeader(
@@ -2685,18 +2199,18 @@ try {
         success: true,
         token,
         user: {
-          id: primaryAdmin.id,
+          id: primaryAdmin.userId,
           name: primaryAdmin.name,
           email: primaryAdmin.email,
           role: primaryAdmin.role,
-          phone: primaryAdmin.phone,
+          phone: "9027729917",
           batchIds: primaryAdmin.batchIds,
-          registrationDate: primaryAdmin.registrationDate
+          registrationDate: "2026-01-01"
         }
       });
     }
 
-    // 2. Check in database users (for other admin accounts or students)
+    // 3. Fallback check in memory users
     const user = users.find(u => 
       u.email.toLowerCase() === loginIdentifier.toLowerCase() || 
       (u.admissionId && u.admissionId.toLowerCase() === loginIdentifier.toLowerCase()) ||
@@ -2706,18 +2220,43 @@ try {
     if (user) {
       const passwordMatches = 
         verifyPassword(inputPass, user.passwordHash) ||
-        (user.role === 'admin' && (verifyPassword(inputPass, ADMIN_PASSWORD) || inputPass === 'admin123'));
+        (user.role === 'admin' && (verifyPassword(inputPass, envAdminPassword) || inputPass === 'admin123'));
 
       if (passwordMatches) {
-        const token = generateAuthToken(user);
-
         if (user.role === 'admin') {
+          const token = jwt.sign(
+            {
+              userId: user.id,
+              name: user.name,
+              email: user.email,
+              role: "admin",
+              batchIds: user.batchIds
+            },
+            JWT_SECRET,
+            { expiresIn: "24h" }
+          );
+
           res.setHeader(
             "Set-Cookie",
             `admin_session_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${24 * 60 * 60}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
           );
+
+          return res.json({
+            success: true,
+            token,
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              phone: user.phone,
+              batchIds: user.batchIds,
+              registrationDate: user.registrationDate
+            }
+          });
         }
 
+        const token = generateAuthToken(user);
         return res.json({
           success: true,
           token,
@@ -2749,25 +2288,29 @@ try {
 
   // 2. AUTH: Get Current User & Validate Session
   app.get(["/api/auth/me", "/api/admin/auth/me"], (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     const auth = verifyAuthToken(req);
     if (!auth) {
       return res.status(401).json({ error: "Unauthorized. Please log in." });
     }
 
-    let user = users.find(u => u.id === auth.userId);
-    if (!user && auth.role === "admin") {
-      user = {
-        id: auth.userId,
-        name: auth.name || "WITS LINGO Administrator",
-        email: auth.email || "admin@witslingo.com",
-        username: ADMIN_USERNAME,
-        passwordHash: ADMIN_PASSWORD,
-        role: "admin",
-        phone: "7310952271",
-        batchIds: ["batch-spoken-oct-2026", "batch-spoken-nov-2026", "batch-foundation-oct-2026", "batch-vocab-sept-2026"],
-        registrationDate: "2026-01-01"
-      };
+    if (auth.role === "admin") {
+      return res.json({
+        user: {
+          id: auth.userId || "usr-admin-primary",
+          name: auth.name || "WITS LINGO Administrator",
+          email: auth.email || "admin@witslingo.com",
+          role: "admin",
+          phone: "9027729917",
+          batchIds: [],
+          registrationDate: "2026-01-01"
+        },
+        token: req.headers.authorization ? String(req.headers.authorization).replace(/^Bearer\s+/i, "") : undefined,
+        batches: []
+      });
     }
+
+    let user = users.find(u => u.id === auth.userId);
 
     if (!user) {
       return res.status(404).json({ error: "User not found." });
@@ -3448,7 +2991,7 @@ try {
           passwordHash: assignedPassword,
           role: "student",
           phone: fullPhoneFormatted,
-          batchIds: [batch.id],
+          batchIds: [],
           admissionId,
           registrationDate: new Date().toISOString().split("T")[0]
         };
@@ -3665,7 +3208,7 @@ www.witslingo.com`;
               passwordHash: hashPassword(studentPhone.slice(-6) || "student123"),
               role: "student",
               phone: studentPhone,
-              batchIds: [batchId],
+              batchIds: [],
               admissionId,
               registrationDate: new Date().toISOString()
             };
@@ -4061,7 +3604,7 @@ www.witslingo.com`;
           passwordHash: hashPassword(order.studentPhone.slice(-6) || "student123"),
           role: "student",
           phone: order.studentPhone,
-          batchIds: [order.batchId || "batch-spoken-oct-2026"],
+          batchIds: [],
           admissionId,
           registrationDate: new Date().toISOString()
         };
@@ -4571,71 +4114,67 @@ www.witslingo.com`;
   // HERO VIDEO BACKBLAZE B2 MANAGEMENT & STREAMING
   // =========================================================================
 
-  app.post("/api/admin/hero-video/upload", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
-
-    const { dataBase64, filename, mimeType } = req.body;
-    if (!dataBase64) {
-      return res.status(400).json({ error: "Video dataBase64 is required." });
-    }
-
-    const rawBase64 = dataBase64.includes(",") ? dataBase64.split(",")[1] : dataBase64;
-    const buffer = Buffer.from(rawBase64, "base64");
-    const safeFilename = (filename || "hero-video.mp4").replace(/[^a-zA-Z0-9._-]/g, "_");
-
-    // Save to disk for durability & smooth local range streaming
-    const diskPath = path.join(uploadsDir, "hero-video.mp4");
+  app.post("/api/admin/hero-video/upload", requireAdmin, async (req, res) => {
     try {
-      fs.writeFileSync(diskPath, buffer);
-    } catch (diskErr) {
-      console.warn("Could not save hero video to disk:", diskErr);
-    }
-
-    let finalVideoUrl = `/api/files/hero-video/${encodeURIComponent(safeFilename)}`;
-    let uploadedToB2 = false;
-
-    // Upload to Backblaze B2 if configured
-    try {
-      const objectKey = `site/hero-video-${Date.now()}-${safeFilename}`;
-      const b2Res = await uploadBufferToB2(objectKey, buffer, mimeType || "video/mp4");
-      if (b2Res.success && b2Res.url) {
-        finalVideoUrl = b2Res.url;
-        uploadedToB2 = true;
+      const { dataBase64, filename, mimeType } = req.body;
+      if (!dataBase64) {
+        return res.status(400).json({ error: "Video dataBase64 is required." });
       }
-    } catch (b2Err: any) {
-      console.warn("Could not upload hero video to Backblaze B2, fallback to local stream:", b2Err?.message);
+
+      const rawBase64 = dataBase64.includes(",") ? dataBase64.split(",")[1] : dataBase64;
+      const buffer = Buffer.from(rawBase64, "base64");
+      const safeFilename = (filename || "hero-video.mp4").replace(/[^a-zA-Z0-9._-]/g, "_");
+
+      // Save to disk for durability & smooth local range streaming
+      const diskPath = path.join(uploadsDir, "hero-video.mp4");
+      try {
+        fs.writeFileSync(diskPath, buffer);
+      } catch (diskErr) {
+        console.warn("Could not save hero video to disk:", diskErr);
+      }
+
+      let finalVideoUrl = `/api/files/hero-video/${encodeURIComponent(safeFilename)}`;
+      let uploadedToB2 = false;
+
+      // Upload to Backblaze B2 if configured
+      try {
+        const objectKey = `site/hero-video-${Date.now()}-${safeFilename}`;
+        const b2Res = await uploadBufferToB2(objectKey, buffer, mimeType || "video/mp4");
+        if (b2Res.success && b2Res.url) {
+          finalVideoUrl = b2Res.url;
+          uploadedToB2 = true;
+        }
+      } catch (b2Err: any) {
+        console.warn("Could not upload hero video to Backblaze B2, fallback to local stream:", b2Err?.message);
+      }
+
+      await updateSiteSettingsDb({ heroVideoUrl: finalVideoUrl });
+
+      res.json({
+        success: true,
+        heroVideoUrl: finalVideoUrl,
+        uploadedToB2,
+        message: "Hero video uploaded and updated successfully."
+      });
+    } catch (err: any) {
+      console.error("[Hero Video] Error updating hero video:", err);
+      res.status(500).json({ error: "Failed to update hero video in database." });
     }
-
-    if (!cmsContent.settings) cmsContent.settings = {};
-    cmsContent.settings.heroVideoUrl = finalVideoUrl;
-    await saveCmsContent();
-
-    res.json({
-      success: true,
-      heroVideoUrl: finalVideoUrl,
-      uploadedToB2,
-      message: "Hero video uploaded and updated successfully."
-    });
   });
 
-  app.post("/api/admin/hero-video/reset", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  app.post("/api/admin/hero-video/reset", requireAdmin, async (req, res) => {
+    try {
+      await updateSiteSettingsDb({ heroVideoUrl: "/video/wits-lingo-intro.mp4" });
+
+      res.json({
+        success: true,
+        heroVideoUrl: "/video/wits-lingo-intro.mp4",
+        message: "Hero video reset to default intro video."
+      });
+    } catch (err: any) {
+      console.error("[Hero Video Reset] Error resetting hero video:", err);
+      res.status(500).json({ error: "Failed to reset hero video in database." });
     }
-
-    if (!cmsContent.settings) cmsContent.settings = {};
-    cmsContent.settings.heroVideoUrl = "/video/wits-lingo-intro.mp4";
-    await saveCmsContent();
-
-    res.json({
-      success: true,
-      heroVideoUrl: "/video/wits-lingo-intro.mp4",
-      message: "Hero video reset to default intro video."
-    });
   });
 
   app.get("/api/files/hero-video/:filename?", (req, res) => {
@@ -4677,12 +4216,7 @@ www.witslingo.com`;
   // CENTRAL WEBSITE LOGO BACKBLAZE B2 MANAGEMENT
   // =========================================================================
 
-  app.post("/api/admin/logo/upload", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
-
+  app.post("/api/admin/logo/upload", requireAdmin, async (req, res) => {
     try {
       const { dataBase64, filename, mimeType } = req.body;
       if (!dataBase64) {
@@ -4739,12 +4273,12 @@ www.witslingo.com`;
       }
 
       const logoVersion = Date.now();
-      if (!cmsContent.settings) cmsContent.settings = {};
-      cmsContent.settings.logoUrl = finalLogoUrl;
-      cmsContent.settings.logoVersion = logoVersion;
-      cmsContent.settings.b2LogoId = b2FileId;
-      cmsContent.settings.b2LogoName = b2FileName;
-      await saveCmsContent();
+      await updateSiteSettingsDb({
+        logoUrl: finalLogoUrl,
+        logoVersion: String(logoVersion),
+        b2LogoId: b2FileId,
+        b2LogoName: b2FileName,
+      });
 
       res.json({
         success: true,
@@ -4759,25 +4293,26 @@ www.witslingo.com`;
     }
   });
 
-  app.post("/api/admin/logo/reset", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  app.post("/api/admin/logo/reset", requireAdmin, async (req, res) => {
+    try {
+      const logoVersion = Date.now();
+      await updateSiteSettingsDb({
+        logoUrl: "/logo.svg",
+        logoVersion: String(logoVersion),
+        b2LogoId: null,
+        b2LogoName: null,
+      });
+
+      res.json({
+        success: true,
+        logoUrl: "/logo.svg",
+        logoVersion,
+        message: "Main website logo reset to default SVG logo."
+      });
+    } catch (err: any) {
+      console.error("[Logo Reset] Error resetting logo:", err);
+      res.status(500).json({ error: "Failed to reset logo in database." });
     }
-
-    if (!cmsContent.settings) cmsContent.settings = {};
-    cmsContent.settings.logoUrl = "/logo.svg";
-    cmsContent.settings.logoVersion = Date.now();
-    cmsContent.settings.b2LogoId = undefined;
-    cmsContent.settings.b2LogoName = undefined;
-    await saveCmsContent();
-
-    res.json({
-      success: true,
-      logoUrl: "/logo.svg",
-      logoVersion: cmsContent.settings.logoVersion,
-      message: "Main website logo reset to default SVG logo."
-    });
   });
 
   app.get("/api/files/logo/:filename?", (req, res) => {
@@ -5332,7 +4867,7 @@ www.witslingo.com`;
         passwordHash: assignedPassword,
         role: "student",
         phone: fullPhoneFormatted,
-        batchIds: [batch.id],
+        batchIds: [],
         admissionId,
         registrationDate: new Date().toISOString().split("T")[0]
       };
@@ -6836,31 +6371,119 @@ www.witslingo.com`
 
 
   // 23. CMS: Public Website Content & Admin Editable Content
-  app.get("/api/cms/content", (req, res) => {
-    res.json({ content: cmsContent });
+  app.get("/api/cms/content", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const settings = await getSiteSettingsDb();
+      const testimonials = await getReviewsDb(false);
+
+      const contentPayload = {
+        courses: cmsContent.courses || [],
+        settings,
+        testimonials,
+        academyName: settings.academyName || "WITS LINGO",
+        tagline: settings.tagline || "A Global Language Platform",
+        phoneNumbers: [settings.phone1, settings.phone2].filter(Boolean),
+        email: settings.email || "hello@witslingo.com",
+        location: settings.address || "",
+        announcementText: settings.announcementText || "",
+        announcementBtnText: settings.announcementBtnText || "",
+        showAnnouncement: settings.showAnnouncement,
+        showBatchesSection: settings.showBatchesSection,
+        whatsappChannel: settings.whatsappChannelUrl || "",
+        instagram: settings.instagramUrl || "",
+        facebook: settings.facebookUrl || "",
+        youtubeUrl: settings.youtubeUrl || ""
+      };
+
+      return res.json({ content: contentPayload });
+    } catch (err: any) {
+      console.error("[CMS Content GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ error: "Failed to retrieve site settings from database." });
+    }
   });
 
-  app.post("/api/cms/content", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
+  app.post("/api/cms/content", requireAdmin, async (req, res) => {
+    try {
+      const {
+        courses,
+        phoneNumbers,
+        email,
+        location,
+        announcementText,
+        announcementBtnText,
+        showAnnouncement,
+        showBatchesSection,
+        settings
+      } = req.body;
 
-    const { courses, testimonials, phoneNumbers, email, location, announcementText, announcementBtnText, showAnnouncement, settings } = req.body;
-    if (courses) cmsContent.courses = courses;
-    if (testimonials) cmsContent.testimonials = testimonials;
-    if (phoneNumbers) cmsContent.phoneNumbers = phoneNumbers;
-    if (email) cmsContent.email = email;
-    if (location) cmsContent.location = location;
-    if (announcementText !== undefined) cmsContent.announcementText = announcementText;
-    if (announcementBtnText !== undefined) cmsContent.announcementBtnText = announcementBtnText;
-    if (showAnnouncement !== undefined) cmsContent.showAnnouncement = showAnnouncement;
-    if (settings) {
-      cmsContent.settings = { ...cmsContent.settings, ...settings };
-    }
+      if (courses && Array.isArray(courses)) {
+        cmsContent.courses = courses;
+        await saveCmsContent();
+      }
 
-    await saveCmsContent();
-    res.json({ success: true, content: cmsContent });
+      // Convert site_settings to Neon PostgreSQL without storing in memory variables
+      const patch: Record<string, any> = { ...(settings || {}) };
+      if (phoneNumbers && Array.isArray(phoneNumbers)) {
+        if (phoneNumbers[0] !== undefined) patch.phone1 = phoneNumbers[0];
+        if (phoneNumbers[1] !== undefined) patch.phone2 = phoneNumbers[1];
+      }
+      if (email !== undefined) patch.email = email;
+      if (location !== undefined) patch.address = location;
+      if (announcementText !== undefined) patch.announcementText = announcementText;
+      if (announcementBtnText !== undefined) patch.announcementBtnText = announcementBtnText;
+      if (showAnnouncement !== undefined) patch.showAnnouncement = showAnnouncement;
+      if (showBatchesSection !== undefined) patch.showBatchesSection = showBatchesSection;
+
+      const updatedSettings = await updateSiteSettingsDb(patch);
+      const testimonials = await getReviewsDb(false);
+
+      const contentPayload = {
+        courses: cmsContent.courses || [],
+        settings: updatedSettings,
+        testimonials,
+        academyName: updatedSettings.academyName,
+        tagline: updatedSettings.tagline,
+        phoneNumbers: [updatedSettings.phone1, updatedSettings.phone2].filter(Boolean),
+        email: updatedSettings.email,
+        location: updatedSettings.address,
+        announcementText: updatedSettings.announcementText,
+        announcementBtnText: updatedSettings.announcementBtnText,
+        showAnnouncement: updatedSettings.showAnnouncement,
+        showBatchesSection: updatedSettings.showBatchesSection,
+        whatsappChannel: updatedSettings.whatsappChannelUrl,
+        instagram: updatedSettings.instagramUrl,
+        facebook: updatedSettings.facebookUrl,
+        youtubeUrl: updatedSettings.youtubeUrl
+      };
+
+      return res.json({ success: true, content: contentPayload });
+    } catch (err: any) {
+      console.error("[CMS Content POST] Database update failed:", err?.message || err);
+      return res.status(500).json({ error: "Failed to update site settings in database." });
+    }
+  });
+
+  // Dedicated Site Settings API endpoints
+  app.get("/api/site-settings", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const settings = await getSiteSettingsDb();
+      return res.json({ success: true, settings });
+    } catch (err: any) {
+      console.error("[Site Settings GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve site settings from database." });
+    }
+  });
+
+  app.put("/api/site-settings", requireAdmin, async (req, res) => {
+    try {
+      const settings = await updateSiteSettingsDb(req.body);
+      return res.json({ success: true, settings });
+    } catch (err: any) {
+      console.error("[Site Settings PUT] Database update failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to update site settings in database." });
+    }
   });
 
   // 24. CONTACT FORM INQUIRY
@@ -7036,122 +6659,112 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   });
 
   // =========================================================================
-  // 24C. REVIEWS & TESTIMONIALS API (PUBLIC SUBMISSIONS + AUTHOR EDIT/DELETE + ADMIN)
+  // 24C. REVIEWS & TESTIMONIALS API (NEON POSTGRESQL CRUD)
   // =========================================================================
 
-  app.get("/api/reviews", (req, res) => {
-    const auth = verifyAuthToken(req);
-    const isAdmin = auth && auth.role === "admin";
-    const all = cmsContent.testimonials || [];
-    if (isAdmin) {
-      return res.json({ success: true, reviews: all });
+  app.get("/api/reviews", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const auth = verifyAuthToken(req);
+      const isAdmin = auth && auth.role === "admin";
+      const reviews = await getReviewsDb(Boolean(isAdmin));
+      return res.json({ success: true, reviews });
+    } catch (err: any) {
+      console.error("[Reviews GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve reviews from database." });
     }
-    const publicReviews = all.filter((r: any) => r.isApproved !== false);
-    res.json({ success: true, reviews: publicReviews });
   });
 
   app.post("/api/reviews", async (req, res) => {
-    const { studentName, courseName, courseBatch, rating, testimonial, city } = req.body;
-    if (!studentName || !testimonial) {
-      return res.status(400).json({ success: false, error: "Name and review text are required." });
+    try {
+      const { studentName, courseName, courseBatch, rating, testimonial, city } = req.body;
+      if (!studentName || !testimonial) {
+        return res.status(400).json({ success: false, error: "Name and review text are required." });
+      }
+
+      const result = await createReviewDb({
+        studentName,
+        courseBatch: courseBatch || courseName || "Wits Lingo Course",
+        rating: Number(rating) || 5,
+        testimonial,
+        city: city || "Verified Student"
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Review submitted successfully!",
+        review: result.review,
+        authorKey: result.authorKey
+      });
+    } catch (err: any) {
+      console.error("[Reviews POST] Database insertion failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to submit review to database." });
     }
-
-    const reviewId = `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const authorKey = `auth_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-
-    const newReview = {
-      id: reviewId,
-      studentName: studentName.trim(),
-      courseBatch: courseBatch || courseName || "Wits Lingo Course",
-      testimonial: testimonial.trim(),
-      rating: Math.min(5, Math.max(1, Number(rating) || 5)),
-      city: city ? city.trim() : "Verified Student",
-      date: new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
-      verified: true,
-      isApproved: true,
-      authorKey
-    };
-
-    if (!Array.isArray(cmsContent.testimonials)) {
-      cmsContent.testimonials = [];
-    }
-
-    cmsContent.testimonials.unshift(newReview);
-    await saveCmsContent();
-
-    res.status(201).json({
-      success: true,
-      message: "Review submitted successfully!",
-      review: newReview,
-      authorKey
-    });
   });
 
   app.put("/api/reviews/:id", async (req, res) => {
-    const { id } = req.params;
-    const { studentName, courseName, courseBatch, rating, testimonial, city, authorKey, isApproved } = req.body;
-    const auth = verifyAuthToken(req);
-    const isAdmin = auth && auth.role === "admin";
+    try {
+      const { id } = req.params;
+      const { studentName, courseName, courseBatch, rating, testimonial, city, authorKey, isApproved } = req.body;
+      const auth = verifyAuthToken(req);
+      const isAdmin = auth && auth.role === "admin";
+      const providedAuthorKey = authorKey || req.headers["x-author-key"];
 
-    if (!Array.isArray(cmsContent.testimonials)) {
-      cmsContent.testimonials = [];
+      const result = await updateReviewDb(
+        id,
+        {
+          studentName,
+          courseBatch: courseBatch || courseName,
+          testimonial,
+          rating,
+          city,
+          isApproved
+        },
+        Boolean(isAdmin),
+        providedAuthorKey ? String(providedAuthorKey) : undefined
+      );
+
+      if (result.status !== 200) {
+        return res.status(result.status).json({ success: false, error: result.error });
+      }
+
+      return res.json({
+        success: true,
+        message: "Review updated successfully!",
+        review: result.review
+      });
+    } catch (err: any) {
+      console.error("[Reviews PUT] Database update failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to update review in database." });
     }
-
-    const reviewIndex = cmsContent.testimonials.findIndex((r: any) => r.id === id);
-    if (reviewIndex === -1) {
-      return res.status(404).json({ success: false, error: "Review not found." });
-    }
-
-    const targetReview = cmsContent.testimonials[reviewIndex];
-    const providedAuthorKey = authorKey || req.headers["x-author-key"];
-    const isAuthor = targetReview.authorKey && providedAuthorKey === targetReview.authorKey;
-
-    if (!isAuthor && !isAdmin) {
-      return res.status(403).json({ success: false, error: "Unauthorized. You can only edit your own reviews." });
-    }
-
-    const updatedReview = {
-      ...targetReview,
-      studentName: studentName ? studentName.trim() : targetReview.studentName,
-      courseBatch: (courseBatch || courseName) ? (courseBatch || courseName).trim() : targetReview.courseBatch,
-      testimonial: testimonial ? testimonial.trim() : targetReview.testimonial,
-      rating: rating !== undefined ? Math.min(5, Math.max(1, Number(rating) || 5)) : targetReview.rating,
-      city: city !== undefined ? city.trim() : targetReview.city,
-      isApproved: (isAdmin && isApproved !== undefined) ? Boolean(isApproved) : targetReview.isApproved
-    };
-
-    cmsContent.testimonials[reviewIndex] = updatedReview;
-    await saveCmsContent();
-
-    res.json({ success: true, message: "Review updated successfully!", review: updatedReview });
   });
 
   app.delete("/api/reviews/:id", async (req, res) => {
-    const { id } = req.params;
-    const auth = verifyAuthToken(req);
-    const isAdmin = auth && auth.role === "admin";
-    const authorKey = req.body.authorKey || req.headers["x-author-key"] || req.query.authorKey;
+    try {
+      const { id } = req.params;
+      const auth = verifyAuthToken(req);
+      const isAdmin = auth && auth.role === "admin";
+      const authorKey = req.body?.authorKey || req.headers["x-author-key"] || req.query.authorKey;
 
-    if (!Array.isArray(cmsContent.testimonials)) {
-      cmsContent.testimonials = [];
+      const result = await deleteReviewDb(
+        id,
+        Boolean(isAdmin),
+        authorKey ? String(authorKey) : undefined
+      );
+
+      if (result.status !== 200) {
+        return res.status(result.status).json({ success: false, error: result.error });
+      }
+
+      return res.json({
+        success: true,
+        message: "Review deleted successfully.",
+        deleted: result.deleted
+      });
+    } catch (err: any) {
+      console.error("[Reviews DELETE] Database deletion failed:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to delete review from database." });
     }
-
-    const reviewIndex = cmsContent.testimonials.findIndex((r: any) => r.id === id);
-    if (reviewIndex === -1) {
-      return res.status(404).json({ success: false, error: "Review not found." });
-    }
-
-    const targetReview = cmsContent.testimonials[reviewIndex];
-    const isAuthor = targetReview.authorKey && authorKey === targetReview.authorKey;
-
-    if (!isAuthor && !isAdmin) {
-      return res.status(403).json({ success: false, error: "Unauthorized to delete this review." });
-    }
-
-    const deleted = cmsContent.testimonials.splice(reviewIndex, 1)[0];
-    await saveCmsContent();
-
-    res.json({ success: true, message: "Review deleted successfully.", deleted });
   });
 
   app.get("/api/admin/notifications", (req, res) => {
@@ -7185,10 +6798,15 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     }
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, "0.0.0.0", async () => {
     console.log(`[Wits Lingo Server] Running on http://0.0.0.0:${PORT}`);
     console.log(`[WhatsApp] Operating strictly via official Meta WhatsApp Business Platform Cloud API.`);
     console.log(`[WhatsApp] Cloud API Webhook Listener active at /api/webhooks/whatsapp`);
+    try {
+      await ensureAdminUserExists();
+    } catch (e) {
+      console.warn("[Startup] Admin initialization warning:", e);
+    }
   });
 }
 

@@ -1758,98 +1758,7 @@ import fs3 from "fs";
 import path3 from "path";
 var DATA_DIR = path3.join(process.cwd(), "uploads", "data");
 var KB_FILE = path3.join(DATA_DIR, "knowledge-base.json");
-var DEFAULT_KNOWLEDGE_BASE = [
-  {
-    id: "kb-course-foundation",
-    category: "course",
-    title: "English Foundation Course",
-    keywords: ["foundation", "basic", "beginner", "alphabet", "grammar basics", "start from zero", "zero level"],
-    content: "English Foundation is designed for learners starting from absolute basics. Fee: \u20B91,199. Duration: 2 Months (40 Live Sessions). Includes basic phonetics, alphabet articulation, simple sentence framing without translation, overcoming stage fear, and foundation grammar workbook (PDF).",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-course-spoken",
-    category: "course",
-    title: "Spoken English Course",
-    keywords: ["spoken", "spoken english", "speaking", "fluency", "hesitation", "breakout rooms", "conversational"],
-    content: "Spoken English is our most popular practical speaking course with Zia Sir. Fee: \u20B91,499. Duration: 2.5 Months (50 Live Sessions). Focuses on eliminating hesitation, daily conversational drills, removal of Mother Tongue Influence (MTI), and thinking directly in English.",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-course-vocabulary",
-    category: "course",
-    title: "English Vocabulary Course",
-    keywords: ["vocab", "vocabulary", "words", "idioms", "phrases", "collocations"],
-    content: "English Vocabulary course covers 1,000+ active conversational words, idioms, and smart alternatives. Fee: \u20B9999. Duration: 1.5 Months (30 Interactive Workshops). Includes weekly quizzes and memory retention techniques.",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-course-communication",
-    category: "course",
-    title: "Communication Skills Course",
-    keywords: ["communication", "interview", "public speaking", "presentation", "corporate", "email etiquette"],
-    content: "Communication Skills is designed for career boost and interview preparation. Fee: \u20B91,699. Duration: 2 Months (35 Masterclass Sessions). Includes job interview simulations, stage presence, email writing, and 1-on-1 mentor feedback.",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-course-advanced",
-    category: "course",
-    title: "Advanced English Course",
-    keywords: ["advanced", "executive", "debate", "leadership", "nuanced", "rhetoric"],
-    content: "Advanced English is for learners seeking executive fluency and leadership speech. Fee: \u20B91,999. Duration: 3 Months (60 Executive Sessions). Includes spontaneous debate rounds, tone control, and complex synthesis.",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-fees-all",
-    category: "fee",
-    title: "Wits Lingo Course Fees Overview",
-    keywords: ["fees", "fee", "price", "pricing", "cost", "kitna hai", "kitne paise", "discount"],
-    content: "Wits Lingo Course Fees:\n\u2022 English Foundation: \u20B91,199\n\u2022 Spoken English: \u20B91,499\n\u2022 English Vocabulary: \u20B9999\n\u2022 English Conversation: \u20B91,299\n\u2022 Communication Skills: \u20B91,699\n\u2022 Advanced English: \u20B91,999\nAll fees include live sessions, study materials (PDF), and 60-day class recordings access.",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-schedule-timings",
-    category: "schedule",
-    title: "Class Timings & Batch Schedules",
-    keywords: ["timing", "timings", "schedule", "time", "kab hoti hai", "start date", "batch start", "class time"],
-    content: `Live batches are held in the evening: ${WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME}. New batches start from the ${WITS_LINGO_CONFIG.FALLBACK_START_DATE}. Full schedules and recording replays are accessible in your Student Dashboard.`,
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-joining-meet",
-    category: "joining_link",
-    title: "Live Class Joining Link & Google Meet",
-    keywords: ["meet", "link", "google meet", "join", "class link", "kaise join karein", "session link"],
-    content: `Official live classes are conducted online via Google Meet.
-Permanent Joining Link: ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
-Please ensure you are logged in with your registered email before joining the class room.`,
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-certificate-policy",
-    category: "certificate",
-    title: "Course Completion Certificate",
-    keywords: ["certificate", "cert", "completion", "marksheet", "diploma"],
-    content: "Students receive an official verifiable Wits Lingo Academy Certificate upon completing the course with at least 80% attendance in live sessions and passing the final practical speaking evaluation.",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-refund-policy",
-    category: "refund",
-    title: "Refund & Cancellation Policy",
-    keywords: ["refund", "money back", "cancel", "cancellation", "wapas", "return"],
-    content: "Wits Lingo offers a 100% money-back guarantee within the first 7 days of batch commencement if you are not fully satisfied with the teaching quality. To initiate a refund, simply request support here or email hello@witslingo.com with your transaction ID.",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  },
-  {
-    id: "kb-founder-zia",
-    category: "general",
-    title: "About Founder Ziyaur Rehman Zia",
-    keywords: ["mentor", "teacher", "founder", "zia", "sir", "trainer", "who teaches"],
-    content: "All primary live sessions are personally conducted by Ziyaur Rehman Zia (Zia Sir), celebrated English language educator and founder of Wits Lingo, known for his zero-hesitation, conversational speaking pedagogy.",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  }
-];
+var DEFAULT_KNOWLEDGE_BASE = [];
 var AiSupportService = class {
   constructor() {
     this.knowledgeBase = [];
@@ -1860,7 +1769,7 @@ var AiSupportService = class {
       if (fs3.existsSync(KB_FILE)) {
         const raw = fs3.readFileSync(KB_FILE, "utf-8");
         const data = JSON.parse(raw);
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           this.knowledgeBase = data;
           return;
         }

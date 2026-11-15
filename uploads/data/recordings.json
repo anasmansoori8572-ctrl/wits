@@ -1,14 +1,1 @@
-[
-  {
-    "id": "rec-1",
-    "batchId": "batch-spoken-oct-2026",
-    "classId": "cls-1",
-    "title": "Orientation & Speaking Hesitation Removal",
-    "duration": "58 min",
-    "recordedDate": "2026-10-05",
-    "expiryDate": "2027-10-05",
-    "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    "thumbnailUrl": "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80",
-    "viewsCount": 38
-  }
-]
+[]

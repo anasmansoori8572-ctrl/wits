@@ -6,12 +6,7 @@
     "passwordHash": "admin123",
     "role": "admin",
     "phone": "7310952271",
-    "batchIds": [
-      "batch-spoken-oct-2026",
-      "batch-spoken-nov-2026",
-      "batch-foundation-oct-2026",
-      "batch-vocab-sept-2026"
-    ],
+    "batchIds": [],
     "registrationDate": "2026-01-01"
   },
   {
@@ -21,12 +16,7 @@
     "passwordHash": "admin123",
     "role": "admin",
     "phone": "7310952271",
-    "batchIds": [
-      "batch-spoken-oct-2026",
-      "batch-spoken-nov-2026",
-      "batch-foundation-oct-2026",
-      "batch-vocab-sept-2026"
-    ],
+    "batchIds": [],
     "registrationDate": "2026-01-01"
   }
 ]

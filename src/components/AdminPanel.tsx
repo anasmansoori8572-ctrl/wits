@@ -4336,7 +4336,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {testimonials.map((test) => (
+              {testimonials.length === 0 ? (
+                <div className="col-span-full py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+                  <MessageSquare className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="font-bold text-slate-700 text-sm">No student reviews yet</p>
+                  <p className="text-xs text-slate-500">Click "+ Add Student Review" above to add your first student review.</p>
+                </div>
+              ) : (
+                testimonials.map((test) => (
                 <div
                   key={test.id}
                   className="p-5 rounded-2xl border border-purple-100 bg-[#FAF9FC] space-y-3 flex flex-col justify-between shadow-xs"
@@ -4379,7 +4386,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </button>
                   </div>
                 </div>
-              ))}
+              ))
+            )}
             </div>
           </div>
         )}
