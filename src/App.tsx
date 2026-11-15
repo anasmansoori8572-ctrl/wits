@@ -9,6 +9,7 @@ import { StatsSection } from './components/StatsSection';
 import { WhatWeTeach } from './components/WhatWeTeach';
 import { CoursesSection } from './components/CoursesSection';
 import { YouTubeVideoSection } from './components/YouTubeVideoSection';
+import { ReviewsSection } from './components/ReviewsSection';
 import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
 
@@ -184,13 +185,7 @@ export default function App() {
     return INITIAL_BATCHES;
   });
 
-  const [testimonials, setTestimonials] = useState<TestimonialData[]>(() => {
-    try {
-      const saved = localStorage.getItem('wits_lingo_testimonials');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_TESTIMONIALS;
-  });
+  const [testimonials, setTestimonials] = useState<TestimonialData[]>([]);
 
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
     try {
@@ -255,16 +250,6 @@ export default function App() {
 
   const handleUpdateTestimonials = async (newTestimonials: TestimonialData[]) => {
     setTestimonials(newTestimonials);
-    localStorage.setItem('wits_lingo_testimonials', JSON.stringify(newTestimonials));
-    try {
-      await adminFetch('/api/cms/content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testimonials: newTestimonials })
-      });
-    } catch (e) {
-      console.warn('Could not sync testimonials to backend:', e);
-    }
   };
 
   const handleUpdateSiteSettings = async (newSettings: SiteSettings) => {
@@ -421,6 +406,28 @@ export default function App() {
       })
       .catch(err => console.warn('Could not load announcements in App:', err));
 
+    // Purge any stale client-cached reviews from localStorage
+    try {
+      localStorage.removeItem('wits_lingo_testimonials');
+    } catch (e) {}
+
+    // Fetch official student reviews ONLY from Neon PostgreSQL
+    fetch('/api/reviews')
+      .then(res => res.json())
+      .then(data => {
+        if (data && Array.isArray(data.reviews)) {
+          setTestimonials(data.reviews);
+        } else if (Array.isArray(data)) {
+          setTestimonials(data);
+        } else {
+          setTestimonials([]);
+        }
+      })
+      .catch(err => {
+        console.warn('Could not load reviews from /api/reviews:', err);
+        setTestimonials([]);
+      });
+
     // Fetch CMS settings (including active central logo)
     fetch('/api/cms/content')
       .then(res => res.json())
@@ -429,10 +436,6 @@ export default function App() {
           if (Array.isArray(data.content.courses)) {
             setCourses(data.content.courses);
             localStorage.setItem('wits_lingo_courses', JSON.stringify(data.content.courses));
-          }
-          if (Array.isArray(data.content.testimonials)) {
-            setTestimonials(data.content.testimonials);
-            localStorage.setItem('wits_lingo_testimonials', JSON.stringify(data.content.testimonials));
           }
           setSiteSettings(prev => {
             const incomingEmail = data.content.email || data.content.settings?.email;
@@ -820,6 +823,9 @@ export default function App() {
             materials={materials}
             siteSettings={siteSettings}
           />
+
+          {/* 7. Student Reviews & Testimonials Marquee ("Trusted By Global Learners & Students") */}
+          <ReviewsSection testimonials={testimonials} />
 
           {/* 13. Contact Section */}
           <ContactSection siteSettings={siteSettings} />

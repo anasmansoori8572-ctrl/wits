@@ -3711,6 +3711,7 @@ async function loadAllPersistedDataAsync() {
         cmsContent = {
           ...cmsContent,
           ...remote,
+          testimonials: [],
           courses: Array.isArray(remote.courses) ? remote.courses : cmsContent.courses,
           settings: { ...cmsContent.settings, ...remote.settings || {} }
         };
@@ -8065,11 +8066,9 @@ app.get("/api/cms/content", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   try {
     const settings = await getSiteSettingsDb();
-    const testimonials = await getReviewsDb(false);
     const contentPayload = {
       courses: cmsContent.courses || [],
       settings,
-      testimonials,
       academyName: settings.academyName || "WITS LINGO",
       tagline: settings.tagline || "A Global Language Platform",
       phoneNumbers: [settings.phone1, settings.phone2].filter(Boolean),
@@ -8119,11 +8118,9 @@ app.post("/api/cms/content", requireAdmin, async (req, res) => {
     if (showAnnouncement !== void 0) patch.showAnnouncement = showAnnouncement;
     if (showBatchesSection !== void 0) patch.showBatchesSection = showBatchesSection;
     const updatedSettings = await updateSiteSettingsDb(patch);
-    const testimonials = await getReviewsDb(false);
     const contentPayload = {
       courses: cmsContent.courses || [],
       settings: updatedSettings,
-      testimonials,
       academyName: updatedSettings.academyName,
       tagline: updatedSettings.tagline,
       phoneNumbers: [updatedSettings.phone1, updatedSettings.phone2].filter(Boolean),

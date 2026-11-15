@@ -1157,6 +1157,7 @@ async function loadAllPersistedDataAsync(): Promise<void> {
         cmsContent = {
           ...cmsContent,
           ...remote,
+          testimonials: [],
           courses: Array.isArray(remote.courses) ? remote.courses : cmsContent.courses,
           settings: { ...cmsContent.settings, ...(remote.settings || {}) }
         };
@@ -6375,12 +6376,10 @@ www.witslingo.com`
     res.setHeader("Cache-Control", "no-store");
     try {
       const settings = await getSiteSettingsDb();
-      const testimonials = await getReviewsDb(false);
 
       const contentPayload = {
         courses: cmsContent.courses || [],
         settings,
-        testimonials,
         academyName: settings.academyName || "WITS LINGO",
         tagline: settings.tagline || "A Global Language Platform",
         phoneNumbers: [settings.phone1, settings.phone2].filter(Boolean),
@@ -6436,12 +6435,10 @@ www.witslingo.com`
       if (showBatchesSection !== undefined) patch.showBatchesSection = showBatchesSection;
 
       const updatedSettings = await updateSiteSettingsDb(patch);
-      const testimonials = await getReviewsDb(false);
 
       const contentPayload = {
         courses: cmsContent.courses || [],
         settings: updatedSettings,
-        testimonials,
         academyName: updatedSettings.academyName,
         tagline: updatedSettings.tagline,
         phoneNumbers: [updatedSettings.phone1, updatedSettings.phone2].filter(Boolean),
