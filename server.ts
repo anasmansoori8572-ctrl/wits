@@ -1854,6 +1854,44 @@ try {
     res.json({ status: "ok", app: "Wits Lingo Academy Server", timestamp: new Date().toISOString() });
   });
 
+  // Database connectivity & diagnostic check (Neon PostgreSQL)
+  app.get(["/api/debug/db", "/debug/db"], async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const dbUrlSet = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim().length > 0);
+    let dbQueryOk = false;
+    let reviewsCount: number | null = null;
+    let dbError: string | null = null;
+
+    if (dbUrlSet) {
+      try {
+        const sql = getDb();
+        const testResult = await sql`SELECT 1 as ok;`;
+        if (testResult && testResult.length > 0) {
+          dbQueryOk = true;
+        }
+
+        const countResult = await sql`SELECT count(*)::int AS count FROM reviews;`;
+        if (countResult && countResult.length > 0) {
+          reviewsCount = Number(countResult[0].count);
+        } else {
+          reviewsCount = 0;
+        }
+      } catch (err: any) {
+        console.error("[Debug DB] Database check failed:", err?.message || err);
+        dbQueryOk = false;
+        dbError = err?.message || String(err);
+      }
+    }
+
+    return res.json({
+      dbUrlSet,
+      dbQueryOk,
+      reviewsCount,
+      buildMarker: "neon-debug-1",
+      ...(dbError ? { error: dbError } : {})
+    });
+  });
+
   // =========================================================================
   // OFFICIAL META WHATSAPP BUSINESS PLATFORM CLOUD API ENDPOINTS
   // =========================================================================

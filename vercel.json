@@ -11,6 +11,10 @@
       "destination": "/api/health"
     },
     {
+      "source": "/api",
+      "destination": "/api"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api"
     },

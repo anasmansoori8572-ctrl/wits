@@ -8,8 +8,15 @@ export const config = {
 
 export default async function handler(req: any, res: any) {
   // If Vercel rewrote the URL to /api, restore the original incoming path for Express routing
-  const rawMatched = req.headers["x-matched-path"] || req.headers["x-forwarded-uri"];
-  if (rawMatched && typeof rawMatched === "string" && (req.url === "/api" || req.url.startsWith("/api?") || req.url.startsWith("/api/"))) {
+  const rawMatched = 
+    req.headers["x-matched-path"] || 
+    req.headers["x-vercel-matched-path"] ||
+    req.headers["x-forwarded-uri"] || 
+    req.headers["x-original-url"] || 
+    req.headers["x-rewrite-url"] ||
+    req.headers["x-invoke-path"];
+
+  if (rawMatched && typeof rawMatched === "string" && (req.url === "/" || req.url === "/api" || req.url.startsWith("/api?") || req.url.startsWith("/api/"))) {
     const [pathOnly, matchedQuery] = rawMatched.split("?");
     const reqQueryIdx = req.url.indexOf("?");
     const reqQuery = reqQueryIdx !== -1 ? req.url.substring(reqQueryIdx + 1) : "";
