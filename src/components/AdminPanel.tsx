@@ -125,12 +125,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [classes, setClasses] = useState<ClassSession[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
-    if (Array.isArray(externalMaterials)) return externalMaterials;
+    if (Array.isArray(externalMaterials) && externalMaterials.length > 0) return externalMaterials;
     try {
       const saved = localStorage.getItem('wits_lingo_materials');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch (e) {}
-    return [];
+    return Array.isArray(externalMaterials) ? externalMaterials : [];
   });
 
   useEffect(() => {

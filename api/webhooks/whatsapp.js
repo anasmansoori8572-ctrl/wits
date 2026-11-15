@@ -1103,7 +1103,7 @@ var DurableStorageService = class _DurableStorageService {
   async getCollection(collectionName, defaultValue = [], forceCloud = false) {
     if (!forceCloud && this.memoryCache.has(collectionName)) {
       const cached = this.memoryCache.get(collectionName);
-      if (Array.isArray(cached) && cached.length > 0) {
+      if (Array.isArray(cached)) {
         return [...cached];
       }
     }

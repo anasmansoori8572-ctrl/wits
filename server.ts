@@ -1165,6 +1165,7 @@ const recordings: DBRecording[] = [
   }
 ];
 
+let materialsInitialized = false;
 const studyMaterials: DBStudyMaterial[] = [
   {
     id: "yt-01",
@@ -2004,7 +2005,7 @@ function loadAllPersistedData(): void {
     if (fs.existsSync(MATERIALS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           for (const m of data) {
             if (m.resourceType === "youtube" || m.fileType === "youtube") {
               if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
@@ -2015,6 +2016,7 @@ function loadAllPersistedData(): void {
           studyMaterials.length = 0;
           studyMaterials.push(...data);
           materialsLoaded = true;
+          materialsInitialized = true;
           console.log(`[Persistence] Loaded ${studyMaterials.length} study materials.`);
         }
       } catch (e) {
@@ -2022,31 +2024,27 @@ function loadAllPersistedData(): void {
       }
     }
 
-    // Cloud Durable Storage Hydration for Study Materials & YouTube Lessons
-    try {
-      durableStorageService.getCollection<DBStudyMaterial>("materials", []).then((durableMaterials) => {
-        if (Array.isArray(durableMaterials) && durableMaterials.length > 0) {
-          for (const m of durableMaterials) {
-            if (m.resourceType === "youtube" || m.fileType === "youtube") {
-              if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
-            } else if (!m.downloadUrl || m.downloadUrl === "#") {
-              m.downloadUrl = `/api/files/download/${m.id}`;
-            }
-          }
-          if (studyMaterials.length === 0) {
-            studyMaterials.push(...durableMaterials);
-          } else {
-            const existingIds = new Set(studyMaterials.map(m => m.id));
+    // Cloud Durable Storage Hydration for Study Materials & YouTube Lessons (only if not loaded locally)
+    if (!materialsLoaded) {
+      try {
+        durableStorageService.getCollection<DBStudyMaterial>("materials", [], true).then((durableMaterials) => {
+          if (Array.isArray(durableMaterials)) {
             for (const m of durableMaterials) {
-              if (!existingIds.has(m.id)) {
-                studyMaterials.push(m);
+              if (m.resourceType === "youtube" || m.fileType === "youtube") {
+                if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
+              } else if (!m.downloadUrl || m.downloadUrl === "#") {
+                m.downloadUrl = `/api/files/download/${m.id}`;
               }
             }
+            studyMaterials.length = 0;
+            studyMaterials.push(...durableMaterials);
+            materialsLoaded = true;
+            materialsInitialized = true;
+            console.log(`[Persistence] Hydrated ${studyMaterials.length} study materials from cloud durable storage.`);
           }
-          console.log(`[Persistence] Hydrated ${studyMaterials.length} study materials from cloud durable storage.`);
-        }
-      }).catch(() => {});
-    } catch (e) {}
+        }).catch(() => {});
+      } catch (e) {}
+    }
 
     if (!materialsLoaded && studyMaterials.length > 0) {
       savePersistedMaterials();
@@ -6199,12 +6197,13 @@ www.witslingo.com`
 
   // 20a. PUBLIC: Get All Live Website Study Materials & PDF / YouTube Resources
   app.get(["/api/materials", "/api/learning-resources"], async (req, res) => {
-    if (studyMaterials.length === 0) {
+    if (!materialsInitialized && studyMaterials.length === 0) {
       try {
         const durableMaterials = await durableStorageService.getCollection<DBStudyMaterial>("materials", []);
-        if (Array.isArray(durableMaterials) && durableMaterials.length > 0) {
+        if (Array.isArray(durableMaterials)) {
           studyMaterials.length = 0;
           studyMaterials.push(...durableMaterials);
+          materialsInitialized = true;
         }
       } catch (e) {}
     }
@@ -6224,12 +6223,13 @@ www.witslingo.com`
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
-    if (studyMaterials.length === 0) {
+    if (!materialsInitialized && studyMaterials.length === 0) {
       try {
         const durableMaterials = await durableStorageService.getCollection<DBStudyMaterial>("materials", []);
-        if (Array.isArray(durableMaterials) && durableMaterials.length > 0) {
+        if (Array.isArray(durableMaterials)) {
           studyMaterials.length = 0;
           studyMaterials.push(...durableMaterials);
+          materialsInitialized = true;
         }
       } catch (e) {}
     }
@@ -6310,6 +6310,7 @@ www.witslingo.com`
     };
 
     studyMaterials.unshift(newMat);
+    materialsInitialized = true;
     if (classId) {
       const cls = classes.find(c => c.id === classId);
       if (cls) cls.hasStudyMaterial = true;
@@ -6424,6 +6425,7 @@ www.witslingo.com`
     } catch (e) {}
 
     studyMaterials.splice(idx, 1);
+    materialsInitialized = true;
     await savePersistedMaterials();
 
     const sorted = sortLearningMaterials(studyMaterials);
