@@ -4611,7 +4611,7 @@ www.witslingo.com`;
 
     if (!cmsContent.settings) cmsContent.settings = {};
     cmsContent.settings.heroVideoUrl = finalVideoUrl;
-    saveCmsContent();
+    await saveCmsContent();
 
     res.json({
       success: true,
@@ -4621,7 +4621,7 @@ www.witslingo.com`;
     });
   });
 
-  app.post("/api/admin/hero-video/reset", (req, res) => {
+  app.post("/api/admin/hero-video/reset", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -4629,7 +4629,7 @@ www.witslingo.com`;
 
     if (!cmsContent.settings) cmsContent.settings = {};
     cmsContent.settings.heroVideoUrl = "/video/wits-lingo-intro.mp4";
-    saveCmsContent();
+    await saveCmsContent();
 
     res.json({
       success: true,
@@ -4744,7 +4744,7 @@ www.witslingo.com`;
       cmsContent.settings.logoVersion = logoVersion;
       cmsContent.settings.b2LogoId = b2FileId;
       cmsContent.settings.b2LogoName = b2FileName;
-      saveCmsContent();
+      await saveCmsContent();
 
       res.json({
         success: true,
@@ -4759,7 +4759,7 @@ www.witslingo.com`;
     }
   });
 
-  app.post("/api/admin/logo/reset", (req, res) => {
+  app.post("/api/admin/logo/reset", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -4770,7 +4770,7 @@ www.witslingo.com`;
     cmsContent.settings.logoVersion = Date.now();
     cmsContent.settings.b2LogoId = undefined;
     cmsContent.settings.b2LogoName = undefined;
-    saveCmsContent();
+    await saveCmsContent();
 
     res.json({
       success: true,
@@ -7050,7 +7050,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     res.json({ success: true, reviews: publicReviews });
   });
 
-  app.post("/api/reviews", (req, res) => {
+  app.post("/api/reviews", async (req, res) => {
     const { studentName, courseName, courseBatch, rating, testimonial, city } = req.body;
     if (!studentName || !testimonial) {
       return res.status(400).json({ success: false, error: "Name and review text are required." });
@@ -7077,7 +7077,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     }
 
     cmsContent.testimonials.unshift(newReview);
-    saveCmsContent();
+    await saveCmsContent();
 
     res.status(201).json({
       success: true,
@@ -7087,7 +7087,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     });
   });
 
-  app.put("/api/reviews/:id", (req, res) => {
+  app.put("/api/reviews/:id", async (req, res) => {
     const { id } = req.params;
     const { studentName, courseName, courseBatch, rating, testimonial, city, authorKey, isApproved } = req.body;
     const auth = verifyAuthToken(req);
@@ -7121,12 +7121,12 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     };
 
     cmsContent.testimonials[reviewIndex] = updatedReview;
-    saveCmsContent();
+    await saveCmsContent();
 
     res.json({ success: true, message: "Review updated successfully!", review: updatedReview });
   });
 
-  app.delete("/api/reviews/:id", (req, res) => {
+  app.delete("/api/reviews/:id", async (req, res) => {
     const { id } = req.params;
     const auth = verifyAuthToken(req);
     const isAdmin = auth && auth.role === "admin";
@@ -7149,7 +7149,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     }
 
     const deleted = cmsContent.testimonials.splice(reviewIndex, 1)[0];
-    saveCmsContent();
+    await saveCmsContent();
 
     res.json({ success: true, message: "Review deleted successfully.", deleted });
   });

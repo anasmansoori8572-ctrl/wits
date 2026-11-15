@@ -6391,7 +6391,7 @@ app.post("/api/admin/hero-video/upload", async (req, res) => {
   }
   if (!cmsContent.settings) cmsContent.settings = {};
   cmsContent.settings.heroVideoUrl = finalVideoUrl;
-  saveCmsContent();
+  await saveCmsContent();
   res.json({
     success: true,
     heroVideoUrl: finalVideoUrl,
@@ -6399,14 +6399,14 @@ app.post("/api/admin/hero-video/upload", async (req, res) => {
     message: "Hero video uploaded and updated successfully."
   });
 });
-app.post("/api/admin/hero-video/reset", (req, res) => {
+app.post("/api/admin/hero-video/reset", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
   }
   if (!cmsContent.settings) cmsContent.settings = {};
   cmsContent.settings.heroVideoUrl = "/video/wits-lingo-intro.mp4";
-  saveCmsContent();
+  await saveCmsContent();
   res.json({
     success: true,
     heroVideoUrl: "/video/wits-lingo-intro.mp4",
@@ -6506,7 +6506,7 @@ app.post("/api/admin/logo/upload", async (req, res) => {
     cmsContent.settings.logoVersion = logoVersion;
     cmsContent.settings.b2LogoId = b2FileId;
     cmsContent.settings.b2LogoName = b2FileName;
-    saveCmsContent();
+    await saveCmsContent();
     res.json({
       success: true,
       logoUrl: finalLogoUrl,
@@ -6519,7 +6519,7 @@ app.post("/api/admin/logo/upload", async (req, res) => {
     res.status(500).json({ error: err.message || "Failed to process logo upload." });
   }
 });
-app.post("/api/admin/logo/reset", (req, res) => {
+app.post("/api/admin/logo/reset", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -6529,7 +6529,7 @@ app.post("/api/admin/logo/reset", (req, res) => {
   cmsContent.settings.logoVersion = Date.now();
   cmsContent.settings.b2LogoId = void 0;
   cmsContent.settings.b2LogoName = void 0;
-  saveCmsContent();
+  await saveCmsContent();
   res.json({
     success: true,
     logoUrl: "/logo.svg",
@@ -8473,7 +8473,7 @@ app.get("/api/reviews", (req, res) => {
   const publicReviews = all.filter((r) => r.isApproved !== false);
   res.json({ success: true, reviews: publicReviews });
 });
-app.post("/api/reviews", (req, res) => {
+app.post("/api/reviews", async (req, res) => {
   const { studentName, courseName, courseBatch, rating, testimonial, city } = req.body;
   if (!studentName || !testimonial) {
     return res.status(400).json({ success: false, error: "Name and review text are required." });
@@ -8496,7 +8496,7 @@ app.post("/api/reviews", (req, res) => {
     cmsContent.testimonials = [];
   }
   cmsContent.testimonials.unshift(newReview);
-  saveCmsContent();
+  await saveCmsContent();
   res.status(201).json({
     success: true,
     message: "Review submitted successfully!",
@@ -8504,7 +8504,7 @@ app.post("/api/reviews", (req, res) => {
     authorKey
   });
 });
-app.put("/api/reviews/:id", (req, res) => {
+app.put("/api/reviews/:id", async (req, res) => {
   const { id } = req.params;
   const { studentName, courseName, courseBatch, rating, testimonial, city, authorKey, isApproved } = req.body;
   const auth = verifyAuthToken(req);
@@ -8532,10 +8532,10 @@ app.put("/api/reviews/:id", (req, res) => {
     isApproved: isAdmin && isApproved !== void 0 ? Boolean(isApproved) : targetReview.isApproved
   };
   cmsContent.testimonials[reviewIndex] = updatedReview;
-  saveCmsContent();
+  await saveCmsContent();
   res.json({ success: true, message: "Review updated successfully!", review: updatedReview });
 });
-app.delete("/api/reviews/:id", (req, res) => {
+app.delete("/api/reviews/:id", async (req, res) => {
   const { id } = req.params;
   const auth = verifyAuthToken(req);
   const isAdmin = auth && auth.role === "admin";
@@ -8553,7 +8553,7 @@ app.delete("/api/reviews/:id", (req, res) => {
     return res.status(403).json({ success: false, error: "Unauthorized to delete this review." });
   }
   const deleted = cmsContent.testimonials.splice(reviewIndex, 1)[0];
-  saveCmsContent();
+  await saveCmsContent();
   res.json({ success: true, message: "Review deleted successfully.", deleted });
 });
 app.get("/api/admin/notifications", (req, res) => {
