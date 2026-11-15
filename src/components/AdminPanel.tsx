@@ -647,7 +647,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       registeredAt: new Date().toISOString()
     };
 
-    setStudents([record, ...students]);
     setShowAddStudentModal(false);
     setNewStudent({
       name: '',
@@ -664,6 +663,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       batchId: batches[0]?.id || 'batch-spoken-oct-2026',
       courseId: courses[0]?.id || 'course-spoken-english'
     });
+
+    try {
+      const res = await fetch('/api/admin/students', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(record)
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.student) {
+        setStudents(prev => [data.student, ...prev.filter(s => s.id !== record.id)]);
+      } else {
+        setStudents(prev => [record, ...prev]);
+      }
+    } catch (err) {
+      console.warn('Student save error:', err);
+      setStudents(prev => [record, ...prev]);
+    }
+
     triggerFeedback(`Student "${record.name}" admitted successfully! (Admission ID: ${admissionId})`);
   };
 

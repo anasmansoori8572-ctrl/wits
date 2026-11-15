@@ -725,7 +725,7 @@ export interface DBSupportTicket {
 }
 
 // Initial Data
-const users: DBUser[] = [
+const defaultAdminUsers: DBUser[] = [
   {
     id: "usr-admin-01",
     name: "Ziyaur Rehman Zia",
@@ -745,119 +745,12 @@ const users: DBUser[] = [
     phone: "7310952271",
     batchIds: ["batch-spoken-oct-2026", "batch-spoken-nov-2026", "batch-foundation-oct-2026", "batch-vocab-sept-2026"],
     registrationDate: "2026-01-01",
-  },
-  {
-    id: "usr-student-01",
-    name: "Mohd Farhan",
-    email: "mohd.farhan@gmail.com",
-    passwordHash: "student123",
-    role: "student",
-    phone: "9876543210",
-    batchIds: ["batch-spoken-oct-2026"],
-    admissionId: "WL-2026-OCT-0101",
-    registrationDate: "2026-09-01",
-  },
-  {
-    id: "usr-student-02",
-    name: "Shabana Parveen",
-    email: "shabana.parveen@gmail.com",
-    passwordHash: "student123",
-    role: "student",
-    phone: "9832109876",
-    batchIds: ["batch-foundation-oct-2026"],
-    admissionId: "WL-2026-OCT-0102",
-    registrationDate: "2026-09-02",
-  },
-  {
-    id: "usr-student-03",
-    name: "Arjun Sharma",
-    email: "arjun.sharma@gmail.com",
-    passwordHash: "student123",
-    role: "student",
-    phone: "9412345678",
-    batchIds: ["batch-spoken-nov-2026"],
-    admissionId: "WL-2026-NOV-0103",
-    registrationDate: "2026-09-10",
   }
 ];
 
-const registrations: DBStudentRegistration[] = [
-  {
-    id: "reg-01",
-    admissionId: "WL-2026-OCT-0101",
-    name: "Mohd Farhan",
-    fatherName: "Akhtar Ali",
-    dob: "2003-05-14",
-    gender: "Male",
-    district: "Amroha",
-    state: "Uttar Pradesh",
-    phone: "9876543210",
-    whatsapp: "9876543210",
-    email: "mohd.farhan@gmail.com",
-    address: "Mohalla Chah Ghori, Amroha, UP",
-    qualification: "Undergraduate (B.A.)",
-    currentEnglishLevel: "Beginner",
-    courseId: "course-spoken-english",
-    courseName: "Spoken English",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English — Batch October 2026 (Batch 01)",
-    feeAmount: 1499,
-    paymentStatus: "Paid",
-    paymentMethod: "Razorpay",
-    paymentTxnId: "pay_Rzp982347101",
-    registeredAt: "2026-09-01T10:30:00Z"
-  },
-  {
-    id: "reg-02",
-    admissionId: "WL-2026-OCT-0102",
-    name: "Shabana Parveen",
-    fatherName: "Rashid Khan",
-    dob: "2002-11-20",
-    gender: "Female",
-    district: "Moradabad",
-    state: "Uttar Pradesh",
-    phone: "9832109876",
-    whatsapp: "9832109876",
-    email: "shabana.parveen@gmail.com",
-    address: "Civil Lines, Moradabad, UP",
-    qualification: "Senior Secondary (12th Passed)",
-    currentEnglishLevel: "Complete Beginner",
-    courseId: "course-foundation",
-    courseName: "English Foundation",
-    batchId: "batch-foundation-oct-2026",
-    batchName: "English Foundation — Batch October 2026",
-    feeAmount: 1199,
-    paymentStatus: "Paid",
-    paymentMethod: "Razorpay",
-    paymentTxnId: "pay_Rzp449102837",
-    registeredAt: "2026-09-02T14:15:00Z"
-  },
-  {
-    id: "reg-03",
-    admissionId: "WL-2026-NOV-0103",
-    name: "Arjun Sharma",
-    fatherName: "Mahesh Sharma",
-    dob: "2001-08-09",
-    gender: "Male",
-    district: "Hapur",
-    state: "Uttar Pradesh",
-    phone: "9412345678",
-    whatsapp: "9412345678",
-    email: "arjun.sharma@gmail.com",
-    address: "Station Road, Hapur, UP",
-    qualification: "B.Tech Student",
-    currentEnglishLevel: "Intermediate",
-    courseId: "course-spoken-english",
-    courseName: "Spoken English",
-    batchId: "batch-spoken-nov-2026",
-    batchName: "Spoken English — Batch November 2026",
-    feeAmount: 1499,
-    paymentStatus: "Paid",
-    paymentMethod: "PayPal",
-    paymentTxnId: "PAYID-MN7849102",
-    registeredAt: "2026-09-10T16:45:00Z"
-  }
-];
+const users: DBUser[] = [...defaultAdminUsers];
+
+const registrations: DBStudentRegistration[] = [];
 
 const batches: DBBatch[] = [
   {
@@ -1744,7 +1637,7 @@ async function loadAllPersistedDataAsync(): Promise<void> {
     if (fs.existsSync(REGISTRATIONS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           registrations.length = 0;
           registrations.push(...data);
         }
@@ -1753,7 +1646,7 @@ async function loadAllPersistedDataAsync(): Promise<void> {
     if (fs.existsSync(USERS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs.readFileSync(USERS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           users.length = 0;
           users.push(...data);
         }
@@ -1798,13 +1691,32 @@ async function loadAllPersistedDataAsync(): Promise<void> {
 
     // 2. Cloud-first Dynamic Content Hydration (Backblaze B2 is Source of Truth)
     try {
-      const [cloudMaterials, cloudCourses, cloudCms, cloudAnnouncements, cloudBatches, cloudGallery] = await Promise.all([
+      const [
+        cloudMaterials,
+        cloudCourses,
+        cloudCms,
+        cloudAnnouncements,
+        cloudBatches,
+        cloudGallery,
+        cloudRegistrations,
+        cloudUsers,
+        cloudClasses,
+        cloudRecordings,
+        cloudOrders,
+        cloudPayments
+      ] = await Promise.all([
         durableStorageService.getCollection<DBStudyMaterial>("materials", []),
         durableStorageService.getCollection<any>("courses", []),
         durableStorageService.getCollection<any>("cmsContent", []),
         durableStorageService.getCollection<any>("announcements", []),
         durableStorageService.getCollection<any>("batches", []),
-        durableStorageService.getCollection<any>("gallery", [])
+        durableStorageService.getCollection<any>("gallery", []),
+        durableStorageService.getCollection<DBStudentRegistration>("registrations", []),
+        durableStorageService.getCollection<DBUser>("users", defaultAdminUsers),
+        durableStorageService.getCollection<DBClass>("classes", []),
+        durableStorageService.getCollection<DBRecording>("recordings", []),
+        durableStorageService.getCollection<DBOrder>("orders", []),
+        durableStorageService.getCollection<DBPayment>("payments", [])
       ]);
 
       // Materials & Videos
@@ -1841,24 +1753,75 @@ async function loadAllPersistedDataAsync(): Promise<void> {
       }
 
       // Announcements
-      if (Array.isArray(cloudAnnouncements) && cloudAnnouncements.length > 0) {
+      if (Array.isArray(cloudAnnouncements)) {
         announcements.length = 0;
         announcements.push(...cloudAnnouncements);
         console.log(`[Persistence] Hydrated ${announcements.length} announcements from Backblaze B2.`);
       }
 
       // Batches
-      if (Array.isArray(cloudBatches) && cloudBatches.length > 0) {
+      if (Array.isArray(cloudBatches)) {
         batches.length = 0;
         batches.push(...cloudBatches);
         console.log(`[Persistence] Hydrated ${batches.length} batches from Backblaze B2.`);
       }
 
       // Gallery
-      if (Array.isArray(cloudGallery) && cloudGallery.length > 0) {
+      if (Array.isArray(cloudGallery)) {
         galleryItems.length = 0;
         galleryItems.push(...cloudGallery);
         console.log(`[Persistence] Hydrated ${galleryItems.length} gallery items from Backblaze B2.`);
+      }
+
+      // Registrations (Admissions & Students)
+      if (Array.isArray(cloudRegistrations)) {
+        registrations.length = 0;
+        registrations.push(...cloudRegistrations);
+        console.log(`[Persistence] Hydrated ${registrations.length} student registrations from Backblaze B2.`);
+      }
+
+      // Users (Admins & Students)
+      if (Array.isArray(cloudUsers)) {
+        const userMap = new Map<string, DBUser>();
+        for (const admin of defaultAdminUsers) {
+          userMap.set(admin.email.toLowerCase(), admin);
+        }
+        for (const u of cloudUsers) {
+          if (u.role === "admin" && userMap.has(u.email.toLowerCase())) {
+            userMap.set(u.email.toLowerCase(), { ...userMap.get(u.email.toLowerCase())!, ...u });
+          } else {
+            userMap.set(u.email.toLowerCase(), u);
+          }
+        }
+        users.length = 0;
+        users.push(...Array.from(userMap.values()));
+        console.log(`[Persistence] Hydrated ${users.length} users from Backblaze B2.`);
+      }
+
+      // Classes
+      if (Array.isArray(cloudClasses)) {
+        classes.length = 0;
+        classes.push(...cloudClasses);
+        console.log(`[Persistence] Hydrated ${classes.length} classes from Backblaze B2.`);
+      }
+
+      // Recordings
+      if (Array.isArray(cloudRecordings)) {
+        recordings.length = 0;
+        recordings.push(...cloudRecordings);
+        console.log(`[Persistence] Hydrated ${recordings.length} recordings from Backblaze B2.`);
+      }
+
+      // Orders
+      if (Array.isArray(cloudOrders)) {
+        orders.length = 0;
+        orders.push(...cloudOrders);
+      }
+
+      // Payments
+      if (Array.isArray(cloudPayments)) {
+        payments.length = 0;
+        payments.push(...cloudPayments);
       }
     } catch (cloudErr) {
       console.warn("[Persistence] Cloud hydration notice:", cloudErr);
@@ -3489,11 +3452,13 @@ try {
 
       const token = generateAuthToken(user);
 
-      // Save persisted changes to disk
-      saveRegistrations();
-      saveUsers();
-      saveBatches();
-      savePayments();
+      // Save persisted changes to durable cloud storage
+      await Promise.all([
+        saveRegistrations(),
+        saveUsers(),
+        saveBatches(),
+        savePayments()
+      ]);
 
       // Await WhatsApp Confirmation to ensure Vercel Lambda doesn't terminate early
       try {
@@ -3640,7 +3605,7 @@ www.witslingo.com`;
             matchedOrder.orderStatus = "paid";
             matchedOrder.razorpayPaymentId = paymentId;
             matchedOrder.updatedAt = new Date().toISOString();
-            saveOrders();
+            await saveOrders();
           }
 
           // 3. Resolve matching student registration
@@ -3648,7 +3613,7 @@ www.witslingo.com`;
           if (reg) {
             reg.paymentStatus = "Paid";
             reg.razorpayPaymentId = paymentId;
-            saveRegistrations();
+            await saveRegistrations();
           }
 
           const studentName = reg?.name || matchedOrder?.studentName || paymentEntity.notes?.studentName || "Student";
@@ -4079,7 +4044,7 @@ www.witslingo.com`;
         existingReg.courseId = order.courseId;
         existingReg.courseName = order.courseName;
       }
-      saveRegistrations();
+      await saveRegistrations();
 
       // 4. Ensure Student Login Account
       let existingUser = users.find(u => u.phone === order.studentPhone || u.email.toLowerCase() === order.studentEmail.toLowerCase());
@@ -4101,7 +4066,7 @@ www.witslingo.com`;
           existingUser.batchIds.push(order.batchId || "batch-spoken-oct-2026");
         }
       }
-      saveUsers();
+      await saveUsers();
 
       // 5. Send Automatic WhatsApp Confirmation (Awaited for Vercel serverless execution)
       let waConfirmationResult: any = null;
@@ -5224,7 +5189,7 @@ www.witslingo.com`;
   });
 
   // 14. ADMISSION & REGISTRATION (Direct Admin Registration or Standard Entry)
-  app.post("/api/admissions/register", (req, res) => {
+  app.post("/api/admissions/register", async (req, res) => {
     const auth = verifyAuthToken(req);
     const isAdmin = auth && auth.role === "admin";
 
@@ -5417,10 +5382,12 @@ www.witslingo.com`;
     studentReg.whatsappStudentUrl = whatsappStudentUrl;
     studentReg.whatsappAdminUrl = whatsappAdminUrl;
 
-    // Save persisted state to disk
-    saveRegistrations();
-    saveUsers();
-    saveBatches();
+    // Save persisted state to durable storage
+    await Promise.all([
+      saveRegistrations(),
+      saveUsers(),
+      saveBatches()
+    ]);
 
     // Async WhatsApp dispatch (Meta Cloud API)
     if (paymentStatus === "Paid") {
@@ -5611,7 +5578,7 @@ www.witslingo.com`
       forceResend: true
     });
 
-    saveRegistrations();
+    await saveRegistrations();
 
     res.json({
       success: waRes.success,
@@ -5654,7 +5621,7 @@ www.witslingo.com`
       forceResend: true
     });
 
-    saveRegistrations();
+    await saveRegistrations();
 
     res.json({
       success: waRes.success,
@@ -5700,7 +5667,7 @@ www.witslingo.com`
   });
 
   // 17. ADMIN: Schedule New Class or Toggle Live
-  app.post("/api/admin/schedule-class", (req, res) => {
+  app.post("/api/admin/schedule-class", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
@@ -5742,15 +5709,15 @@ www.witslingo.com`
         author: newClass.teacherName,
         priority: "Urgent"
       });
-      saveAnnouncements();
+      await saveAnnouncements();
     }
 
-    saveClasses();
+    await saveClasses();
     res.json({ success: true, class: newClass });
   });
 
   // 18. ADMIN: Toggle Class Status (Live / Completed / Upcoming) & Auto-recording
-  app.post("/api/admin/classes/:classId/status", (req, res) => {
+  app.post("/api/admin/classes/:classId/status", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
@@ -5799,16 +5766,16 @@ www.witslingo.com`
         author: "Wits Lingo Academy",
         priority: "Normal"
       });
-      saveAnnouncements();
+      await saveAnnouncements();
     }
 
-    saveClasses();
-    saveRecordings();
+    await saveClasses();
+    await saveRecordings();
     res.json({ success: true, class: cls });
   });
 
   // 19. ADMIN: Upload or Attach Manual Recording
-  app.post("/api/admin/recordings", (req, res) => {
+  app.post("/api/admin/recordings", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -5837,8 +5804,8 @@ www.witslingo.com`
     cls.recordingId = newRec.id;
     cls.status = "Completed";
 
-    saveRecordings();
-    saveClasses();
+    await saveRecordings();
+    await saveClasses();
 
     res.json({ success: true, recording: newRec });
   });
@@ -6657,8 +6624,59 @@ www.witslingo.com`
     res.json({ attendance: list, totalCount: list.length });
   });
 
+  // CREATE Student / Admission
+  app.post("/api/admin/students", async (req, res) => {
+    const auth = verifyAuthToken(req);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+    const studentData = req.body;
+    if (!studentData.name || !studentData.phone) {
+      return res.status(400).json({ error: "Student name and phone are required." });
+    }
+
+    const id = studentData.id || `reg-${Date.now()}`;
+    const randomSeq = Math.floor(1000 + Math.random() * 9000);
+    const admissionId = studentData.admissionId || `WL-OCT26-${randomSeq}`;
+
+    const record: DBStudentRegistration = {
+      ...studentData,
+      id,
+      admissionId,
+      registeredAt: studentData.registeredAt || new Date().toISOString()
+    };
+
+    registrations.unshift(record);
+
+    if (record.email) {
+      let existingUser = users.find(u => u.email.toLowerCase() === record.email.toLowerCase());
+      if (existingUser) {
+        if (record.batchId && !existingUser.batchIds.includes(record.batchId)) {
+          existingUser.batchIds.push(record.batchId);
+        }
+        if (!existingUser.admissionId) existingUser.admissionId = record.admissionId;
+      } else {
+        users.push({
+          id: `usr-${Date.now()}`,
+          name: record.name,
+          email: record.email.toLowerCase(),
+          passwordHash: "student123",
+          role: "student",
+          phone: record.phone,
+          batchIds: record.batchId ? [record.batchId] : [],
+          admissionId: record.admissionId,
+          registrationDate: new Date().toISOString().split("T")[0]
+        });
+      }
+      await saveUsers();
+    }
+
+    await saveRegistrations();
+    res.json({ success: true, student: record });
+  });
+
   // DELETE Student / Admission
-  app.delete("/api/admin/students/:id", (req, res) => {
+  app.delete("/api/admin/students/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6668,20 +6686,20 @@ www.witslingo.com`
     if (regIdx !== -1) {
       const reg = registrations[regIdx];
       registrations.splice(regIdx, 1);
-      // Remove from users if exists
-      const userIdx = users.findIndex(u => u.admissionId === reg.admissionId || u.email === reg.email);
-      if (userIdx !== -1) {
+      // Remove student user if exists
+      const userIdx = users.findIndex(u => (reg.admissionId && u.admissionId === reg.admissionId) || (reg.email && u.email.toLowerCase() === reg.email.toLowerCase()));
+      if (userIdx !== -1 && users[userIdx].role !== "admin") {
         users.splice(userIdx, 1);
-        saveUsers();
+        await saveUsers();
       }
-      saveRegistrations();
+      await saveRegistrations();
       return res.json({ success: true, message: "Student admission deleted successfully." });
     }
     res.status(404).json({ error: "Student registration not found." });
   });
 
   // UPDATE Student / Admission
-  app.put("/api/admin/students/:id", (req, res) => {
+  app.put("/api/admin/students/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6691,7 +6709,7 @@ www.witslingo.com`
     if (!reg) return res.status(404).json({ error: "Student registration not found." });
 
     Object.assign(reg, req.body);
-    saveRegistrations();
+    await saveRegistrations();
     res.json({ success: true, student: reg });
   });
 
@@ -6727,7 +6745,7 @@ www.witslingo.com`
   });
 
   // UPDATE Class
-  app.put("/api/admin/classes/:id", (req, res) => {
+  app.put("/api/admin/classes/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6737,12 +6755,12 @@ www.witslingo.com`
     if (!cls) return res.status(404).json({ error: "Class not found." });
 
     Object.assign(cls, req.body);
-    saveClasses();
+    await saveClasses();
     res.json({ success: true, class: cls, classes });
   });
 
   // DELETE Class
-  app.delete("/api/admin/classes/:id", (req, res) => {
+  app.delete("/api/admin/classes/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6751,14 +6769,14 @@ www.witslingo.com`
     const idx = classes.findIndex(c => c.id === id);
     if (idx !== -1) {
       classes.splice(idx, 1);
-      saveClasses();
+      await saveClasses();
       return res.json({ success: true, message: "Class deleted successfully.", classes });
     }
     res.status(404).json({ error: "Class not found." });
   });
 
   // UPDATE Recording
-  app.put("/api/admin/recordings/:id", (req, res) => {
+  app.put("/api/admin/recordings/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6768,12 +6786,12 @@ www.witslingo.com`
     if (!rec) return res.status(404).json({ error: "Recording not found." });
 
     Object.assign(rec, req.body);
-    saveRecordings();
+    await saveRecordings();
     res.json({ success: true, recording: rec, recordings });
   });
 
   // DELETE Recording
-  app.delete("/api/admin/recordings/:id", (req, res) => {
+  app.delete("/api/admin/recordings/:id", async (req, res) => {
     const auth = verifyAuthToken(req);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -6782,7 +6800,7 @@ www.witslingo.com`
     const idx = recordings.findIndex(r => r.id === id);
     if (idx !== -1) {
       recordings.splice(idx, 1);
-      saveRecordings();
+      await saveRecordings();
       return res.json({ success: true, message: "Recording deleted successfully.", recordings });
     }
     res.status(404).json({ error: "Recording not found." });

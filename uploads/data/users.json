@@ -28,44 +28,5 @@
       "batch-vocab-sept-2026"
     ],
     "registrationDate": "2026-01-01"
-  },
-  {
-    "id": "usr-student-01",
-    "name": "Mohd Farhan",
-    "email": "mohd.farhan@gmail.com",
-    "passwordHash": "student123",
-    "role": "student",
-    "phone": "9876543210",
-    "batchIds": [
-      "batch-spoken-oct-2026"
-    ],
-    "admissionId": "WL-2026-OCT-0101",
-    "registrationDate": "2026-09-01"
-  },
-  {
-    "id": "usr-student-02",
-    "name": "Shabana Parveen",
-    "email": "shabana.parveen@gmail.com",
-    "passwordHash": "student123",
-    "role": "student",
-    "phone": "9832109876",
-    "batchIds": [
-      "batch-foundation-oct-2026"
-    ],
-    "admissionId": "WL-2026-OCT-0102",
-    "registrationDate": "2026-09-02"
-  },
-  {
-    "id": "usr-student-03",
-    "name": "Arjun Sharma",
-    "email": "arjun.sharma@gmail.com",
-    "passwordHash": "student123",
-    "role": "student",
-    "phone": "9412345678",
-    "batchIds": [
-      "batch-spoken-nov-2026"
-    ],
-    "admissionId": "WL-2026-NOV-0103",
-    "registrationDate": "2026-09-10"
   }
 ]

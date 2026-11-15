@@ -263,6 +263,63 @@ async function runTests() {
       assert(deleteGalRes.ok && deleteGalData.success, 'DELETE /api/admin/gallery/:id deletes gallery item', JSON.stringify(deleteGalData));
     }
 
+    // 6b. Test Student Admissions CRUD Endpoints
+    console.log('\n--- 6b. Testing Student Admissions CRUD Endpoints ---');
+    const initialStudentsRes = await fetch(`${baseUrl}/api/admin/students`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const initialStudentsData = await initialStudentsRes.json();
+    assert(initialStudentsRes.ok && Array.isArray(initialStudentsData.students), 'GET /api/admin/students returns students array');
+
+    // Create a new student admission
+    const newStudentRes = await fetch(`${baseUrl}/api/admin/students`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        name: 'Test Persistent Student',
+        fatherName: 'Test Father',
+        dob: '2001-01-01',
+        phone: '9998887776',
+        whatsapp: '9998887776',
+        email: 'test.student@witslingo.test',
+        district: 'Amroha',
+        state: 'Uttar Pradesh',
+        pincode: '244221',
+        courseId: 'course-spoken-english',
+        batchId: 'batch-spoken-oct-2026',
+        paymentStatus: 'Paid'
+      })
+    });
+    const newStudentData = await newStudentRes.json();
+    assert(newStudentRes.ok && newStudentData.success && !!newStudentData.student?.id, 'POST /api/admin/students creates student admission record', JSON.stringify(newStudentData));
+    const createdStudentId = newStudentData.student?.id;
+
+    // Update the student admission
+    const updateStudentRes = await fetch(`${baseUrl}/api/admin/students/${createdStudentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        currentEnglishLevel: 'Advanced Speaker'
+      })
+    });
+    const updateStudentData = await updateStudentRes.json();
+    assert(updateStudentRes.ok && updateStudentData.success && updateStudentData.student?.currentEnglishLevel === 'Advanced Speaker', 'PUT /api/admin/students/:id updates student record', JSON.stringify(updateStudentData));
+
+    // Delete the student admission
+    const deleteStudentRes = await fetch(`${baseUrl}/api/admin/students/${createdStudentId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const deleteStudentData = await deleteStudentRes.json();
+    assert(deleteStudentRes.ok && deleteStudentData.success, 'DELETE /api/admin/students/:id deletes student admission record', JSON.stringify(deleteStudentData));
+
+    // Verify GET /api/admin/students reflects the deletion
+    const finalStudentsRes = await fetch(`${baseUrl}/api/admin/students`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const finalStudentsData = await finalStudentsRes.json();
+    assert(finalStudentsRes.ok && !finalStudentsData.students.some((s: any) => s.id === createdStudentId), 'GET /api/admin/students verifies student is deleted');
+
     // 9. Test CMS Content Bulk Update
     console.log('\n--- 7. Testing CMS Settings Update ---');
     const cmsUpdateRes = await fetch(`${baseUrl}/api/cms/content`, {

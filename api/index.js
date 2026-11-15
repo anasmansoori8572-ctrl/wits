@@ -3075,7 +3075,7 @@ function verifyPassword(inputPassword, storedHashOrPlain, salt = "witslingo_salt
   }
   return false;
 }
-var users = [
+var defaultAdminUsers = [
   {
     id: "usr-admin-01",
     name: "Ziyaur Rehman Zia",
@@ -3095,118 +3095,10 @@ var users = [
     phone: "7310952271",
     batchIds: ["batch-spoken-oct-2026", "batch-spoken-nov-2026", "batch-foundation-oct-2026", "batch-vocab-sept-2026"],
     registrationDate: "2026-01-01"
-  },
-  {
-    id: "usr-student-01",
-    name: "Mohd Farhan",
-    email: "mohd.farhan@gmail.com",
-    passwordHash: "student123",
-    role: "student",
-    phone: "9876543210",
-    batchIds: ["batch-spoken-oct-2026"],
-    admissionId: "WL-2026-OCT-0101",
-    registrationDate: "2026-09-01"
-  },
-  {
-    id: "usr-student-02",
-    name: "Shabana Parveen",
-    email: "shabana.parveen@gmail.com",
-    passwordHash: "student123",
-    role: "student",
-    phone: "9832109876",
-    batchIds: ["batch-foundation-oct-2026"],
-    admissionId: "WL-2026-OCT-0102",
-    registrationDate: "2026-09-02"
-  },
-  {
-    id: "usr-student-03",
-    name: "Arjun Sharma",
-    email: "arjun.sharma@gmail.com",
-    passwordHash: "student123",
-    role: "student",
-    phone: "9412345678",
-    batchIds: ["batch-spoken-nov-2026"],
-    admissionId: "WL-2026-NOV-0103",
-    registrationDate: "2026-09-10"
   }
 ];
-var registrations = [
-  {
-    id: "reg-01",
-    admissionId: "WL-2026-OCT-0101",
-    name: "Mohd Farhan",
-    fatherName: "Akhtar Ali",
-    dob: "2003-05-14",
-    gender: "Male",
-    district: "Amroha",
-    state: "Uttar Pradesh",
-    phone: "9876543210",
-    whatsapp: "9876543210",
-    email: "mohd.farhan@gmail.com",
-    address: "Mohalla Chah Ghori, Amroha, UP",
-    qualification: "Undergraduate (B.A.)",
-    currentEnglishLevel: "Beginner",
-    courseId: "course-spoken-english",
-    courseName: "Spoken English",
-    batchId: "batch-spoken-oct-2026",
-    batchName: "Spoken English \u2014 Batch October 2026 (Batch 01)",
-    feeAmount: 1499,
-    paymentStatus: "Paid",
-    paymentMethod: "Razorpay",
-    paymentTxnId: "pay_Rzp982347101",
-    registeredAt: "2026-09-01T10:30:00Z"
-  },
-  {
-    id: "reg-02",
-    admissionId: "WL-2026-OCT-0102",
-    name: "Shabana Parveen",
-    fatherName: "Rashid Khan",
-    dob: "2002-11-20",
-    gender: "Female",
-    district: "Moradabad",
-    state: "Uttar Pradesh",
-    phone: "9832109876",
-    whatsapp: "9832109876",
-    email: "shabana.parveen@gmail.com",
-    address: "Civil Lines, Moradabad, UP",
-    qualification: "Senior Secondary (12th Passed)",
-    currentEnglishLevel: "Complete Beginner",
-    courseId: "course-foundation",
-    courseName: "English Foundation",
-    batchId: "batch-foundation-oct-2026",
-    batchName: "English Foundation \u2014 Batch October 2026",
-    feeAmount: 1199,
-    paymentStatus: "Paid",
-    paymentMethod: "Razorpay",
-    paymentTxnId: "pay_Rzp449102837",
-    registeredAt: "2026-09-02T14:15:00Z"
-  },
-  {
-    id: "reg-03",
-    admissionId: "WL-2026-NOV-0103",
-    name: "Arjun Sharma",
-    fatherName: "Mahesh Sharma",
-    dob: "2001-08-09",
-    gender: "Male",
-    district: "Hapur",
-    state: "Uttar Pradesh",
-    phone: "9412345678",
-    whatsapp: "9412345678",
-    email: "arjun.sharma@gmail.com",
-    address: "Station Road, Hapur, UP",
-    qualification: "B.Tech Student",
-    currentEnglishLevel: "Intermediate",
-    courseId: "course-spoken-english",
-    courseName: "Spoken English",
-    batchId: "batch-spoken-nov-2026",
-    batchName: "Spoken English \u2014 Batch November 2026",
-    feeAmount: 1499,
-    paymentStatus: "Paid",
-    paymentMethod: "PayPal",
-    paymentTxnId: "PAYID-MN7849102",
-    registeredAt: "2026-09-10T16:45:00Z"
-  }
-];
+var users = [...defaultAdminUsers];
+var registrations = [];
 var batches = [
   {
     id: "batch-spoken-oct-2026",
@@ -4061,7 +3953,7 @@ async function loadAllPersistedDataAsync() {
     if (fs7.existsSync(REGISTRATIONS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs7.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           registrations.length = 0;
           registrations.push(...data);
         }
@@ -4071,7 +3963,7 @@ async function loadAllPersistedDataAsync() {
     if (fs7.existsSync(USERS_STORAGE_FILE)) {
       try {
         const data = JSON.parse(fs7.readFileSync(USERS_STORAGE_FILE, "utf-8"));
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           users.length = 0;
           users.push(...data);
         }
@@ -4119,13 +4011,32 @@ async function loadAllPersistedDataAsync() {
       }
     }
     try {
-      const [cloudMaterials, cloudCourses, cloudCms, cloudAnnouncements, cloudBatches, cloudGallery] = await Promise.all([
+      const [
+        cloudMaterials,
+        cloudCourses,
+        cloudCms,
+        cloudAnnouncements,
+        cloudBatches,
+        cloudGallery,
+        cloudRegistrations,
+        cloudUsers,
+        cloudClasses,
+        cloudRecordings,
+        cloudOrders,
+        cloudPayments
+      ] = await Promise.all([
         durableStorageService.getCollection("materials", []),
         durableStorageService.getCollection("courses", []),
         durableStorageService.getCollection("cmsContent", []),
         durableStorageService.getCollection("announcements", []),
         durableStorageService.getCollection("batches", []),
-        durableStorageService.getCollection("gallery", [])
+        durableStorageService.getCollection("gallery", []),
+        durableStorageService.getCollection("registrations", []),
+        durableStorageService.getCollection("users", defaultAdminUsers),
+        durableStorageService.getCollection("classes", []),
+        durableStorageService.getCollection("recordings", []),
+        durableStorageService.getCollection("orders", []),
+        durableStorageService.getCollection("payments", [])
       ]);
       if (Array.isArray(cloudMaterials)) {
         for (const m of cloudMaterials) {
@@ -4154,20 +4065,59 @@ async function loadAllPersistedDataAsync() {
         };
         console.log(`[Persistence] Hydrated CMS settings from Backblaze B2.`);
       }
-      if (Array.isArray(cloudAnnouncements) && cloudAnnouncements.length > 0) {
+      if (Array.isArray(cloudAnnouncements)) {
         announcements.length = 0;
         announcements.push(...cloudAnnouncements);
         console.log(`[Persistence] Hydrated ${announcements.length} announcements from Backblaze B2.`);
       }
-      if (Array.isArray(cloudBatches) && cloudBatches.length > 0) {
+      if (Array.isArray(cloudBatches)) {
         batches.length = 0;
         batches.push(...cloudBatches);
         console.log(`[Persistence] Hydrated ${batches.length} batches from Backblaze B2.`);
       }
-      if (Array.isArray(cloudGallery) && cloudGallery.length > 0) {
+      if (Array.isArray(cloudGallery)) {
         galleryItems.length = 0;
         galleryItems.push(...cloudGallery);
         console.log(`[Persistence] Hydrated ${galleryItems.length} gallery items from Backblaze B2.`);
+      }
+      if (Array.isArray(cloudRegistrations)) {
+        registrations.length = 0;
+        registrations.push(...cloudRegistrations);
+        console.log(`[Persistence] Hydrated ${registrations.length} student registrations from Backblaze B2.`);
+      }
+      if (Array.isArray(cloudUsers)) {
+        const userMap = /* @__PURE__ */ new Map();
+        for (const admin of defaultAdminUsers) {
+          userMap.set(admin.email.toLowerCase(), admin);
+        }
+        for (const u of cloudUsers) {
+          if (u.role === "admin" && userMap.has(u.email.toLowerCase())) {
+            userMap.set(u.email.toLowerCase(), { ...userMap.get(u.email.toLowerCase()), ...u });
+          } else {
+            userMap.set(u.email.toLowerCase(), u);
+          }
+        }
+        users.length = 0;
+        users.push(...Array.from(userMap.values()));
+        console.log(`[Persistence] Hydrated ${users.length} users from Backblaze B2.`);
+      }
+      if (Array.isArray(cloudClasses)) {
+        classes.length = 0;
+        classes.push(...cloudClasses);
+        console.log(`[Persistence] Hydrated ${classes.length} classes from Backblaze B2.`);
+      }
+      if (Array.isArray(cloudRecordings)) {
+        recordings.length = 0;
+        recordings.push(...cloudRecordings);
+        console.log(`[Persistence] Hydrated ${recordings.length} recordings from Backblaze B2.`);
+      }
+      if (Array.isArray(cloudOrders)) {
+        orders.length = 0;
+        orders.push(...cloudOrders);
+      }
+      if (Array.isArray(cloudPayments)) {
+        payments.length = 0;
+        payments.push(...cloudPayments);
       }
     } catch (cloudErr) {
       console.warn("[Persistence] Cloud hydration notice:", cloudErr);
@@ -5502,10 +5452,12 @@ app.post("/api/payments/razorpay/verify", async (req, res) => {
       users.push(user);
     }
     const token = generateAuthToken(user);
-    saveRegistrations();
-    saveUsers();
-    saveBatches();
-    savePayments();
+    await Promise.all([
+      saveRegistrations(),
+      saveUsers(),
+      saveBatches(),
+      savePayments()
+    ]);
     try {
       const waRes = await sendWhatsAppEnrollmentMessage({
         studentName: studentReg.name,
@@ -5631,13 +5583,13 @@ app.post("/api/webhooks/razorpay", async (req, res) => {
           matchedOrder.orderStatus = "paid";
           matchedOrder.razorpayPaymentId = paymentId;
           matchedOrder.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-          saveOrders();
+          await saveOrders();
         }
         const reg = registrations.find((r) => r.razorpayOrderId === orderId || matchedOrder && r.phone === matchedOrder.studentPhone);
         if (reg) {
           reg.paymentStatus = "Paid";
           reg.razorpayPaymentId = paymentId;
-          saveRegistrations();
+          await saveRegistrations();
         }
         const studentName = reg?.name || matchedOrder?.studentName || paymentEntity.notes?.studentName || "Student";
         const studentEmail = reg?.email || matchedOrder?.studentEmail || paymentEntity.email || "";
@@ -6004,7 +5956,7 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
       existingReg.courseId = order.courseId;
       existingReg.courseName = order.courseName;
     }
-    saveRegistrations();
+    await saveRegistrations();
     let existingUser = users.find((u) => u.phone === order.studentPhone || u.email.toLowerCase() === order.studentEmail.toLowerCase());
     if (!existingUser) {
       existingUser = {
@@ -6024,7 +5976,7 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
         existingUser.batchIds.push(order.batchId || "batch-spoken-oct-2026");
       }
     }
-    saveUsers();
+    await saveUsers();
     let waConfirmationResult = null;
     try {
       waConfirmationResult = await sendPaymentConfirmationWhatsApp(order, newPayment);
@@ -6928,7 +6880,7 @@ app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
   }
   res.status(404).send("Gallery image not found.");
 });
-app.post("/api/admissions/register", (req, res) => {
+app.post("/api/admissions/register", async (req, res) => {
   const auth = verifyAuthToken(req);
   const isAdmin = auth && auth.role === "admin";
   const {
@@ -7094,9 +7046,11 @@ www.witslingo.com`;
   studentReg.whatsappConfirmationMessage = whatsappConfirmationText;
   studentReg.whatsappStudentUrl = whatsappStudentUrl;
   studentReg.whatsappAdminUrl = whatsappAdminUrl;
-  saveRegistrations();
-  saveUsers();
-  saveBatches();
+  await Promise.all([
+    saveRegistrations(),
+    saveUsers(),
+    saveBatches()
+  ]);
   if (paymentStatus === "Paid") {
     const courseObj = (cmsContent.courses || []).find((c) => c.id === studentReg.courseId || c.name === studentReg.courseName);
     sendWhatsAppEnrollmentMessage({
@@ -7264,7 +7218,7 @@ app.post("/api/admin/students/:id/resend-whatsapp", async (req, res) => {
     facilities: course?.facilities,
     forceResend: true
   });
-  saveRegistrations();
+  await saveRegistrations();
   res.json({
     success: waRes.success,
     whatsappDeliveryStatus: reg.whatsappDeliveryStatus,
@@ -7300,7 +7254,7 @@ app.post("/api/admin/registrations/:id/resend-whatsapp", async (req, res) => {
     facilities: course?.facilities,
     forceResend: true
   });
-  saveRegistrations();
+  await saveRegistrations();
   res.json({
     success: waRes.success,
     whatsappDeliveryStatus: reg.whatsappDeliveryStatus,
@@ -7338,7 +7292,7 @@ app.post("/api/admin/batches", async (req, res) => {
   await saveBatches();
   res.json({ success: true, batch: newBatch, batches });
 });
-app.post("/api/admin/schedule-class", (req, res) => {
+app.post("/api/admin/schedule-class", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Access Denied: Admin authorization required." });
@@ -7375,12 +7329,12 @@ app.post("/api/admin/schedule-class", (req, res) => {
       author: newClass.teacherName,
       priority: "Urgent"
     });
-    saveAnnouncements();
+    await saveAnnouncements();
   }
-  saveClasses();
+  await saveClasses();
   res.json({ success: true, class: newClass });
 });
-app.post("/api/admin/classes/:classId/status", (req, res) => {
+app.post("/api/admin/classes/:classId/status", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Access Denied: Admin authorization required." });
@@ -7422,13 +7376,13 @@ app.post("/api/admin/classes/:classId/status", (req, res) => {
       author: "Wits Lingo Academy",
       priority: "Normal"
     });
-    saveAnnouncements();
+    await saveAnnouncements();
   }
-  saveClasses();
-  saveRecordings();
+  await saveClasses();
+  await saveRecordings();
   res.json({ success: true, class: cls });
 });
-app.post("/api/admin/recordings", (req, res) => {
+app.post("/api/admin/recordings", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -7453,8 +7407,8 @@ app.post("/api/admin/recordings", (req, res) => {
   recordings.unshift(newRec);
   cls.recordingId = newRec.id;
   cls.status = "Completed";
-  saveRecordings();
-  saveClasses();
+  await saveRecordings();
+  await saveClasses();
   res.json({ success: true, recording: newRec });
 });
 function extractYouTubeVideoId(url) {
@@ -8175,7 +8129,51 @@ app.get("/api/admin/attendance", (req, res) => {
   }
   res.json({ attendance: list, totalCount: list.length });
 });
-app.delete("/api/admin/students/:id", (req, res) => {
+app.post("/api/admin/students", async (req, res) => {
+  const auth = verifyAuthToken(req);
+  if (!auth || auth.role !== "admin") {
+    return res.status(403).json({ error: "Admin authorization required." });
+  }
+  const studentData = req.body;
+  if (!studentData.name || !studentData.phone) {
+    return res.status(400).json({ error: "Student name and phone are required." });
+  }
+  const id = studentData.id || `reg-${Date.now()}`;
+  const randomSeq = Math.floor(1e3 + Math.random() * 9e3);
+  const admissionId = studentData.admissionId || `WL-OCT26-${randomSeq}`;
+  const record = {
+    ...studentData,
+    id,
+    admissionId,
+    registeredAt: studentData.registeredAt || (/* @__PURE__ */ new Date()).toISOString()
+  };
+  registrations.unshift(record);
+  if (record.email) {
+    let existingUser = users.find((u) => u.email.toLowerCase() === record.email.toLowerCase());
+    if (existingUser) {
+      if (record.batchId && !existingUser.batchIds.includes(record.batchId)) {
+        existingUser.batchIds.push(record.batchId);
+      }
+      if (!existingUser.admissionId) existingUser.admissionId = record.admissionId;
+    } else {
+      users.push({
+        id: `usr-${Date.now()}`,
+        name: record.name,
+        email: record.email.toLowerCase(),
+        passwordHash: "student123",
+        role: "student",
+        phone: record.phone,
+        batchIds: record.batchId ? [record.batchId] : [],
+        admissionId: record.admissionId,
+        registrationDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
+      });
+    }
+    await saveUsers();
+  }
+  await saveRegistrations();
+  res.json({ success: true, student: record });
+});
+app.delete("/api/admin/students/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8185,17 +8183,17 @@ app.delete("/api/admin/students/:id", (req, res) => {
   if (regIdx !== -1) {
     const reg = registrations[regIdx];
     registrations.splice(regIdx, 1);
-    const userIdx = users.findIndex((u) => u.admissionId === reg.admissionId || u.email === reg.email);
-    if (userIdx !== -1) {
+    const userIdx = users.findIndex((u) => reg.admissionId && u.admissionId === reg.admissionId || reg.email && u.email.toLowerCase() === reg.email.toLowerCase());
+    if (userIdx !== -1 && users[userIdx].role !== "admin") {
       users.splice(userIdx, 1);
-      saveUsers();
+      await saveUsers();
     }
-    saveRegistrations();
+    await saveRegistrations();
     return res.json({ success: true, message: "Student admission deleted successfully." });
   }
   res.status(404).json({ error: "Student registration not found." });
 });
-app.put("/api/admin/students/:id", (req, res) => {
+app.put("/api/admin/students/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8204,7 +8202,7 @@ app.put("/api/admin/students/:id", (req, res) => {
   const reg = registrations.find((r) => r.id === id || r.admissionId === id);
   if (!reg) return res.status(404).json({ error: "Student registration not found." });
   Object.assign(reg, req.body);
-  saveRegistrations();
+  await saveRegistrations();
   res.json({ success: true, student: reg });
 });
 app.put("/api/admin/batches/:id", async (req, res) => {
@@ -8233,7 +8231,7 @@ app.delete("/api/admin/batches/:id", async (req, res) => {
   }
   res.status(404).json({ error: "Batch not found." });
 });
-app.put("/api/admin/classes/:id", (req, res) => {
+app.put("/api/admin/classes/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8242,10 +8240,10 @@ app.put("/api/admin/classes/:id", (req, res) => {
   const cls = classes.find((c) => c.id === id);
   if (!cls) return res.status(404).json({ error: "Class not found." });
   Object.assign(cls, req.body);
-  saveClasses();
+  await saveClasses();
   res.json({ success: true, class: cls, classes });
 });
-app.delete("/api/admin/classes/:id", (req, res) => {
+app.delete("/api/admin/classes/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8254,12 +8252,12 @@ app.delete("/api/admin/classes/:id", (req, res) => {
   const idx = classes.findIndex((c) => c.id === id);
   if (idx !== -1) {
     classes.splice(idx, 1);
-    saveClasses();
+    await saveClasses();
     return res.json({ success: true, message: "Class deleted successfully.", classes });
   }
   res.status(404).json({ error: "Class not found." });
 });
-app.put("/api/admin/recordings/:id", (req, res) => {
+app.put("/api/admin/recordings/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8268,10 +8266,10 @@ app.put("/api/admin/recordings/:id", (req, res) => {
   const rec = recordings.find((r) => r.id === id);
   if (!rec) return res.status(404).json({ error: "Recording not found." });
   Object.assign(rec, req.body);
-  saveRecordings();
+  await saveRecordings();
   res.json({ success: true, recording: rec, recordings });
 });
-app.delete("/api/admin/recordings/:id", (req, res) => {
+app.delete("/api/admin/recordings/:id", async (req, res) => {
   const auth = verifyAuthToken(req);
   if (!auth || auth.role !== "admin") {
     return res.status(403).json({ error: "Admin authorization required." });
@@ -8280,7 +8278,7 @@ app.delete("/api/admin/recordings/:id", (req, res) => {
   const idx = recordings.findIndex((r) => r.id === id);
   if (idx !== -1) {
     recordings.splice(idx, 1);
-    saveRecordings();
+    await saveRecordings();
     return res.json({ success: true, message: "Recording deleted successfully.", recordings });
   }
   res.status(404).json({ error: "Recording not found." });
