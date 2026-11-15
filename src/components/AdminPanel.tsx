@@ -19,6 +19,7 @@ import { useScrollLock } from '../hooks/useScrollLock';
 import { CountryCodePhoneInput } from './CountryCodePhoneInput';
 import { CountryPhoneCode, DEFAULT_COUNTRY_CODE, ALL_COUNTRY_PHONE_CODES } from '../data/countryPhoneCodes';
 import { AddressHierarchySelector } from './AddressHierarchySelector';
+import { adminFetch } from '../utils/adminApi';
 
 export type AdminTabType = 'students' | 'courses' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings' | 'orders-payments' | 'whatsapp-notifications' | 'support-tickets' | 'knowledge-base';
 
@@ -38,7 +39,7 @@ interface AdminPanelProps {
   batches: Batch[];
   onUpdateBatches: (batches: Batch[]) => void;
   testimonials: TestimonialData[];
-  onUpdateTestimonials: (testimonials: TestimonialData[]) => void;
+  onUpdateTestimonials: (testimonials: TestimonialData[]) => void | Promise<void>;
   siteSettings: SiteSettings;
   onUpdateSiteSettings: (settings: SiteSettings) => void;
   announcements?: Announcement[];
@@ -451,7 +452,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       onUpdateSiteSettings(updatedSettings);
       localStorage.setItem('wits_lingo_site_settings', JSON.stringify(updatedSettings));
 
-      const res = await fetch('/api/cms/content', {
+      const res = await adminFetch('/api/cms/content', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -488,18 +489,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsLoading(true);
     try {
       // 1. Batches
-      const bRes = await fetch('/api/batches', {
+      const bRes = await adminFetch('/api/batches', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (bRes.ok) {
         const bData = await bRes.json();
-        if (Array.isArray(bData) && bData.length > 0) {
+        if (Array.isArray(bData)) {
           onUpdateBatches(bData);
         }
       }
 
       // 2. Students
-      const sRes = await fetch('/api/admin/students', {
+      const sRes = await adminFetch('/api/admin/students', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (sRes.ok) {
@@ -508,7 +509,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
 
       // 3. Classes
-      const cRes = await fetch('/api/batches/batch-spoken-oct-2026/classes', {
+      const cRes = await adminFetch('/api/batches/batch-spoken-oct-2026/classes', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (cRes.ok) {
@@ -517,7 +518,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
 
       // 4. Study Materials
-      const mRes = await fetch('/api/admin/materials', {
+      const mRes = await adminFetch('/api/admin/materials', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (mRes.ok) {
@@ -531,7 +532,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
 
       // 5. Gallery Items
-      const gRes = await fetch('/api/admin/gallery', {
+      const gRes = await adminFetch('/api/admin/gallery', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (gRes.ok) {
@@ -573,12 +574,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       description: `Are you sure you want to delete the admission record for "${name}" (${studentId})? This student will be removed from all enrolled course rosters and portal access.`,
       onConfirm: async () => {
         try {
-          await fetch(`/api/admin/students/${studentId}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
+          const res = await adminFetch(`/api/admin/students/${studentId}`, {
+            method: 'DELETE'
           });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            triggerFeedback(err.error || `Failed to delete student (${res.status})`);
+            return;
+          }
         } catch (err) {
           console.error('Delete student error', err);
+          triggerFeedback('Network error while deleting student.');
+          return;
         }
         setStudents(prev => prev.filter(s => s.id !== studentId && s.admissionId !== studentId));
         triggerFeedback(`Student admission for "${name}" deleted.`);
@@ -590,7 +597,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     if (!editingStudent) return;
     try {
-      await fetch(`/api/admin/students/${editingStudent.id || editingStudent.admissionId}`, {
+      await adminFetch(`/api/admin/students/${editingStudent.id || editingStudent.admissionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(editingStudent)
@@ -665,7 +672,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
 
     try {
-      const res = await fetch('/api/admin/students', {
+      const res = await adminFetch('/api/admin/students', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -717,7 +724,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleResendWhatsApp = async (studentId: string) => {
     try {
       setIsLoading(true);
-      const res = await fetch(`/api/admin/students/${studentId}/resend-whatsapp`, {
+      const res = await adminFetch(`/api/admin/students/${studentId}/resend-whatsapp`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -779,7 +786,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
 
     try {
-      const res = await fetch('/api/courses', {
+      const res = await adminFetch('/api/courses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -812,7 +819,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     triggerFeedback(`Course "${targetCourse.name}" changes saved successfully! (Status: ${targetCourse.isPublished !== false ? 'Live Published' : 'Draft / Unpublished'})`);
 
     try {
-      const res = await fetch(`/api/courses/${targetCourse.id}`, {
+      const res = await adminFetch(`/api/courses/${targetCourse.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -846,7 +853,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
 
     try {
-      const res = await fetch(`/api/courses/${courseId}/publish`, {
+      const res = await adminFetch(`/api/courses/${courseId}/publish`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -880,7 +887,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         triggerFeedback(`Course "${name}" deleted.`);
 
         try {
-          const res = await fetch(`/api/courses/${courseId}`, {
+          const res = await adminFetch(`/api/courses/${courseId}`, {
             method: 'DELETE',
             headers: {
               'Authorization': token ? `Bearer ${token}` : ''
@@ -949,7 +956,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     triggerFeedback(`Batch "${batchToAdd.name}" created.`);
 
     try {
-      const res = await fetch('/api/admin/batches', {
+      const res = await adminFetch('/api/admin/batches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(batchToAdd)
@@ -984,7 +991,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
 
     try {
-      const res = await fetch(`/api/admin/batches/${batchId}`, {
+      const res = await adminFetch(`/api/admin/batches/${batchId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(updatedBatch)
@@ -1015,7 +1022,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         : 'Batches & Seat Capacity section is now HIDDEN from public website.'
     );
     try {
-      await fetch('/api/cms/content', {
+      await adminFetch('/api/cms/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
@@ -1039,7 +1046,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     triggerFeedback(`Batch "${targetBatch.name}" updated.`);
 
     try {
-      const res = await fetch(`/api/admin/batches/${targetBatch.id}`, {
+      const res = await adminFetch(`/api/admin/batches/${targetBatch.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(targetBatch)
@@ -1070,7 +1077,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         triggerFeedback(`Batch "${name}" deleted.`);
 
         try {
-          const res = await fetch(`/api/admin/batches/${batchId}`, {
+          const res = await adminFetch(`/api/admin/batches/${batchId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -1114,7 +1121,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       hasAssignment: false
     };
     try {
-      await fetch(`/api/admin/batches/${newClass.batchId}/classes`, {
+      await adminFetch(`/api/admin/batches/${newClass.batchId}/classes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(created)
@@ -1128,7 +1135,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleToggleClassStatus = async (clsId: string, newStatus: 'Upcoming' | 'Live' | 'Completed') => {
     setClasses(prev => prev.map(c => c.id === clsId ? { ...c, status: newStatus } : c));
     try {
-      await fetch(`/api/admin/classes/${clsId}/status`, {
+      await adminFetch(`/api/admin/classes/${clsId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ status: newStatus })
@@ -1146,7 +1153,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       description: `Are you sure you want to delete the class session "${title}"?`,
       onConfirm: async () => {
         try {
-          await fetch(`/api/admin/classes/${clsId}`, {
+          await adminFetch(`/api/admin/classes/${clsId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -1178,7 +1185,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       description: newRecording.description
     };
     try {
-      await fetch('/api/admin/recordings', {
+      await adminFetch('/api/admin/recordings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(rec)
@@ -1198,7 +1205,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       description: `Are you sure you want to delete recording "${title}" from the student vault?`,
       onConfirm: async () => {
         try {
-          await fetch(`/api/admin/recordings/${recId}`, {
+          await adminFetch(`/api/admin/recordings/${recId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -1216,7 +1223,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (!url || !url.trim()) return;
     setIsFetchingYtMetadata(true);
     try {
-      const res = await fetch('/api/admin/youtube-metadata', {
+      const res = await adminFetch('/api/admin/youtube-metadata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ url: url.trim() })
@@ -1258,7 +1265,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const reader = new FileReader();
       reader.onload = async (e) => {
         const dataBase64 = e.target?.result as string;
-        const res = await fetch('/api/admin/upload-file', {
+        const res = await adminFetch('/api/admin/upload-file', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({
@@ -1317,7 +1324,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } catch (e) {}
 
     try {
-      const res = await fetch(`/api/admin/materials/${mat.id}`, {
+      const res = await adminFetch(`/api/admin/materials/${mat.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ isPublished: newStatus, isVisibleOnWebsite: newStatus })
@@ -1352,7 +1359,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       reader.onload = async (e) => {
         const dataBase64 = e.target?.result as string;
         try {
-          const res = await fetch('/api/admin/upload-file', {
+          const res = await adminFetch('/api/admin/upload-file', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({
@@ -1366,7 +1373,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             const uploadedUrl = data.url || data.b2Url;
 
             // Persist to backend
-            const updateRes = await fetch(`/api/admin/materials/${mat.id}`, {
+            const updateRes = await adminFetch(`/api/admin/materials/${mat.id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
               body: JSON.stringify({
@@ -1421,7 +1428,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const defaultThumb = vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : '';
 
     try {
-      const res = await fetch(`/api/admin/materials/${mat.id}`, {
+      const res = await adminFetch(`/api/admin/materials/${mat.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
@@ -1480,7 +1487,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         reader.readAsDataURL(file);
       });
 
-      const res = await fetch('/api/admin/upload-file', {
+      const res = await adminFetch('/api/admin/upload-file', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1557,7 +1564,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     let updatedList = [mat, ...materials];
     try {
-      const res = await fetch('/api/admin/materials', {
+      const res = await adminFetch('/api/admin/materials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(mat)
@@ -1648,7 +1655,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     let updatedList = [mat, ...materials];
     try {
-      const res = await fetch('/api/admin/materials', {
+      const res = await adminFetch('/api/admin/materials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(mat)
@@ -1730,7 +1737,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     let updatedList = materials.map(m => m.id === editingMaterial.id ? updated : m);
     try {
-      const res = await fetch(`/api/admin/materials/${editingMaterial.id}`, {
+      const res = await adminFetch(`/api/admin/materials/${editingMaterial.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(updated)
@@ -1773,7 +1780,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       onConfirm: async () => {
         let updatedList = materials.filter(m => m.id !== matId);
         try {
-          const res = await fetch(`/api/admin/materials/${matId}`, {
+          const res = await adminFetch(`/api/admin/materials/${matId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -1809,7 +1816,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // ----------------------------------------------------------------------
   // 7. TESTIMONIALS HANDLERS
   // ----------------------------------------------------------------------
-  const handleAddTestimonial = (e: React.FormEvent) => {
+  const handleAddTestimonial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTestimonial.studentName || !newTestimonial.testimonial) return;
     const item: TestimonialData = {
@@ -1822,16 +1829,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       rating: Number(newTestimonial.rating) || 5,
     };
     const updated = [item, ...testimonials];
-    onUpdateTestimonials(updated);
+    await onUpdateTestimonials(updated);
     setShowAddTestimonialModal(false);
     triggerFeedback(`Review from "${item.studentName}" published on homepage!`);
   };
 
-  const handleSaveEditTestimonial = (e: React.FormEvent) => {
+  const handleSaveEditTestimonial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTestimonial) return;
     const updated = testimonials.map(t => t.id === editingTestimonial.id ? editingTestimonial : t);
-    onUpdateTestimonials(updated);
+    await onUpdateTestimonials(updated);
     setEditingTestimonial(null);
     triggerFeedback('Testimonial updated.');
   };
@@ -1843,9 +1850,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       itemName: name,
       itemType: 'student review',
       description: `Are you sure you want to delete the testimonial from "${name}"? It will be removed from the homepage reviews section.`,
-      onConfirm: () => {
+      onConfirm: async () => {
         const updated = testimonials.filter(t => t.id !== id);
-        onUpdateTestimonials(updated);
+        await onUpdateTestimonials(updated);
         triggerFeedback(`Review deleted.`);
       }
     });
@@ -1896,7 +1903,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     triggerFeedback(`Notice "${createdAnn.title}" published successfully!`);
 
     try {
-      const res = await fetch('/api/admin/announcements', {
+      const res = await adminFetch('/api/admin/announcements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(createdAnn)
@@ -1931,7 +1938,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     triggerFeedback(`Notice "${updatedRecord.title}" updated.`);
 
     try {
-      const res = await fetch(`/api/admin/announcements/${updatedRecord.id}`, {
+      const res = await adminFetch(`/api/admin/announcements/${updatedRecord.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(updatedRecord)
@@ -1962,7 +1969,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         triggerFeedback(`Notice removed.`);
 
         try {
-          const res = await fetch(`/api/admin/announcements/${id}`, {
+          const res = await adminFetch(`/api/admin/announcements/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -1990,7 +1997,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     triggerFeedback(updatedTarget.isPinned ? `Notice pinned to top.` : `Notice unpinned.`);
 
     try {
-      const res = await fetch(`/api/admin/announcements/${id}`, {
+      const res = await adminFetch(`/api/admin/announcements/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ isPinned: updatedTarget.isPinned })
@@ -2018,7 +2025,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       reader.onload = async () => {
         try {
           const base64Data = reader.result as string;
-          const res = await fetch('/api/admin/hero-video/upload', {
+          const res = await adminFetch('/api/admin/hero-video/upload', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -2061,7 +2068,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleResetHeroVideo = async () => {
     try {
-      const res = await fetch('/api/admin/hero-video/reset', {
+      const res = await adminFetch('/api/admin/hero-video/reset', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -2091,7 +2098,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setCustomHeroVideoUrl(urlToSet);
     onUpdateSiteSettings(updated);
     try {
-      await fetch('/api/cms/content', {
+      await adminFetch('/api/cms/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
@@ -2158,7 +2165,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         });
       }
 
-      const res = await fetch('/api/admin/logo/upload', {
+      const res = await adminFetch('/api/admin/logo/upload', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2214,7 +2221,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       description: 'Are you sure you want to reset the website logo to the default original Wits Lingo SVG logo? All headers and footers will revert to the default mascot emblem.',
       onConfirm: async () => {
         try {
-          const res = await fetch('/api/admin/logo/reset', {
+          const res = await adminFetch('/api/admin/logo/reset', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -2284,7 +2291,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         });
       }
 
-      const res = await fetch('/api/admin/gallery/upload', {
+      const res = await adminFetch('/api/admin/gallery/upload', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2298,7 +2305,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         if (Array.isArray(data.items)) {
           setGalleryItems(prev => [...data.items, ...prev]);
         } else {
-          const gRes = await fetch('/api/admin/gallery', {
+          const gRes = await adminFetch('/api/admin/gallery', {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (gRes.ok) {
@@ -2324,7 +2331,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     if (!editingGalleryItem) return;
     try {
-      const res = await fetch(`/api/admin/gallery/${editingGalleryItem.id}`, {
+      const res = await adminFetch(`/api/admin/gallery/${editingGalleryItem.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -2354,7 +2361,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleToggleGalleryPublish = async (item: GalleryItem) => {
     const nextStatus = !item.isPublished;
     try {
-      const res = await fetch(`/api/admin/gallery/${item.id}`, {
+      const res = await adminFetch(`/api/admin/gallery/${item.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -2380,7 +2387,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       description: `Are you sure you want to delete this photo from the gallery? It will be removed from the public website and safely erased from cloud storage.`,
       onConfirm: async () => {
         try {
-          const res = await fetch(`/api/admin/gallery/${item.id}`, {
+          const res = await adminFetch(`/api/admin/gallery/${item.id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -2409,7 +2416,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setGalleryItems(updated);
 
     try {
-      await fetch('/api/admin/gallery/reorder', {
+      await adminFetch('/api/admin/gallery/reorder', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -2427,7 +2434,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     onUpdateSiteSettings(localSettings);
     try {
-      await fetch('/api/cms/content', {
+      await adminFetch('/api/cms/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({

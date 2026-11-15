@@ -1369,14 +1369,6 @@ let cmsContent: any = {
       testimonial: "Wits Lingo changed the way I look at English. Earlier, I used to freeze whenever someone asked me a question in English. Zia Sir's practical step-by-step approach helped me speak naturally in just a few weeks without memorising heavy grammar rules."
     },
     {
-      id: "test-02",
-      studentName: "Shabana Parveen",
-      courseBatch: "English Foundation",
-      city: "Moradabad, UP",
-      date: "August 2026",
-      testimonial: "Coming from a Hindi-medium background, I always lacked confidence in college. In Wits Lingo Academy, every single student gets a chance to speak. The batch recordings and daily worksheets are immense help!"
-    },
-    {
       id: "test-03",
       studentName: "Mohammad Danish",
       courseBatch: "Spoken English & Communication",
@@ -1432,9 +1424,19 @@ function verifyAuthToken(reqOrHeader?: express.Request | string): { userId: stri
       token = raw;
     }
   } else if (typeof reqOrHeader === "object") {
-    const authHeader = reqOrHeader.headers?.authorization;
-    if (authHeader) {
-      const raw = authHeader.trim();
+    const headers = reqOrHeader.headers || {};
+    const candidate = (
+      headers.authorization ||
+      headers["authorization"] ||
+      headers["Authorization"] ||
+      headers["x-authorization"] ||
+      headers["x-admin-token"] ||
+      headers["x-auth-token"] ||
+      headers["x-access-token"]
+    ) as string | undefined;
+
+    if (candidate) {
+      const raw = String(candidate).trim();
       if (raw.startsWith("Bearer ")) {
         token = raw.substring(7).trim();
       } else {
@@ -1447,6 +1449,9 @@ function verifyAuthToken(reqOrHeader?: express.Request | string): { userId: stri
     }
     if (!token && typeof reqOrHeader.query?.token === "string") {
       token = reqOrHeader.query.token.trim();
+    }
+    if (!token && reqOrHeader.body && typeof reqOrHeader.body.adminToken === "string") {
+      token = reqOrHeader.body.adminToken.trim();
     }
   }
 
@@ -6682,18 +6687,36 @@ www.witslingo.com`
       return res.status(403).json({ error: "Admin authorization required." });
     }
     const { id } = req.params;
-    const regIdx = registrations.findIndex(r => r.id === id || r.admissionId === id);
+    const target = String(id).toLowerCase().trim();
+    const regIdx = registrations.findIndex(r => 
+      (r.id && r.id.toLowerCase().trim() === target) || 
+      (r.admissionId && r.admissionId.toLowerCase().trim() === target)
+    );
     if (regIdx !== -1) {
       const reg = registrations[regIdx];
       registrations.splice(regIdx, 1);
       // Remove student user if exists
-      const userIdx = users.findIndex(u => (reg.admissionId && u.admissionId === reg.admissionId) || (reg.email && u.email.toLowerCase() === reg.email.toLowerCase()));
+      const userIdx = users.findIndex(u => 
+        (reg.admissionId && u.admissionId && u.admissionId.toLowerCase().trim() === reg.admissionId.toLowerCase().trim()) || 
+        (reg.email && u.email && u.email.toLowerCase().trim() === reg.email.toLowerCase().trim())
+      );
       if (userIdx !== -1 && users[userIdx].role !== "admin") {
         users.splice(userIdx, 1);
         await saveUsers();
       }
       await saveRegistrations();
-      return res.json({ success: true, message: "Student admission deleted successfully." });
+      return res.json({ success: true, message: "Student admission deleted successfully.", remainingCount: registrations.length, students: registrations });
+    }
+    // Also check users array
+    const userIdx = users.findIndex(u => 
+      (u.admissionId && u.admissionId.toLowerCase().trim() === target) ||
+      (u.id && u.id.toLowerCase().trim() === target)
+    );
+    if (userIdx !== -1 && users[userIdx].role !== "admin") {
+      users.splice(userIdx, 1);
+      await saveUsers();
+      await saveRegistrations();
+      return res.json({ success: true, message: "Student user deleted successfully.", remainingCount: registrations.length, students: registrations });
     }
     res.status(404).json({ error: "Student registration not found." });
   });
@@ -6705,7 +6728,11 @@ www.witslingo.com`
       return res.status(403).json({ error: "Admin authorization required." });
     }
     const { id } = req.params;
-    const reg = registrations.find(r => r.id === id || r.admissionId === id);
+    const target = String(id).toLowerCase().trim();
+    const reg = registrations.find(r => 
+      (r.id && r.id.toLowerCase().trim() === target) || 
+      (r.admissionId && r.admissionId.toLowerCase().trim() === target)
+    );
     if (!reg) return res.status(404).json({ error: "Student registration not found." });
 
     Object.assign(reg, req.body);

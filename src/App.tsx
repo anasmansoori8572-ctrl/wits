@@ -26,6 +26,7 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { PaymentStatusModal } from './components/PaymentStatusModal';
 import { PolicyPages, PolicyTab } from './components/PolicyPages';
 import { WITS_LINGO_CONFIG } from './config/witsLingoConfig';
+import { adminFetch } from './utils/adminApi';
 
 import { AdminTabType } from './components/AdminPanel';
 
@@ -236,14 +237,10 @@ export default function App() {
   const handleUpdateCourses = async (newCourses: CourseData[]) => {
     setCourses(newCourses);
     localStorage.setItem('wits_lingo_courses', JSON.stringify(newCourses));
-    const effectiveToken = authToken || (typeof window !== 'undefined' ? localStorage.getItem('wits_lingo_token') : '') || 'admin-session';
     try {
-      await fetch('/api/cms/content', {
+      await adminFetch('/api/cms/content', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${effectiveToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ courses: newCourses })
       });
     } catch (e) {
@@ -259,14 +256,10 @@ export default function App() {
   const handleUpdateTestimonials = async (newTestimonials: TestimonialData[]) => {
     setTestimonials(newTestimonials);
     localStorage.setItem('wits_lingo_testimonials', JSON.stringify(newTestimonials));
-    const effectiveToken = authToken || (typeof window !== 'undefined' ? localStorage.getItem('wits_lingo_token') : '') || 'admin-session';
     try {
-      await fetch('/api/cms/content', {
+      await adminFetch('/api/cms/content', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${effectiveToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ testimonials: newTestimonials })
       });
     } catch (e) {
@@ -277,14 +270,10 @@ export default function App() {
   const handleUpdateSiteSettings = async (newSettings: SiteSettings) => {
     setSiteSettings(newSettings);
     localStorage.setItem('wits_lingo_site_settings', JSON.stringify(newSettings));
-    const effectiveToken = authToken || (typeof window !== 'undefined' ? localStorage.getItem('wits_lingo_token') : '') || 'admin-session';
     try {
-      await fetch('/api/cms/content', {
+      await adminFetch('/api/cms/content', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${effectiveToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings: newSettings })
       });
     } catch (e) {
@@ -392,7 +381,7 @@ export default function App() {
     fetch('/api/courses?includeAll=true')
       .then(res => res.json())
       .then(data => {
-        if (data && Array.isArray(data.courses) && data.courses.length > 0) {
+        if (data && Array.isArray(data.courses)) {
           setCourses(data.courses);
           localStorage.setItem('wits_lingo_courses', JSON.stringify(data.courses));
         }
@@ -403,7 +392,7 @@ export default function App() {
     fetch('/api/batches')
       .then(res => res.json())
       .then(data => {
-        if (data && Array.isArray(data.batches) && data.batches.length > 0) {
+        if (data && Array.isArray(data.batches)) {
           setBatches(data.batches);
           localStorage.setItem('wits_lingo_batches', JSON.stringify(data.batches));
         }
@@ -425,7 +414,7 @@ export default function App() {
     fetch('/api/announcements')
       .then(res => res.json())
       .then(data => {
-        if (data && Array.isArray(data.announcements) && data.announcements.length > 0) {
+        if (data && Array.isArray(data.announcements)) {
           setAnnouncements(data.announcements);
           localStorage.setItem('wits_lingo_announcements', JSON.stringify(data.announcements));
         }
@@ -437,11 +426,11 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         if (data?.content) {
-          if (Array.isArray(data.content.courses) && data.content.courses.length > 0) {
+          if (Array.isArray(data.content.courses)) {
             setCourses(data.content.courses);
             localStorage.setItem('wits_lingo_courses', JSON.stringify(data.content.courses));
           }
-          if (Array.isArray(data.content.testimonials) && data.content.testimonials.length > 0) {
+          if (Array.isArray(data.content.testimonials)) {
             setTestimonials(data.content.testimonials);
             localStorage.setItem('wits_lingo_testimonials', JSON.stringify(data.content.testimonials));
           }

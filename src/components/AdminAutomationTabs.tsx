@@ -1,3 +1,4 @@
+import { adminFetch } from '../utils/adminApi';
 import React, { useState, useEffect } from 'react';
 import { WITS_LINGO_CONFIG } from '../config/witsLingoConfig';
 import {
@@ -81,28 +82,28 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
     setIsLoading(true);
     try {
       if (activeTab === 'orders-payments') {
-        const res = await fetch('/api/admin/orders', { headers: getHeaders() });
+        const res = await adminFetch('/api/admin/orders', { headers: getHeaders() });
         const data = await res.json();
         if (data.success) {
           setOrders(data.orders || []);
           if (data.stats) setOrderStats(data.stats);
         }
       } else if (activeTab === 'whatsapp-notifications') {
-        const res = await fetch('/api/admin/notifications', { headers: getHeaders() });
+        const res = await adminFetch('/api/admin/notifications', { headers: getHeaders() });
         const data = await res.json();
         if (data.success) {
           setNotifications(data.notifications || []);
           if (data.stats) setNotifStats(data.stats);
         }
       } else if (activeTab === 'support-tickets') {
-        const res = await fetch('/api/admin/tickets', { headers: getHeaders() });
+        const res = await adminFetch('/api/admin/tickets', { headers: getHeaders() });
         const data = await res.json();
         if (data.success) {
           setTickets(data.tickets || []);
           if (data.stats) setTicketStats(data.stats);
         }
       } else if (activeTab === 'knowledge-base') {
-        const res = await fetch('/api/admin/knowledge-base', { headers: getHeaders() });
+        const res = await adminFetch('/api/admin/knowledge-base', { headers: getHeaders() });
         const data = await res.json();
         if (data.success) {
           setKbItems(data.items || []);
@@ -151,7 +152,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
   const handleRetryNotification = async (notifId: string) => {
     setRetryingNotifId(notifId);
     try {
-      const res = await fetch(`/api/admin/notifications/${notifId}/retry`, {
+      const res = await adminFetch(`/api/admin/notifications/${notifId}/retry`, {
         method: 'POST',
         headers: getHeaders()
       });
@@ -186,7 +187,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
 
   const handleUpdateTicketStatus = async (ticketId: string, newStatus: string) => {
     try {
-      const res = await fetch(`/api/admin/tickets/${ticketId}`, {
+      const res = await adminFetch(`/api/admin/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: getHeaders(),
         body: JSON.stringify({ status: newStatus })
@@ -203,7 +204,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
 
   const handleSaveTicketNotes = async (ticketId: string, notes: string, assignedAgent: string) => {
     try {
-      const res = await fetch(`/api/admin/tickets/${ticketId}`, {
+      const res = await adminFetch(`/api/admin/tickets/${ticketId}`, {
         method: 'PATCH',
         headers: getHeaders(),
         body: JSON.stringify({ resolutionNotes: notes, assignedAgentName: assignedAgent })
@@ -225,7 +226,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
     setIsSendingReply(true);
     try {
       const convId = replyTicket.conversationId || `conv_${replyTicket.studentPhone}`;
-      const res = await fetch(`/api/admin/conversations/${convId}/reply`, {
+      const res = await adminFetch(`/api/admin/conversations/${convId}/reply`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ messageText: replyText.trim() })
@@ -265,7 +266,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
     if (!editingKbItem?.title || !editingKbItem?.content) return;
 
     try {
-      const res = await fetch('/api/admin/knowledge-base', {
+      const res = await adminFetch('/api/admin/knowledge-base', {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify(editingKbItem)
@@ -285,7 +286,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
   const handleDeleteKbItem = async (id: string) => {
     if (!confirm('Are you sure you want to delete this knowledge article?')) return;
     try {
-      const res = await fetch(`/api/admin/knowledge-base/${id}`, {
+      const res = await adminFetch(`/api/admin/knowledge-base/${id}`, {
         method: 'DELETE',
         headers: getHeaders()
       });
@@ -310,7 +311,7 @@ export const AdminAutomationTabs: React.FC<AdminAutomationTabsProps> = ({ active
     setTestAiResponse(null);
 
     try {
-      const res = await fetch('/api/support/chat', {
+      const res = await adminFetch('/api/support/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

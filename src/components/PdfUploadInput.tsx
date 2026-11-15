@@ -1,3 +1,4 @@
+import { adminFetch } from '../utils/adminApi';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   FileUp, Link as LinkIcon, Check, Eye, Trash2, 
@@ -52,7 +53,7 @@ export const PdfUploadInput: React.FC<PdfUploadInputProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch('/api/admin/b2-status')
+    adminFetch('/api/admin/b2-status')
       .then(r => r.json())
       .then(data => setB2Status(data))
       .catch(() => {});
@@ -115,7 +116,7 @@ export const PdfUploadInput: React.FC<PdfUploadInputProps> = ({
       let returnedMime: string | undefined;
 
       try {
-        const response = await fetch('/api/admin/upload-file', {
+        const response = await adminFetch('/api/admin/upload-file', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
