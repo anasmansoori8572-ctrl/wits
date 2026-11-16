@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
-  CheckCircle2, Search, Calendar, Laptop, 
-  Sparkles, Hash, MapPin, Target, Flame, Mic
+  CheckCircle2, Search, Calendar, 
+  Sparkles, Hash, Target, Flame, Mic
 } from 'lucide-react';
 import { SiteSettings } from '../types';
 
@@ -14,7 +14,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
   const studentsCount = siteSettings?.activeStudentsCount || '100+';
 
   return (
-    <section className="relative py-8 sm:py-16 lg:py-24 bg-[#F8F6F2] overflow-hidden border-b border-slate-200/80 font-['Plus_Jakarta_Sans']">
+    <section className="relative py-8 sm:py-10 lg:py-14 bg-[#F8F6F2] overflow-hidden border-b border-slate-200/80 font-['Plus_Jakarta_Sans']">
       
       {/* Subtle Warm Canvas Texture & Dot Accent */}
       <div 
@@ -405,38 +405,6 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
 
         </div>
 
-        {/* =========================================================================
-            BOTTOM BAR: DEVICE COMPATIBILITY & DOMAIN BRANDING (DESKTOP ONLY)
-            ========================================================================= */}
-        <div className="hidden lg:flex mt-14 pt-6 border-t border-slate-200/80 items-center justify-between gap-4 text-xs">
-          
-          {/* Left: Device & Location metadata matching reference footer */}
-          <div className="flex items-center gap-3 text-slate-600 font-medium">
-            <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#581C87] flex items-center justify-center shrink-0">
-              <Laptop className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="font-bold text-slate-800 block">
-                Live Google Meet Interactive Classes + In-Person Batches
-              </span>
-              <span className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                <MapPin className="w-3 h-3 text-purple-600" />
-                <span>{siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh'}</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Right: Wits Lingo Custom Branding matching reference logo stamp */}
-          <div className="flex items-center gap-2 font-['Outfit']">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#6D28D9] to-[#4F46E5] text-white flex items-center justify-center font-black text-xs shadow-xs">
-              W
-            </div>
-            <span className="font-bold text-sm text-slate-800 tracking-tight">
-              {siteSettings?.academyName || 'witslingo.com'}
-            </span>
-          </div>
-
-        </div>
 
       </div>
     </section>

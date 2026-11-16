@@ -54,29 +54,19 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
   };
 
   return (
-    <section id="courses" className="py-14 sm:py-16 lg:py-20 bg-[#FAF9FC] border-b border-purple-100/60 relative">
+    <section id="courses" className="py-8 sm:py-10 lg:py-14 bg-[#FAF9FC] border-b border-purple-100/60 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* =========================================================================
-            SECTION HEADER (Matches Reference Image "Our Courses")
+            SECTION HEADER (Only Heading & Filters - Clean & Compact)
             ========================================================================= */}
-        <div className="max-w-3xl mx-auto text-center space-y-3 mb-12 sm:mb-14">
-          {/* Top Pill / Kicker with arrow accent */}
-          <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.2em] text-[#6D28D9]">
-            <span className="flex items-center text-[10px] tracking-normal font-black text-[#6D28D9]">&#9658;&#9658;</span>
-            <span>Courses</span>
-          </div>
-
-          <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#1E1B26] tracking-tight">
+        <div className="max-w-3xl mx-auto text-center mb-6 sm:mb-8">
+          <h2 className="font-['Outfit'] text-3xl sm:text-4xl font-extrabold text-[#1E1B26] tracking-tight mb-4">
             Our Courses
           </h2>
 
-          <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Our team of experienced and certified instructors is committed to helping you achieve fluency and confidence in English.
-          </p>
-
-          {/* Filter Pills (All / Live / Upcoming - strictly aligning with the 2 allowed tags) */}
-          <div className="pt-4 flex items-center justify-center gap-2">
+          {/* Filter Pills */}
+          <div className="flex items-center justify-center gap-2">
             {(['All', 'Live', 'Upcoming'] as const).map((filter) => (
               <button
                 key={filter}
