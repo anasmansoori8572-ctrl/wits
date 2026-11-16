@@ -399,7 +399,7 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         if (data?.content) {
-          if (Array.isArray(data.content.courses)) {
+          if (Array.isArray(data.content.courses) && data.content.courses.length > 0) {
             setCourses(data.content.courses);
           }
           setSiteSettings(prev => {

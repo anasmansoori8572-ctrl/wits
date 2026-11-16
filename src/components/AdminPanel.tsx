@@ -287,10 +287,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     district: 'Amroha',
     pincode: '244221',
     address: '',
-    batchId: batches[0]?.id || 'batch-spoken-oct-2026',
-    batchName: courses[0]?.name || 'Spoken English',
-    courseId: courses[0]?.id || 'course-spoken-english',
-    courseName: courses[0]?.name || 'Spoken English'
+    batchId: batches[0]?.id || '',
+    batchName: courses[0]?.name || '',
+    courseId: courses[0]?.id || '',
+    courseName: courses[0]?.name || ''
   });
 
   const [newCourse, setNewCourse] = useState<Partial<CourseData>>({
@@ -523,7 +523,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
 
       // 3. Classes
-      const cRes = await adminFetch('/api/batches/batch-spoken-oct-2026/classes', {
+      const cRes = await adminFetch('/api/admin/classes', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (cRes.ok) {
@@ -550,6 +550,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const gData = await gRes.json();
         if (gData.success && Array.isArray(gData.items)) {
           setGalleryItems(gData.items);
+        }
+      }
+
+      // 6. Testimonials / Reviews
+      const rRes = await adminFetch('/api/reviews');
+      if (rRes.ok) {
+        const rData = await rRes.json();
+        if (rData && Array.isArray(rData.reviews)) {
+          onUpdateTestimonials(rData.reviews);
         }
       }
     } catch (err) {
@@ -678,8 +687,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       district: 'Amroha',
       pincode: '244221',
       address: '',
-      batchId: batches[0]?.id || 'batch-spoken-oct-2026',
-      courseId: courses[0]?.id || 'course-spoken-english'
+      batchId: batches[0]?.id || '',
+      courseId: courses[0]?.id || ''
     });
 
     try {
@@ -928,8 +937,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       id: `batch-${newBatch.batchCode.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`,
       name: newBatch.name,
       batchCode: newBatch.batchCode,
-      courseId: newBatch.courseId || courses[0]?.id || 'course-spoken-english',
-      courseName: newBatch.courseName || courses[0]?.name || 'Spoken English',
+      courseId: newBatch.courseId || courses[0]?.id || '',
+      courseName: newBatch.courseName || courses[0]?.name || '',
       startDate: newBatch.startDate || '2026-10-01',
       endDate: newBatch.endDate || '2026-12-31',
       scheduleTime: newBatch.scheduleTime || '07:30 PM - 08:30 PM IST',
@@ -950,8 +959,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setNewBatch({
       name: '',
       batchCode: '',
-      courseId: courses[0]?.id || 'course-spoken-english',
-      courseName: courses[0]?.name || 'Spoken English',
+      courseId: courses[0]?.id || '',
+      courseName: courses[0]?.name || '',
       startDate: new Date().toISOString().split('T')[0],
       endDate: '2026-12-31',
       scheduleTime: '07:30 PM - 08:30 PM IST (Mon, Wed, Fri)',
@@ -1797,7 +1806,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // ----------------------------------------------------------------------
-  // 7. TESTIMONIALS HANDLERS
+  // 7. TESTIMONIALS HANDLERS (Connected directly to Neon PostgreSQL)
   // ----------------------------------------------------------------------
   const handleAddTestimonial = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1811,19 +1820,80 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       verified: newTestimonial.verified ?? true,
       rating: Number(newTestimonial.rating) || 5,
     };
+    const prevTestimonials = [...testimonials];
     const updated = [item, ...testimonials];
-    await onUpdateTestimonials(updated);
+    onUpdateTestimonials(updated);
     setShowAddTestimonialModal(false);
     triggerFeedback(`Review from "${item.studentName}" published on homepage!`);
+
+    try {
+      const res = await adminFetch('/api/reviews', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          studentName: item.studentName,
+          courseName: item.courseBatch,
+          courseBatch: item.courseBatch,
+          city: item.city,
+          rating: item.rating,
+          testimonial: item.testimonial
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.reviews)) {
+          onUpdateTestimonials(data.reviews);
+        }
+      } else {
+        throw new Error(`HTTP ${res.status}`);
+      }
+    } catch (err) {
+      console.error('Failed to save review to backend:', err);
+      onUpdateTestimonials(prevTestimonials);
+      triggerFeedback('Failed to save review to database.');
+    }
   };
 
   const handleSaveEditTestimonial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTestimonial) return;
+    const prevTestimonials = [...testimonials];
     const updated = testimonials.map(t => t.id === editingTestimonial.id ? editingTestimonial : t);
-    await onUpdateTestimonials(updated);
+    onUpdateTestimonials(updated);
     setEditingTestimonial(null);
     triggerFeedback('Testimonial updated.');
+
+    try {
+      const res = await adminFetch(`/api/reviews/${editingTestimonial.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          studentName: editingTestimonial.studentName,
+          courseName: editingTestimonial.courseBatch,
+          courseBatch: editingTestimonial.courseBatch,
+          city: editingTestimonial.city,
+          rating: editingTestimonial.rating,
+          testimonial: editingTestimonial.testimonial,
+          isApproved: true
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.reviews)) {
+          onUpdateTestimonials(data.reviews);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update review on backend:', err);
+      onUpdateTestimonials(prevTestimonials);
+      triggerFeedback('Failed to update review in database.');
+    }
   };
 
   const handleDeleteTestimonial = (id: string, name: string) => {
@@ -1834,9 +1904,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       itemType: 'student review',
       description: `Are you sure you want to delete the testimonial from "${name}"? It will be removed from the homepage reviews section.`,
       onConfirm: async () => {
+        const prevTestimonials = [...testimonials];
         const updated = testimonials.filter(t => t.id !== id);
-        await onUpdateTestimonials(updated);
+        onUpdateTestimonials(updated);
         triggerFeedback(`Review deleted.`);
+
+        try {
+          const res = await adminFetch(`/api/reviews/${id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data && Array.isArray(data.reviews)) {
+              onUpdateTestimonials(data.reviews);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to delete review on backend:', err);
+          onUpdateTestimonials(prevTestimonials);
+          triggerFeedback('Failed to delete review from database.');
+        }
       }
     });
   };
@@ -6207,15 +6297,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               <form onSubmit={handleCreateClass} className="space-y-3 text-xs">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Target Course</label>
+                  <label className="font-bold text-slate-700 block mb-1">Target Batch / Cohort</label>
                   <select
                     value={newClass.batchId}
                     onChange={(e) => setNewClass({ ...newClass, batchId: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium"
                   >
-                    {courses.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
+                    {batches.length > 0 ? (
+                      batches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name} ({b.batchCode || 'Cohort'})</option>
+                      ))
+                    ) : courses.length > 0 ? (
+                      courses.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))
+                    ) : (
+                      <option value="">Default Cohort</option>
+                    )}
                   </select>
                 </div>
 

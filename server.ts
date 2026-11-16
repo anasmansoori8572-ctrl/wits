@@ -6200,6 +6200,18 @@ www.witslingo.com`
     }
   });
 
+  // GET All Classes (Neon PostgreSQL)
+  app.get("/api/admin/classes", requireAdmin, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const classes = await getClassesDb();
+      return res.json({ success: true, classes });
+    } catch (err: any) {
+      console.error("[Admin Classes GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ error: "Failed to retrieve classes." });
+    }
+  });
+
   // UPDATE Class (Neon PostgreSQL)
   app.put("/api/admin/classes/:id", requireAdmin, async (req, res) => {
     try {
@@ -6262,8 +6274,10 @@ www.witslingo.com`
   app.get("/api/cms/content", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     try {
+      const auth = verifyAuthToken(req);
+      const includeAll = Boolean(auth && auth.role === "admin") || req.query.includeAll === "true";
       const settings = await getSiteSettingsDb();
-      const courses = await getCoursesDb(false);
+      const courses = await getCoursesDb(includeAll);
 
       const contentPayload = {
         courses,

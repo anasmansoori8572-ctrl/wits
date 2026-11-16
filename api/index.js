@@ -3249,7 +3249,17 @@ async function createBatchDb(data) {
   const sql = getDb();
   const id = data.id || `batch-${Date.now()}`;
   const name = (data.name || "New Batch").trim();
-  const course_id = data.courseId || null;
+  let course_id = data.courseId && data.courseId !== "all" ? data.courseId : null;
+  if (course_id) {
+    try {
+      const courseRows = await sql`SELECT id FROM courses WHERE id = ${course_id} LIMIT 1;`;
+      if (!courseRows || courseRows.length === 0) {
+        course_id = null;
+      }
+    } catch {
+      course_id = null;
+    }
+  }
   const course_name = data.courseName || null;
   const batch_code = data.batchCode || "";
   const start_date = data.startDate || "";
@@ -3303,7 +3313,18 @@ async function updateBatchDb(id, data) {
   const existing = await getBatchByIdDb(id);
   if (!existing) return null;
   const name = data.name !== void 0 ? data.name.trim() : existing.name;
-  const course_id = data.courseId !== void 0 ? data.courseId || null : existing.courseId || null;
+  let rawCourseId = data.courseId !== void 0 ? data.courseId || null : existing.courseId || null;
+  let course_id = rawCourseId && rawCourseId !== "all" ? rawCourseId : null;
+  if (course_id) {
+    try {
+      const courseRows = await sql`SELECT id FROM courses WHERE id = ${course_id} LIMIT 1;`;
+      if (!courseRows || courseRows.length === 0) {
+        course_id = null;
+      }
+    } catch {
+      course_id = null;
+    }
+  }
   const course_name = data.courseName !== void 0 ? data.courseName : existing.courseName;
   const batch_code = data.batchCode !== void 0 ? data.batchCode : existing.batchCode;
   const start_date = data.startDate !== void 0 ? data.startDate : existing.startDate;
@@ -3455,8 +3476,28 @@ async function createStudyMaterialDb(data) {
   const sql = getDb();
   const id = data.id || `mat-${Date.now()}`;
   const resource_type = data.resourceType || "pdf";
-  const batch_id = data.batchId || null;
-  const class_id = data.classId || null;
+  let batch_id = data.batchId && data.batchId !== "all" ? data.batchId : null;
+  if (batch_id) {
+    try {
+      const batchRows = await sql`SELECT id FROM batches WHERE id = ${batch_id} LIMIT 1;`;
+      if (!batchRows || batchRows.length === 0) {
+        batch_id = null;
+      }
+    } catch {
+      batch_id = null;
+    }
+  }
+  let class_id = data.classId && data.classId !== "all" ? data.classId : null;
+  if (class_id) {
+    try {
+      const classRows = await sql`SELECT id FROM classes WHERE id = ${class_id} LIMIT 1;`;
+      if (!classRows || classRows.length === 0) {
+        class_id = null;
+      }
+    } catch {
+      class_id = null;
+    }
+  }
   const title = (data.title || "Untitled Resource").trim();
   const description = data.description || "";
   const category = data.category || "General";
@@ -4039,6 +4080,28 @@ async function createRegistrationDb(data) {
   const id = data.id || `reg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const admissionId = data.admissionId || `WL-${(/* @__PURE__ */ new Date()).getFullYear()}-${Math.floor(1e3 + Math.random() * 9e3)}`;
   const facilities = JSON.stringify(data.facilities || []);
+  let course_id = data.courseId && data.courseId !== "all" ? data.courseId : null;
+  if (course_id) {
+    try {
+      const courseRows = await sql`SELECT id FROM courses WHERE id = ${course_id} LIMIT 1;`;
+      if (!courseRows || courseRows.length === 0) {
+        course_id = null;
+      }
+    } catch {
+      course_id = null;
+    }
+  }
+  let batch_id = data.batchId && data.batchId !== "all" ? data.batchId : null;
+  if (batch_id) {
+    try {
+      const batchRows = await sql`SELECT id FROM batches WHERE id = ${batch_id} LIMIT 1;`;
+      if (!batchRows || batchRows.length === 0) {
+        batch_id = null;
+      }
+    } catch {
+      batch_id = null;
+    }
+  }
   const rows = await sql`
     INSERT INTO student_registrations (
       id, admission_id, name, father_name, dob, gender, country, district, state, pincode,
@@ -4053,7 +4116,7 @@ async function createRegistrationDb(data) {
       ${data.gender || null}, ${data.country || "India"}, ${data.district || null}, ${data.state || null},
       ${data.pincode || null}, ${data.phone || ""}, ${data.whatsapp || data.phone || ""}, ${data.email || ""},
       ${data.address || null}, ${data.qualification || null}, ${data.currentEnglishLevel || null},
-      ${data.courseId || null}, ${data.courseName || null}, ${data.batchId || null}, ${data.batchName || null},
+      ${course_id}, ${data.courseName || null}, ${batch_id}, ${data.batchName || null},
       ${Number(data.feeAmount || 0)}, ${data.paymentStatus || "Pending"}, ${data.paymentMethod || "Online"},
       ${data.paymentCurrency || "INR"}, ${data.paymentAmountFormatted || null}, ${data.paymentTxnId || null},
       ${data.razorpayOrderId || null}, ${data.razorpayPaymentId || null}, ${data.razorpaySignature || null},
@@ -4183,8 +4246,29 @@ async function getClassByIdDb(id) {
 async function createClassDb(data) {
   const sql = getDb();
   const id = data.id || `cls-${Date.now()}`;
-  const batch_id = data.batchId;
-  const batch_name = data.batchName || "";
+  let batch_id = data.batchId || "";
+  let batch_name = data.batchName || "";
+  try {
+    const batchRows = await sql`SELECT id, name FROM batches WHERE id = ${batch_id} LIMIT 1;`;
+    if (!batchRows || batchRows.length === 0) {
+      const anyBatch = await sql`SELECT id, name FROM batches LIMIT 1;`;
+      if (anyBatch && anyBatch.length > 0) {
+        batch_id = anyBatch[0].id;
+        batch_name = anyBatch[0].name;
+      } else {
+        const autoBatch = await createBatchDb({
+          name: "Live Spoken English Cohort",
+          batchCode: "BATCH-LIVE-1",
+          status: "Upcoming"
+        });
+        batch_id = autoBatch.id;
+        batch_name = autoBatch.name;
+      }
+    } else {
+      batch_name = batchRows[0].name;
+    }
+  } catch {
+  }
   const title = data.title || "Live Interactive Class";
   const topic = data.topic || "";
   const class_number = data.classNumber ?? 1;
@@ -9467,6 +9551,16 @@ app.delete("/api/admin/batches/:id", requireAdmin, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to delete batch from database." });
   }
 });
+app.get("/api/admin/classes", requireAdmin, async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const classes2 = await getClassesDb();
+    return res.json({ success: true, classes: classes2 });
+  } catch (err) {
+    console.error("[Admin Classes GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ error: "Failed to retrieve classes." });
+  }
+});
 app.put("/api/admin/classes/:id", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -9518,8 +9612,10 @@ app.delete("/api/admin/recordings/:id", requireAdmin, async (req, res) => {
 app.get("/api/cms/content", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   try {
+    const auth = verifyAuthToken(req);
+    const includeAll = Boolean(auth && auth.role === "admin") || req.query.includeAll === "true";
     const settings = await getSiteSettingsDb();
-    const courses = await getCoursesDb(false);
+    const courses = await getCoursesDb(includeAll);
     const contentPayload = {
       courses,
       settings,
