@@ -3467,8 +3467,17 @@ async function getStudyMaterialsDb(opts) {
 }
 async function getStudyMaterialByIdDb(id) {
   const sql = getDb();
+  const cleanId = (id || "").trim();
+  if (!cleanId) return null;
+  const pattern = `%${cleanId}%`;
   const rows = await sql`
-    SELECT * FROM study_materials WHERE id = ${id} LIMIT 1;
+    SELECT * FROM study_materials 
+    WHERE id = ${cleanId} 
+       OR pdf_url ILIKE ${pattern} 
+       OR thumbnail_url ILIKE ${pattern} 
+       OR b2_file_name ILIKE ${pattern} 
+       OR b2_thumbnail_name ILIKE ${pattern}
+    LIMIT 1;
   `;
   return rows.length > 0 ? rowToStudyMaterial(rows[0]) : null;
 }
@@ -5016,7 +5025,8 @@ async function downloadBufferFromB2(fileId, fileName) {
       }
       if (fileName) {
         const cleanName = fileName.replace(/^\/+/, "");
-        const res = await fetch(`${b2.downloadUrl}/file/${b2.bucketName}/${encodeURIComponent(cleanName)}`, {
+        const encodedPath = cleanName.split("/").map(encodeURIComponent).join("/");
+        const res = await fetch(`${b2.downloadUrl}/file/${b2.bucketName}/${encodedPath}`, {
           headers: { Authorization: b2.authorizationToken }
         });
         if (res.ok) {
@@ -5109,11 +5119,12 @@ function getSafeFileMimeType(filename, providedMime) {
   if (ext === ".pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
   if (ext === ".epub") return "application/epub+zip";
   if (ext === ".zip") return "application/zip";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".jpg" || ext === ".jpeg" || ext === ".jfif") return "image/jpeg";
   if (ext === ".png") return "image/png";
   if (ext === ".webp") return "image/webp";
   if (ext === ".gif") return "image/gif";
   if (ext === ".svg") return "image/svg+xml";
+  if (ext === ".avif") return "image/avif";
   if (providedMime && providedMime.includes("/")) return providedMime;
   return "application/octet-stream";
 }
@@ -9158,8 +9169,11 @@ app.get("/api/files/pdf/:id/:filename?", async (req, res) => {
     } catch (e) {
     }
   }
-  const targetFileId = mat?.b2FileId || memFile?.b2FileId;
-  const targetFileName = mat?.b2FileName || memFile?.b2FileName || (id ? `materials/${id}-${filename}` : void 0);
+  const isThumbRequest = Boolean(
+    filename && /\.(jpe?g|png|webp|gif|jfif|avif)$/i.test(filename) || mat?.thumbnailUrl && mat.thumbnailUrl.includes(id) || mat?.b2ThumbnailName && mat.b2ThumbnailName.includes(id)
+  );
+  const targetFileId = isThumbRequest ? mat?.b2ThumbnailId || mat?.b2FileId || memFile?.b2FileId : mat?.b2FileId || mat?.b2ThumbnailId || memFile?.b2FileId;
+  const targetFileName = isThumbRequest ? mat?.b2ThumbnailName || mat?.b2FileName || memFile?.b2FileName || (id ? `materials/${id}-${filename}` : void 0) : mat?.b2FileName || mat?.b2ThumbnailName || memFile?.b2FileName || (id ? `materials/${id}-${filename}` : void 0);
   if (!buffer && (targetFileId || targetFileName)) {
     try {
       const b2Res = await downloadBufferFromB2(targetFileId, targetFileName);
@@ -9169,6 +9183,15 @@ app.get("/api/files/pdf/:id/:filename?", async (req, res) => {
       }
     } catch (e) {
       console.warn("Failed retrieving document from B2:", e);
+    }
+  }
+  if (!buffer && (isThumbRequest || mat?.resourceType === "youtube")) {
+    const ytUrl = mat?.youtubeUrl || (mat?.downloadUrl && mat.downloadUrl.includes("youtu") ? mat.downloadUrl : "");
+    if (ytUrl) {
+      const match = ytUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/i);
+      if (match && match[1]) {
+        return res.redirect(`https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`);
+      }
     }
   }
   if (!buffer && mat?.pdfUrl && mat.pdfUrl.startsWith("http")) {

@@ -3684,6 +3684,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   src={thumb}
                                   alt={mat.title}
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    const vidId = extractYouTubeVideoId(mat.youtubeUrl || '');
+                                    const fallback = vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : '';
+                                    if (fallback && target.src !== fallback) {
+                                      target.src = fallback;
+                                    }
+                                  }}
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-slate-800 text-slate-500">
@@ -7043,6 +7051,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         src={newYouTubeResource.thumbnailUrl}
                         alt="Thumbnail preview"
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          const vidId = extractYouTubeVideoId(newYouTubeResource.youtubeUrl || '');
+                          const fallback = vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : '';
+                          if (fallback && target.src !== fallback) {
+                            target.src = fallback;
+                          }
+                        }}
                       />
                     </div>
                   )}
@@ -7662,6 +7678,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             src={editingMaterial.thumbnailUrl}
                             alt="Thumbnail preview"
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              const vidId = extractYouTubeVideoId(editingMaterial.youtubeUrl || '');
+                              const fallback = vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : '';
+                              if (fallback && target.src !== fallback) {
+                                target.src = fallback;
+                              }
+                            }}
                           />
                         </div>
                       )}

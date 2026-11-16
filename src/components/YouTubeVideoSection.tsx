@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Play } from 'lucide-react';
 import { StudyMaterial, SiteSettings } from '../types';
 
 export function extractYouTubeThumb(url?: string): string | undefined {
@@ -104,13 +105,15 @@ export const YouTubeVideoSection: React.FC<YouTubeVideoSectionProps> = ({
 
     return publishedYt.map((v, index) => {
       const finalVideoUrl = v.youtubeUrl ? normalizeAndValidateYouTubeUrl(v.youtubeUrl, v.youtubeUrl) : '';
-      const thumb = v.thumbnailUrl || (finalVideoUrl ? extractYouTubeThumb(finalVideoUrl) : undefined);
+      const ytThumb = finalVideoUrl ? extractYouTubeThumb(finalVideoUrl) : undefined;
+      const thumb = v.thumbnailUrl || ytThumb;
 
       return {
         id: v.id,
         title: v.title || 'Video Lesson',
         youtubeUrl: finalVideoUrl,
         thumbnailUrl: thumb,
+        fallbackThumb: ytThumb,
         thumbnailBg: [
           'from-purple-900 via-indigo-900 to-purple-950',
           'from-indigo-950 via-purple-900 to-slate-900',
@@ -156,21 +159,30 @@ export const YouTubeVideoSection: React.FC<YouTubeVideoSectionProps> = ({
                 }}
                 className="relative flex-shrink-0 w-[270px] sm:w-[310px] md:w-[330px] h-[390px] sm:h-[440px] rounded-3xl overflow-hidden shadow-md hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 group cursor-pointer block border border-purple-100/70"
               >
-                {/* Full-bleed Thumbnail */}
-                {video.thumbnailUrl ? (
-                  <img
-                    src={video.thumbnailUrl}
-                    alt={video.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                ) : null}
+                {/* Full-bleed Thumbnail with auto YouTube CDN fallback */}
+                <img
+                  src={video.thumbnailUrl || video.fallbackThumb || ''}
+                  alt={video.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  loading="lazy"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    const fallback = video.fallbackThumb || extractYouTubeThumb(video.youtubeUrl);
+                    if (fallback && target.src !== fallback) {
+                      target.src = fallback;
+                    } else {
+                      target.style.display = 'none';
+                    }
+                  }}
+                />
 
-                <div className={`absolute inset-0 bg-gradient-to-br ${video.thumbnailBg || 'from-[#281648] via-[#3C166D] to-[#12072B]'} ${video.thumbnailUrl ? '-z-10' : ''} flex items-center justify-center`}>
+                <div className={`absolute inset-0 bg-gradient-to-br ${video.thumbnailBg || 'from-[#281648] via-[#3C166D] to-[#12072B]'} -z-10 flex items-center justify-center`}>
                   <span className="text-white/80 font-bold text-sm">Wits Lingo</span>
+                </div>
+
+                {/* Video Play Badge Indicator */}
+                <div className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:bg-red-600 transition-all pointer-events-none">
+                  <Play className="w-4 h-4 fill-white ml-0.5" />
                 </div>
 
                 {/* Dark Vignette Overlay for Title Readability */}

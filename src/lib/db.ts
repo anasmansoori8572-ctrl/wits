@@ -1010,8 +1010,17 @@ export async function getStudyMaterialsDb(opts?: {
 
 export async function getStudyMaterialByIdDb(id: string): Promise<StudyMaterial | null> {
   const sql = getDb();
+  const cleanId = (id || '').trim();
+  if (!cleanId) return null;
+  const pattern = `%${cleanId}%`;
   const rows = await sql`
-    SELECT * FROM study_materials WHERE id = ${id} LIMIT 1;
+    SELECT * FROM study_materials 
+    WHERE id = ${cleanId} 
+       OR pdf_url ILIKE ${pattern} 
+       OR thumbnail_url ILIKE ${pattern} 
+       OR b2_file_name ILIKE ${pattern} 
+       OR b2_thumbnail_name ILIKE ${pattern}
+    LIMIT 1;
   `;
   return rows.length > 0 ? rowToStudyMaterial(rows[0]) : null;
 }

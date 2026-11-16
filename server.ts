@@ -351,7 +351,8 @@ async function downloadBufferFromB2(
 
       if (fileName) {
         const cleanName = fileName.replace(/^\/+/, "");
-        const res = await fetch(`${b2.downloadUrl}/file/${b2.bucketName}/${encodeURIComponent(cleanName)}`, {
+        const encodedPath = cleanName.split("/").map(encodeURIComponent).join("/");
+        const res = await fetch(`${b2.downloadUrl}/file/${b2.bucketName}/${encodedPath}`, {
           headers: { Authorization: b2.authorizationToken }
         });
         if (res.ok) {
@@ -453,11 +454,12 @@ function getSafeFileMimeType(filename: string, providedMime?: string): string {
   if (ext === ".pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
   if (ext === ".epub") return "application/epub+zip";
   if (ext === ".zip") return "application/zip";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".jpg" || ext === ".jpeg" || ext === ".jfif") return "image/jpeg";
   if (ext === ".png") return "image/png";
   if (ext === ".webp") return "image/webp";
   if (ext === ".gif") return "image/gif";
   if (ext === ".svg") return "image/svg+xml";
+  if (ext === ".avif") return "image/avif";
   if (providedMime && providedMime.includes("/")) return providedMime;
   return "application/octet-stream";
 }
@@ -5739,8 +5741,19 @@ www.witslingo.com`
     }
 
     // 3. If not on disk, stream from Backblaze B2
-    const targetFileId = mat?.b2FileId || memFile?.b2FileId;
-    const targetFileName = mat?.b2FileName || memFile?.b2FileName || (id ? `materials/${id}-${filename}` : undefined);
+    const isThumbRequest = Boolean(
+      (filename && /\.(jpe?g|png|webp|gif|jfif|avif)$/i.test(filename)) ||
+      (mat?.thumbnailUrl && mat.thumbnailUrl.includes(id)) ||
+      (mat?.b2ThumbnailName && mat.b2ThumbnailName.includes(id))
+    );
+
+    const targetFileId = isThumbRequest
+      ? (mat?.b2ThumbnailId || mat?.b2FileId || memFile?.b2FileId)
+      : (mat?.b2FileId || mat?.b2ThumbnailId || memFile?.b2FileId);
+
+    const targetFileName = isThumbRequest
+      ? (mat?.b2ThumbnailName || mat?.b2FileName || memFile?.b2FileName || (id ? `materials/${id}-${filename}` : undefined))
+      : (mat?.b2FileName || mat?.b2ThumbnailName || memFile?.b2FileName || (id ? `materials/${id}-${filename}` : undefined));
 
     if (!buffer && (targetFileId || targetFileName)) {
       try {
@@ -5754,7 +5767,18 @@ www.witslingo.com`
       }
     }
 
-    // 4. Fallback: If external URL in material
+    // 4. Fallback for YouTube thumbnails if B2 cap is exceeded, missing, or blocked
+    if (!buffer && (isThumbRequest || mat?.resourceType === "youtube")) {
+      const ytUrl = mat?.youtubeUrl || (mat?.downloadUrl && mat.downloadUrl.includes("youtu") ? mat.downloadUrl : "");
+      if (ytUrl) {
+        const match = ytUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/i);
+        if (match && match[1]) {
+          return res.redirect(`https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`);
+        }
+      }
+    }
+
+    // 5. Fallback: If external URL in material
     if (!buffer && mat?.pdfUrl && mat.pdfUrl.startsWith("http")) {
       return res.redirect(`/api/proxy-pdf?url=${encodeURIComponent(mat.pdfUrl)}`);
     }
