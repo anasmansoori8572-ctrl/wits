@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   CheckCircle2, Search, Calendar, Laptop, 
-  Sparkles, Hash, MapPin
+  Sparkles, Hash, MapPin, Target, Flame, Mic
 } from 'lucide-react';
 import { SiteSettings } from '../types';
 
@@ -14,7 +14,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
   const studentsCount = siteSettings?.activeStudentsCount || '100+';
 
   return (
-    <section className="relative py-16 sm:py-24 bg-[#F8F6F2] overflow-hidden border-b border-slate-200/80 font-['Plus_Jakarta_Sans']">
+    <section className="relative py-8 sm:py-16 lg:py-24 bg-[#F8F6F2] overflow-hidden border-b border-slate-200/80 font-['Plus_Jakarta_Sans']">
       
       {/* Subtle Warm Canvas Texture & Dot Accent */}
       <div 
@@ -30,34 +30,36 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
 
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Main 2-Column Split Composition matching Reference Image */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
+        {/* =========================================================================
+            DESKTOP & TABLET VIEW (lg:grid): 2-COLUMN SPLIT COMPOSITION
+            Left: Background-less student cutout with geometric shapes
+            Right: Editorial serif typography + floating milestone interface card
+            ========================================================================= */}
+        <div className="hidden lg:grid lg:grid-cols-12 gap-10 lg:gap-8 items-center">
           
-          {/* =========================================================================
-              LEFT COLUMN: EXACT REFERENCE STUDENT CUTOUT (BACKGROUND-LESS) WITH GEOMETRIC BACKDROP
-              ========================================================================= */}
+          {/* LEFT COLUMN: EXACT REFERENCE STUDENT CUTOUT WITH GEOMETRIC BACKDROP */}
           <div className="lg:col-span-5 relative flex justify-center lg:justify-start">
             <div className="relative w-full max-w-[340px] sm:max-w-[400px] flex items-end justify-center pt-8 pb-4">
               
-              {/* 1. Large Bold Crimson/Purple Disc directly behind the student's head */}
+              {/* Large Bold Crimson/Purple Disc directly behind the student's head */}
               <div 
                 className="absolute top-2 left-6 sm:left-10 w-60 h-60 sm:w-72 sm:h-72 rounded-full bg-gradient-to-tr from-[#6D28D9] via-[#8B5CF6] to-[#E11D48] shadow-2xl shadow-purple-950/25 z-0" 
                 aria-hidden="true"
               />
 
-              {/* 2. Deep Blue / Indigo Horizontal Anchor Bar behind student's waist */}
+              {/* Deep Blue / Indigo Horizontal Anchor Bar behind student's waist */}
               <div 
                 className="absolute bottom-6 sm:bottom-8 -left-4 sm:-left-8 w-44 sm:w-56 h-10 sm:h-12 rounded-xl bg-[#2563EB] z-0 shadow-md"
                 aria-hidden="true"
               />
 
-              {/* 3. Golden Graphic Pop Accent on lower-right side */}
+              {/* Golden Graphic Pop Accent on lower-right side */}
               <div 
                 className="absolute bottom-16 right-0 w-24 h-36 rounded-t-full bg-gradient-to-b from-[#F59E0B] to-[#D97706] opacity-80 z-0 -rotate-6"
                 aria-hidden="true"
               />
 
-              {/* 4. The Exact Student from Reference Image: Background-less Cutout in Natural Warm Tone */}
+              {/* The Exact Student from Reference Image: Background-less Cutout in Natural Warm Tone */}
               <img
                 src="/student-cutout.png"
                 alt="Wits Lingo Learner"
@@ -65,7 +67,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
                 loading="eager"
               />
 
-              {/* 5. Floating Verified Learner Confidence Badge */}
+              {/* Floating Verified Learner Confidence Badge */}
               <div className="absolute -bottom-2 right-0 sm:-right-4 z-20 bg-white/95 backdrop-blur-md rounded-2xl px-3.5 py-2.5 shadow-xl border border-slate-200/90 flex items-center gap-3">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
@@ -86,9 +88,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
             </div>
           </div>
 
-          {/* =========================================================================
-              RIGHT COLUMN: EDITORIAL TYPOGRAPHY & FLOATING MILESTONE INTERFACE COLLAGE
-              ========================================================================= */}
+          {/* RIGHT COLUMN: EDITORIAL TYPOGRAPHY & FLOATING MILESTONE INTERFACE COLLAGE */}
           <div className="lg:col-span-7 space-y-6 lg:pl-4">
             
             {/* Top Typography (Exact Editorial Serif Layout) */}
@@ -113,9 +113,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
               </p>
             </div>
 
-            {/* =====================================================================
-                FLOATING MILESTONE INTERFACE & STICKER COLLAGE
-                ===================================================================== */}
+            {/* FLOATING MILESTONE INTERFACE & STICKER COLLAGE */}
             <div className="relative pt-4 pb-2">
               
               {/* Background Golden / Amber Arch for Graphic Pop */}
@@ -247,9 +245,170 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
         </div>
 
         {/* =========================================================================
-            BOTTOM BAR: DEVICE COMPATIBILITY & DOMAIN BRANDING
+            MOBILE VIEW (lg:hidden): COMPACT, OPTIMIZED STUDENT & FLOATING CARDS COLLAGE
+            Hides the heavy text and milestone receipt card from second image.
+            Shows student with floating micro-cards as in the reference mobile design.
+            Uses tight framing with no extra wasted space.
             ========================================================================= */}
-        <div className="mt-14 pt-6 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+        <div className="block lg:hidden">
+          
+          {/* Section Pill Title */}
+          <div className="text-center mb-4">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-widest bg-purple-100/90 text-[#581C87] border border-purple-200/80 shadow-2xs">
+              <Sparkles className="w-3.5 h-3.5 text-[#6D28D9]" />
+              <span>Our Journey & Accomplishments</span>
+            </span>
+          </div>
+
+          {/* Optimized Floating Card Stage */}
+          <div className="relative max-w-[340px] xs:max-w-[360px] mx-auto min-h-[430px] flex items-end justify-center pt-3 pb-2 select-none">
+            
+            {/* 1. Purple/Crimson Disc backdrop behind head */}
+            <div 
+              className="absolute top-2 left-1/2 -translate-x-1/2 w-52 h-52 xs:w-56 xs:h-56 rounded-full bg-gradient-to-tr from-[#6D28D9] via-[#8B5CF6] to-[#E11D48] shadow-xl shadow-purple-950/20 z-0" 
+              aria-hidden="true"
+            />
+
+            {/* 2. Golden Arch on bottom right */}
+            <div 
+              className="absolute bottom-12 right-1 w-24 h-36 rounded-t-full bg-gradient-to-b from-[#F59E0B] to-[#D97706] opacity-85 z-0 -rotate-6"
+              aria-hidden="true"
+            />
+
+            {/* 3. Royal Blue Anchor Bar on bottom left */}
+            <div 
+              className="absolute bottom-5 left-1 w-36 h-9 rounded-xl bg-[#2563EB] z-0 shadow-md"
+              aria-hidden="true"
+            />
+
+            {/* 4. Student Cutout */}
+            <img
+              src="/student-cutout.png"
+              alt="Wits Lingo Student"
+              className="relative z-10 w-full max-h-[390px] xs:max-h-[410px] object-contain drop-shadow-xl pointer-events-none"
+              loading="eager"
+            />
+
+            {/* =====================================================================
+                FLOATING MICRO-CARDS MATCHING USER REFERENCE DESIGN
+                ===================================================================== */}
+
+            {/* Card 1: Top-Left "Goal: Fluent in 90 Days" */}
+            <div className="absolute top-0 -left-2 z-20 bg-white/95 backdrop-blur-md rounded-2xl p-2.5 shadow-lg border border-white/80 w-[122px] xs:w-[130px]">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <div className="w-5 h-5 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
+                  <Target className="w-3 h-3 text-rose-500" />
+                </div>
+                <div className="leading-tight">
+                  <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Goal</span>
+                  <span className="text-[9.5px] font-extrabold text-slate-800 block">Fluent in 90 Days</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1 text-[8px] text-purple-700 font-semibold">
+                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                  <span className="w-12 h-1 bg-purple-200 rounded-full" />
+                </div>
+                <div className="flex items-center gap-1 text-[8px] text-purple-700 font-semibold">
+                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                  <span className="w-14 h-1 bg-purple-200 rounded-full" />
+                </div>
+                <div className="flex items-center gap-1 text-[8px] text-slate-400">
+                  <span className="w-2.5 h-2.5 rounded border border-slate-300 shrink-0" />
+                  <span className="w-9 h-1 bg-slate-200 rounded-full" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Top-Right "14-Day Streak!" */}
+            <div className="absolute top-0 -right-2 z-20 bg-white/95 backdrop-blur-md rounded-2xl px-2.5 py-1.5 shadow-lg border border-white/80">
+              <div className="flex items-center gap-1 mb-1">
+                <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500 shrink-0" />
+                <span className="text-[10px] font-extrabold text-slate-800">14-Day Streak!</span>
+              </div>
+              <div className="w-20 h-1.5 bg-orange-100 rounded-full overflow-hidden flex items-center">
+                <div className="w-3/4 h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full" />
+              </div>
+            </div>
+
+            {/* Card 3: Middle-Right "Word of the Day" */}
+            <div className="absolute top-16 -right-2 z-20 bg-white/95 backdrop-blur-md rounded-2xl p-2 shadow-lg border border-white/80 w-[126px]">
+              <span className="text-[7.5px] font-bold uppercase text-slate-400 block tracking-wider">Word of the Day</span>
+              <span className="text-[10px] font-extrabold text-[#581C87] block leading-tight">Serendipity</span>
+              <span className="text-[7.5px] text-slate-500 leading-tight block mt-0.5">
+                Spontaneous confidence in conversation.
+              </span>
+            </div>
+
+            {/* Card 4: Middle-Left "Daily Quiz / Identify Error" */}
+            <div className="absolute top-24 -left-2 z-20 bg-white/95 backdrop-blur-md rounded-2xl px-2 py-1.5 shadow-lg border border-white/80 flex items-center gap-1.5">
+              <div>
+                <span className="text-[7px] font-bold text-slate-400 uppercase block">Daily Quiz</span>
+                <span className="text-[9.5px] font-extrabold text-slate-800 block">She has gone</span>
+              </div>
+              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+            </div>
+
+            {/* Card 5: Lower-Left "Hello! 👋" Bubble */}
+            <div className="absolute bottom-24 -left-1 z-20 bg-white/95 backdrop-blur-md rounded-2xl px-2.5 py-1 shadow-md border border-white/80 flex items-center gap-1 text-[11px] font-extrabold text-slate-800">
+              <span>Hello!</span>
+              <span className="text-xs">👋</span>
+            </div>
+
+            {/* Card 6: Lower-Right "Live Practice Room" */}
+            <div className="absolute bottom-20 -right-1 z-20 bg-white/95 backdrop-blur-md rounded-2xl p-2 shadow-lg border border-white/80">
+              <div className="flex items-center justify-between gap-1.5 mb-1">
+                <div className="flex items-center gap-1">
+                  <Mic className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                  <span className="text-[9px] font-extrabold text-slate-800">Live Practice</span>
+                </div>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              </div>
+              <div className="flex items-center -space-x-1">
+                <img 
+                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=60&q=80" 
+                  alt="Student 1" 
+                  className="w-4 h-4 rounded-full border border-white object-cover" 
+                />
+                <img 
+                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=60&q=80" 
+                  alt="Student 2" 
+                  className="w-4 h-4 rounded-full border border-white object-cover" 
+                />
+                <img 
+                  src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=60&q=80" 
+                  alt="Student 3" 
+                  className="w-4 h-4 rounded-full border border-white object-cover" 
+                />
+              </div>
+            </div>
+
+            {/* Card 7: Bottom Center "Verified Learner" */}
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 z-30 bg-white/95 backdrop-blur-md rounded-2xl px-3 py-1.5 shadow-xl border border-slate-200/90 flex items-center justify-between gap-2 w-[92%] max-w-[280px]">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <div>
+                  <span className="text-[9px] font-extrabold uppercase text-slate-900 block leading-tight">
+                    Verified Learner
+                  </span>
+                  <span className="text-[8px] text-slate-500 block">
+                    Fluent Spoken Confidence
+                  </span>
+                </div>
+              </div>
+              <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-200 shrink-0">
+                100% Practical
+              </span>
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* =========================================================================
+            BOTTOM BAR: DEVICE COMPATIBILITY & DOMAIN BRANDING (DESKTOP ONLY)
+            ========================================================================= */}
+        <div className="hidden lg:flex mt-14 pt-6 border-t border-slate-200/80 items-center justify-between gap-4 text-xs">
           
           {/* Left: Device & Location metadata matching reference footer */}
           <div className="flex items-center gap-3 text-slate-600 font-medium">
