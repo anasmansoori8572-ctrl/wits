@@ -4947,7 +4947,10 @@ async function uploadBufferToB2(fileName, buffer, mimeType = "application/pdf") 
         });
         if (uploadRes.ok) {
           const uploadResult = await uploadRes.json();
-          let directDownloadUrl = `${b2.downloadUrl}/file/${b2.bucketName}/${encodeURIComponent(fileName)}`;
+          const customDomain = process.env.B2_CUSTOM_DOMAIN?.trim() || process.env.CLOUDFLARE_CDN_DOMAIN?.trim();
+          const baseDownloadUrl = customDomain ? `https://${customDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}` : b2.downloadUrl;
+          const encodedFileName = fileName.replace(/^\/+/, "").split("/").map(encodeURIComponent).join("/");
+          let directDownloadUrl = `${baseDownloadUrl}/file/${b2.bucketName}/${encodedFileName}`;
           try {
             const dlAuthRes = await fetch(`${b2.apiUrl}/b2api/v3/b2_get_download_authorization`, {
               method: "POST",
@@ -5026,7 +5029,9 @@ async function downloadBufferFromB2(fileId, fileName) {
       if (fileName) {
         const cleanName = fileName.replace(/^\/+/, "");
         const encodedPath = cleanName.split("/").map(encodeURIComponent).join("/");
-        const res = await fetch(`${b2.downloadUrl}/file/${b2.bucketName}/${encodedPath}`, {
+        const customDomain = process.env.B2_CUSTOM_DOMAIN?.trim() || process.env.CLOUDFLARE_CDN_DOMAIN?.trim();
+        const baseDownloadUrl = customDomain ? `https://${customDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}` : b2.downloadUrl;
+        const res = await fetch(`${baseDownloadUrl}/file/${b2.bucketName}/${encodedPath}`, {
           headers: { Authorization: b2.authorizationToken }
         });
         if (res.ok) {
