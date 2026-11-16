@@ -34,58 +34,53 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 items-center">
           
           {/* =========================================================================
-              LEFT COLUMN: PERSON IN FULL NATURAL COLOR WITH GEOMETRIC BACKDROP SHAPES
+              LEFT COLUMN: EXACT REFERENCE STUDENT CUTOUT (BACKGROUND-LESS) WITH GEOMETRIC BACKDROP
               ========================================================================= */}
           <div className="lg:col-span-5 relative flex justify-center lg:justify-start">
-            <div className="relative w-full max-w-[360px] sm:max-w-[420px] pt-10 pb-6">
+            <div className="relative w-full max-w-[340px] sm:max-w-[400px] flex items-end justify-center pt-8 pb-4">
               
-              {/* 1. Large Bold Crimson/Purple Disc behind the subject */}
+              {/* 1. Large Bold Crimson/Purple Disc directly behind the student's head */}
               <div 
-                className="absolute top-2 left-1/2 -translate-x-1/2 w-64 h-64 sm:w-76 sm:h-76 rounded-full bg-gradient-to-tr from-[#6D28D9] via-[#7C3AED] to-[#E11D48] shadow-2xl shadow-purple-950/20 z-0" 
+                className="absolute top-2 left-6 sm:left-10 w-60 h-60 sm:w-72 sm:h-72 rounded-full bg-gradient-to-tr from-[#6D28D9] via-[#8B5CF6] to-[#E11D48] shadow-2xl shadow-purple-950/25 z-0" 
                 aria-hidden="true"
               />
 
-              {/* 2. Amber/Golden Decorative Arch behind right waist */}
+              {/* 2. Deep Blue / Indigo Horizontal Anchor Bar behind student's waist */}
               <div 
-                className="absolute bottom-16 right-0 w-36 h-48 rounded-t-full bg-gradient-to-b from-[#F59E0B] to-[#D97706] opacity-90 z-0 -rotate-6"
+                className="absolute bottom-6 sm:bottom-8 -left-4 sm:-left-8 w-44 sm:w-56 h-10 sm:h-12 rounded-xl bg-[#2563EB] z-0 shadow-md"
                 aria-hidden="true"
               />
 
-              {/* 3. Deep Blue / Indigo Horizontal Anchor Bar */}
+              {/* 3. Golden Graphic Pop Accent on lower-right side */}
               <div 
-                className="absolute -bottom-2 -left-4 sm:-left-6 w-56 h-12 rounded-xl bg-[#2563EB] z-0 shadow-md"
+                className="absolute bottom-16 right-0 w-24 h-36 rounded-t-full bg-gradient-to-b from-[#F59E0B] to-[#D97706] opacity-80 z-0 -rotate-6"
                 aria-hidden="true"
               />
 
-              {/* 4. Full Color Photographic Portrait of Confident Student / Professional */}
-              <div className="relative z-10 rounded-3xl overflow-hidden shadow-2xl border-4 border-white/90 bg-white/40 backdrop-blur-xs">
-                <img
-                  src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=900&q=85"
-                  alt="Confident Wits Lingo English Student"
-                  className="w-full h-[400px] sm:h-[460px] object-cover object-top filter contrast-[1.05] brightness-[1.02]"
-                  loading="eager"
-                />
+              {/* 4. The Exact Student from Reference Image: Background-less Cutout in Natural Warm Tone */}
+              <img
+                src="/student-cutout.png"
+                alt="Wits Lingo Learner"
+                className="relative z-10 w-full max-h-[460px] sm:max-h-[520px] object-contain drop-shadow-2xl select-none pointer-events-none"
+                loading="eager"
+              />
 
-                {/* Subtle soft gradient fade at base */}
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
-
-                {/* Live Confidence Badge pinned to the photo */}
-                <div className="absolute bottom-3.5 left-3.5 right-3.5 bg-white/95 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 shadow-lg border border-white/60 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                    <div>
-                      <span className="text-[11px] font-extrabold uppercase text-slate-900 block leading-tight">
-                        Verified Learner
-                      </span>
-                      <span className="text-[10px] text-slate-500 block">
-                        Fluent Spoken Confidence
-                      </span>
-                    </div>
+              {/* 5. Floating Verified Learner Confidence Badge */}
+              <div className="absolute -bottom-2 right-0 sm:-right-4 z-20 bg-white/95 backdrop-blur-md rounded-2xl px-3.5 py-2.5 shadow-xl border border-slate-200/90 flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <div>
+                    <span className="text-[11px] font-extrabold uppercase text-slate-900 block leading-tight">
+                      Verified Learner
+                    </span>
+                    <span className="text-[10px] text-slate-500 block">
+                      Fluent Spoken Confidence
+                    </span>
                   </div>
-                  <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-xl border border-purple-200">
-                    100% Practical
-                  </span>
                 </div>
+                <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-xl border border-purple-200">
+                  100% Practical
+                </span>
               </div>
 
             </div>
