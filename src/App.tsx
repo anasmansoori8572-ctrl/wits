@@ -709,6 +709,7 @@ export default function App() {
           }}
           onOpenAdmission={(cId) => handleOpenAdmission(cId)}
           siteSettings={siteSettings}
+          testimonials={testimonials}
         />
       ) : currentView === 'about' ? (
         <AboutPage

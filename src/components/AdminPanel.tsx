@@ -4203,16 +4203,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           const filteredGallery = galleryItems.filter(item => {
             const matchesQuery = !gallerySearchQuery.trim() || 
               (item.title || '').toLowerCase().includes(gallerySearchQuery.toLowerCase()) ||
-              (item.caption || '').toLowerCase().includes(gallerySearchQuery.toLowerCase()) ||
-              (item.category || '').toLowerCase().includes(gallerySearchQuery.toLowerCase());
-            
-            const matchesCat = galleryCategoryFilter === 'all' || (item.category || '').toLowerCase() === galleryCategoryFilter.toLowerCase();
+              (item.caption || '').toLowerCase().includes(gallerySearchQuery.toLowerCase());
             
             const matchesPublish = galleryPublishFilter === 'all' || 
               (galleryPublishFilter === 'published' && item.isPublished) ||
               (galleryPublishFilter === 'draft' && !item.isPublished);
 
-            return matchesQuery && matchesCat && matchesPublish;
+            return matchesQuery && matchesPublish;
           });
 
           const allCategories = ['Classrooms', 'Live Sessions', 'Events & Workshops', 'Student Activities', 'Community', 'General'];
@@ -4273,7 +4270,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               {/* Stats Bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <div className="p-4 rounded-2xl bg-purple-50/50 border border-purple-100 space-y-1">
                   <span className="text-[11px] font-semibold text-slate-500 block">Total Photos</span>
                   <span className="text-xl font-extrabold text-[#4A1D96] font-['Outfit']">{galleryItems.length}</span>
@@ -4286,30 +4283,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <span className="text-[11px] font-semibold text-slate-500 block">Draft / Hidden</span>
                   <span className="text-xl font-extrabold text-slate-700 font-['Outfit']">{draftCount}</span>
                 </div>
-                <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-100 space-y-1">
-                  <span className="text-[11px] font-semibold text-amber-700 block">Categories</span>
-                  <span className="text-xl font-extrabold text-amber-800 font-['Outfit']">{allCategories.length}</span>
-                </div>
               </div>
 
               {/* Filters & Search Bar */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
-                    <Filter className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Category:</span>
-                    <select
-                      value={galleryCategoryFilter}
-                      onChange={(e) => setGalleryCategoryFilter(e.target.value)}
-                      className="bg-transparent text-slate-800 focus:outline-none cursor-pointer"
-                    >
-                      <option value="all">All Categories</option>
-                      {allCategories.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-
                   <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
                     <span>Status:</span>
                     <select
@@ -4354,13 +4332,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
 
-                        {/* Order & Category Badges */}
+                        {/* Order Badge */}
                         <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
                           <span className="px-2 py-0.5 rounded-lg bg-black/70 backdrop-blur-xs text-[10px] font-bold text-white">
                             #{item.displayOrder || (index + 1)}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-lg bg-[#4A1D96]/80 backdrop-blur-xs text-[10px] font-bold text-white uppercase">
-                            {item.category || 'Classrooms'}
                           </span>
                         </div>
 
@@ -4395,16 +4370,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       {/* Details & Actions */}
                       <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
                         <div className="space-y-1">
-                          <h4 className="font-['Outfit'] font-bold text-sm text-slate-900 line-clamp-1">
-                            {item.title || 'Untitled Moment'}
-                          </h4>
-                          {item.caption ? (
-                            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                              {item.caption}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-slate-400 italic">No description provided</p>
-                          )}
+                          <p className="font-['Outfit'] font-bold text-sm text-slate-900 line-clamp-2">
+                            {item.caption || (item.title && !item.title.match(/^(image|img)[\s_(-]*\d+/i) && !item.title.match(/^\d+$/) ? item.title : 'Classroom Moment')}
+                          </p>
                           <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400">
                             <span>{item.fileSize || 'Image'}</span>
                             <span>{item.uploadedAt ? new Date(item.uploadedAt).toLocaleDateString() : ''}</span>
@@ -8016,11 +7984,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     Array.from(e.dataTransfer.files).forEach((file: File) => {
                       if (file.type.startsWith('image/')) {
                         const preview = URL.createObjectURL(file);
-                        const cleanTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
                         newFiles.push({
                           file,
                           preview,
-                          title: cleanTitle,
+                          title: '',
                           caption: '',
                           category: 'Classrooms'
                         });
@@ -8041,11 +8008,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       const newFiles: typeof selectedUploadFiles = [];
                       Array.from(e.target.files).forEach((file: File) => {
                         const preview = URL.createObjectURL(file);
-                        const cleanTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
                         newFiles.push({
                           file,
                           preview,
-                          title: cleanTitle,
+                          title: '',
                           caption: '',
                           category: 'Classrooms'
                         });
