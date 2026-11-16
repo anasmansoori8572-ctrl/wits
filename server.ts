@@ -50,9 +50,69 @@ import {
   createGalleryItemDb,
   updateGalleryItemDb,
   reorderGalleryItemsDb,
-  deleteGalleryItemDb
+  deleteGalleryItemDb,
+  getUserByEmailDb,
+  getUserByIdDb,
+  createUserDb,
+  updateUserDb,
+  deleteUserDb,
+  getStudentsDb,
+  getRegistrationsDb,
+  getRegistrationByIdDb,
+  getRegistrationByAdmissionIdDb,
+  createRegistrationDb,
+  updateRegistrationDb,
+  deleteRegistrationDb,
+  getClassesDb,
+  getClassByIdDb,
+  createClassDb,
+  updateClassDb,
+  deleteClassDb,
+  getRecordingsDb,
+  getRecordingByIdDb,
+  createRecordingDb,
+  updateRecordingDb,
+  deleteRecordingDb,
+  getAssignmentsDb,
+  getAssignmentByIdDb,
+  createAssignmentDb,
+  getAssignmentSubmissionsDb,
+  createAssignmentSubmissionDb,
+  gradeAssignmentSubmissionDb,
+  getAttendanceRecordsDb,
+  logAttendanceJoinDb,
+  logAttendanceLeaveDb,
+  createOrderDb,
+  getOrderByIdDb,
+  getOrderByRazorpayOrderIdDb,
+  updateOrderStatusDb,
+  getOrdersDb,
+  createPaymentDb,
+  getPaymentsDb,
+  getNotificationsDb,
+  createNotificationDb,
+  getSupportTicketsDb,
+  createSupportTicketDb,
+  updateSupportTicketDb,
+  getKnowledgeBaseDb,
+  createKnowledgeBaseDb,
+  deleteKnowledgeBaseDb
 } from "./src/lib/db";
-import type { GalleryItem, StudyMaterial, CourseData, Batch, Announcement } from "./src/types";
+import type {
+  GalleryItem,
+  StudyMaterial,
+  CourseData,
+  Batch,
+  Announcement,
+  User,
+  StudentRegistration,
+  ClassSession,
+  Recording,
+  Assignment,
+  AssignmentSubmission,
+  AttendanceRecord,
+  NotificationItem
+} from "./src/types";
 
 let s3ClientInstance: S3Client | null = null;
 
@@ -766,31 +826,10 @@ export interface DBSupportTicket {
   updatedAt: string;
 }
 
-// Initial Data
-const defaultAdminUsers: DBUser[] = [
-  {
-    id: "usr-admin-01",
-    name: "Ziyaur Rehman Zia",
-    email: "witslingo@gmail.com",
-    passwordHash: "admin123",
-    role: "admin",
-    phone: "7310952271",
-    batchIds: [],
-    registrationDate: "2026-01-01",
-  },
-  {
-    id: "usr-admin-02",
-    name: "Arsh (Admin)",
-    email: "arsh522011@gmail.com",
-    passwordHash: "admin123",
-    role: "admin",
-    phone: "7310952271",
-    batchIds: [],
-    registrationDate: "2026-01-01",
-  }
-];
+// Initial Data (Empty - fully managed in Neon PostgreSQL)
+const defaultAdminUsers: DBUser[] = [];
 
-const users: DBUser[] = [...defaultAdminUsers];
+const users: DBUser[] = [];
 
 const registrations: DBStudentRegistration[] = [];
 
@@ -1163,20 +1202,8 @@ async function loadAllPersistedDataAsync(): Promise<void> {
 
       // Users (Admins & Students)
       if (Array.isArray(cloudUsers)) {
-        const userMap = new Map<string, DBUser>();
-        for (const admin of defaultAdminUsers) {
-          userMap.set(admin.email.toLowerCase(), admin);
-        }
-        for (const u of cloudUsers) {
-          if (u.role === "admin" && userMap.has(u.email.toLowerCase())) {
-            userMap.set(u.email.toLowerCase(), { ...userMap.get(u.email.toLowerCase())!, ...u });
-          } else {
-            userMap.set(u.email.toLowerCase(), u);
-          }
-        }
         users.length = 0;
-        users.push(...Array.from(userMap.values()));
-        console.log(`[Persistence] Hydrated ${users.length} users from Backblaze B2.`);
+        users.push(...cloudUsers);
       }
 
       // Classes
@@ -1403,7 +1430,10 @@ async function sendWhatsAppEnrollmentMessage(data: {
   facilities?: string[];
   forceResend?: boolean;
 }): Promise<{ success: boolean; messageId?: string; error?: string; skipped?: boolean }> {
-  const studentReg = registrations.find(r => r.admissionId === data.admissionId || r.id === data.admissionId);
+  let studentReg: StudentRegistration | null = null;
+  try {
+    studentReg = (await getRegistrationByAdmissionIdDb(data.admissionId)) || (await getRegistrationByIdDb(data.admissionId));
+  } catch {}
 
   // Idempotency check: Do NOT send duplicate message if already sent
   if (studentReg && studentReg.whatsappDeliveryStatus === "sent" && !data.forceResend) {
@@ -1444,9 +1474,10 @@ async function sendWhatsAppEnrollmentMessage(data: {
   if (!cleanRecipient || cleanRecipient.length < 10) {
     const errMsg = "Invalid recipient phone number for WhatsApp Cloud API";
     if (studentReg) {
-      studentReg.whatsappDeliveryStatus = "failed";
-      studentReg.whatsappError = errMsg;
-      saveRegistrations();
+      await updateRegistrationDb(studentReg.id, {
+        whatsappDeliveryStatus: "failed",
+        whatsappError: errMsg
+      }).catch(() => {});
     }
     return { success: false, error: errMsg };
   }
@@ -1538,10 +1569,11 @@ async function sendWhatsAppEnrollmentMessage(data: {
     const errDetail = sendRes.sanitizedError || sendRes.error || "WhatsApp dispatch rejected by Meta Cloud API";
     console.warn(`[WhatsApp] Delivery failure to ${cleanRecipient}: ${errDetail}`);
     if (studentReg) {
-      studentReg.whatsappDeliveryStatus = "failed";
-      studentReg.whatsappError = errDetail;
-      studentReg.facilities = rawFacilities;
-      saveRegistrations();
+      await updateRegistrationDb(studentReg.id, {
+        whatsappDeliveryStatus: "failed",
+        whatsappError: errDetail,
+        facilities: rawFacilities
+      }).catch(() => {});
     }
     return { success: false, error: errDetail };
   }
@@ -1550,12 +1582,11 @@ async function sendWhatsAppEnrollmentMessage(data: {
   console.log(`[WhatsApp] Automated enrollment notification sent to ${cleanRecipient} (Message ID: ${msgId})`);
 
   if (studentReg) {
-    studentReg.whatsappDeliveryStatus = "sent";
-    studentReg.whatsappMessageId = msgId;
-    studentReg.whatsappSentAt = new Date().toISOString();
-    studentReg.whatsappError = undefined;
-    studentReg.facilities = rawFacilities;
-    saveRegistrations();
+    await updateRegistrationDb(studentReg.id, {
+      whatsappDeliveryStatus: "sent",
+      whatsappMessageId: msgId,
+      facilities: rawFacilities
+    }).catch(() => {});
   }
 
   return { success: true, messageId: msgId };
@@ -1617,14 +1648,17 @@ async function handleInboundStudentMessage(
   let cleanPhone = whatsappCloudApiService.normalizePhone(recipientPhone || "");
   if (!cleanPhone) cleanPhone = "unknown";
 
-  // 1. Identify Student Context from DB
-  const matchedReg = registrations.find(r => {
+  // 1. Identify Student Context from DB (Neon PostgreSQL)
+  const allRegistrations = await getRegistrationsDb().catch(() => []);
+  const allOrders = await getOrdersDb().catch(() => []);
+
+  const matchedReg = allRegistrations.find(r => {
     const p1 = (r.phone || "").replace(/\D/g, "");
     const p2 = (r.whatsapp || "").replace(/\D/g, "");
     return cleanPhone.endsWith(p1) || cleanPhone.endsWith(p2) || p1.endsWith(cleanPhone);
   });
 
-  const matchedOrder = orders.find(o => {
+  const matchedOrder = allOrders.find(o => {
     const op = (o.studentPhone || "").replace(/\D/g, "");
     return cleanPhone.endsWith(op) || op.endsWith(cleanPhone);
   });
@@ -1634,7 +1668,7 @@ async function handleInboundStudentMessage(
 
   // Find enrolled courses & payments
   const studentEnrollments: any[] = [];
-  for (const r of registrations) {
+  for (const r of allRegistrations) {
     const p1 = (r.phone || "").replace(/\D/g, "");
     const p2 = (r.whatsapp || "").replace(/\D/g, "");
     if (cleanPhone.endsWith(p1) || cleanPhone.endsWith(p2) || p1.endsWith(cleanPhone)) {
@@ -2180,7 +2214,7 @@ try {
       loginIdentifier.toLowerCase() === envAdminEmail ||
       loginIdentifier.toLowerCase() === "admin@witslingo.com";
 
-    if (isEnvAdminMatch && (inputPass === envAdminPassword || verifyPassword(inputPass, envAdminPassword) || inputPass === "admin123")) {
+    if (isEnvAdminMatch && (inputPass === envAdminPassword || verifyPassword(inputPass, envAdminPassword))) {
       const primaryAdmin = {
         userId: "usr-admin-primary",
         name: process.env.ADMIN_NAME || "WITS LINGO Administrator",
@@ -2212,70 +2246,6 @@ try {
       });
     }
 
-    // 3. Fallback check in memory users
-    const user = users.find(u => 
-      u.email.toLowerCase() === loginIdentifier.toLowerCase() || 
-      (u.admissionId && u.admissionId.toLowerCase() === loginIdentifier.toLowerCase()) ||
-      (u.username && u.username.toLowerCase() === loginIdentifier.toLowerCase())
-    );
-
-    if (user) {
-      const passwordMatches = 
-        verifyPassword(inputPass, user.passwordHash) ||
-        (user.role === 'admin' && (verifyPassword(inputPass, envAdminPassword) || inputPass === 'admin123'));
-
-      if (passwordMatches) {
-        if (user.role === 'admin') {
-          const token = jwt.sign(
-            {
-              userId: user.id,
-              name: user.name,
-              email: user.email,
-              role: "admin",
-              batchIds: user.batchIds
-            },
-            JWT_SECRET,
-            { expiresIn: "24h" }
-          );
-
-          res.setHeader(
-            "Set-Cookie",
-            `admin_session_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${24 * 60 * 60}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
-          );
-
-          return res.json({
-            success: true,
-            token,
-            user: {
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              role: user.role,
-              phone: user.phone,
-              batchIds: user.batchIds,
-              registrationDate: user.registrationDate
-            }
-          });
-        }
-
-        const token = generateAuthToken(user);
-        return res.json({
-          success: true,
-          token,
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            phone: user.phone,
-            batchIds: user.batchIds,
-            admissionId: user.admissionId,
-            registrationDate: user.registrationDate
-          }
-        });
-      }
-    }
-
     return res.status(401).json({ error: "Invalid username or password" });
   });
 
@@ -2289,7 +2259,7 @@ try {
   });
 
   // 2. AUTH: Get Current User & Validate Session
-  app.get(["/api/auth/me", "/api/admin/auth/me"], (req, res) => {
+  app.get(["/api/auth/me", "/api/admin/auth/me"], async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const auth = verifyAuthToken(req);
     if (!auth) {
@@ -2297,13 +2267,18 @@ try {
     }
 
     if (auth.role === "admin") {
+      let adminUser: any = null;
+      try {
+        if (auth.userId) adminUser = await getUserByIdDb(auth.userId);
+      } catch {}
+
       return res.json({
         user: {
-          id: auth.userId || "usr-admin-primary",
-          name: auth.name || "WITS LINGO Administrator",
-          email: auth.email || "admin@witslingo.com",
+          id: adminUser?.id || auth.userId || "usr-admin-primary",
+          name: adminUser?.name || auth.name || "WITS LINGO Administrator",
+          email: adminUser?.email || auth.email || "admin@witslingo.com",
           role: "admin",
-          phone: "9027729917",
+          phone: adminUser?.phone || "9027729917",
           batchIds: [],
           registrationDate: "2026-01-01"
         },
@@ -2312,31 +2287,36 @@ try {
       });
     }
 
-    let user = users.find(u => u.id === auth.userId);
+    try {
+      const user = await getUserByIdDb(auth.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found." });
+      }
 
-    if (!user) {
-      return res.status(404).json({ error: "User not found." });
+      // Return user with their authorized batches
+      const allBatches = await getBatchesDb(false);
+      const userBatches = allBatches.filter(b => (user.batchIds || []).includes(b.id));
+
+      const userToken = generateAuthToken(user as any);
+
+      return res.json({
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone,
+          batchIds: user.batchIds,
+          admissionId: user.admissionId,
+          registrationDate: user.registrationDate
+        },
+        token: userToken,
+        batches: userBatches
+      });
+    } catch (err: any) {
+      console.error("[Auth /me] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to retrieve user session." });
     }
-
-    // Return user with their authorized batches
-    const userBatches = batches.filter(b => user.batchIds.includes(b.id));
-
-    const userToken = generateAuthToken(user);
-
-    res.json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        batchIds: user.batchIds,
-        admissionId: user.admissionId,
-        registrationDate: user.registrationDate
-      },
-      token: userToken,
-      batches: userBatches
-    });
   });
 
   // 3. BATCHES: List Batches (Public or Authenticated, Neon PostgreSQL)
@@ -2371,9 +2351,9 @@ try {
     }
   });
 
-  // 4. BATCH ACCESS CONTROL: Get Classes for Batch
-  // CRITICAL REQUIREMENT: Strict authorization at backend/database level.
-  app.get("/api/batches/:batchId/classes", (req, res) => {
+  // 4. BATCH ACCESS CONTROL: Get Classes for Batch (Neon PostgreSQL)
+  app.get("/api/batches/:batchId/classes", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     const { batchId } = req.params;
     const auth = verifyAuthToken(req);
 
@@ -2381,8 +2361,7 @@ try {
       return res.status(401).json({ error: "Authentication required. Please login to access batch classes." });
     }
 
-    // Check authorization: Admin has access to all; student must be enrolled in this batch
-    if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
+    if (auth.role !== "admin" && !(auth.batchIds || []).includes(batchId)) {
       return res.status(403).json({
         error: "Access Denied: You do not have authorization to view or access this batch's classes.",
         code: "BATCH_UNAUTHORIZED",
@@ -2390,12 +2369,18 @@ try {
       });
     }
 
-    const batchClasses = classes.filter(c => c.batchId === batchId);
-    res.json({ classes: batchClasses });
+    try {
+      const batchClasses = await getClassesDb(batchId);
+      return res.json({ classes: batchClasses });
+    } catch (err: any) {
+      console.error("[Classes GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ error: "Failed to load classes from database." });
+    }
   });
 
-  // 4b. BATCH RECORDINGS (Authorized for Enrolled Students & Admin)
-  app.get("/api/batches/:batchId/recordings", (req, res) => {
+  // 4b. BATCH RECORDINGS (Authorized for Enrolled Students & Admin, Neon PostgreSQL)
+  app.get("/api/batches/:batchId/recordings", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     const { batchId } = req.params;
     const auth = verifyAuthToken(req);
 
@@ -2411,12 +2396,17 @@ try {
       });
     }
 
-    const batchRecordings = recordings.filter(r => r.batchId === batchId);
-    res.json({ recordings: batchRecordings });
+    try {
+      const batchRecordings = await getRecordingsDb(batchId);
+      return res.json({ recordings: batchRecordings });
+    } catch (err: any) {
+      console.error("[Recordings GET] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to load recordings from database." });
+    }
   });
 
-  // 4c. BATCH RECORDING STREAM TICKET (Generates signed expiring playback token)
-  app.get("/api/batches/:batchId/recordings/:recordingId/stream-ticket", (req, res) => {
+  // 4c. BATCH RECORDING STREAM TICKET (Generates signed expiring playback token, Neon PostgreSQL)
+  app.get("/api/batches/:batchId/recordings/:recordingId/stream-ticket", async (req, res) => {
     const { batchId, recordingId } = req.params;
     const auth = verifyAuthToken(req);
 
@@ -2431,26 +2421,32 @@ try {
       });
     }
 
-    const rec = recordings.find(r => r.id === recordingId && r.batchId === batchId);
-    if (!rec) {
-      return res.status(404).json({ error: "Recording not found for this batch." });
+    try {
+      const rec = await getRecordingByIdDb(recordingId);
+      if (!rec || rec.batchId !== batchId) {
+        return res.status(404).json({ error: "Recording not found for this batch." });
+      }
+
+      const token = generateSignedPlaybackToken(auth.userId, rec.classId, batchId);
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+      return res.json({
+        success: true,
+        playbackTicket: token,
+        streamUrl: `/api/stream/recording/${token}`,
+        expiresAt,
+        watermarkText: `${auth.name} • ${auth.userId} • Wits Lingo Academy Authorized Student`,
+        recording: rec
+      });
+    } catch (err: any) {
+      console.error("[Stream ticket] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to generate stream ticket." });
     }
-
-    const token = generateSignedPlaybackToken(auth.userId, rec.classId, batchId);
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-
-    res.json({
-      success: true,
-      playbackTicket: token,
-      streamUrl: `/api/stream/recording/${token}`,
-      expiresAt,
-      watermarkText: `${auth.name} • ${auth.userId} • Wits Lingo Academy Authorized Student`,
-      recording: rec
-    });
   });
 
-  // 5. CLASS DETAIL & ACCESS VERIFICATION
-  app.get("/api/classes/:classId", (req, res) => {
+  // 5. CLASS DETAIL & ACCESS VERIFICATION (Neon PostgreSQL)
+  app.get("/api/classes/:classId", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     const { classId } = req.params;
     const auth = verifyAuthToken(req);
 
@@ -2458,33 +2454,43 @@ try {
       return res.status(401).json({ error: "Authentication required." });
     }
 
-    const cls = classes.find(c => c.id === classId);
-    if (!cls) {
-      return res.status(404).json({ error: "Class not found." });
-    }
+    try {
+      const cls = await getClassByIdDb(classId);
+      if (!cls) {
+        return res.status(404).json({ error: "Class not found." });
+      }
 
-    // Check student assigned batch
-    if (auth.role !== "admin" && !auth.batchIds.includes(cls.batchId)) {
-      return res.status(403).json({
-        error: "Access Denied: You are not authorized to access this class. It belongs to another batch.",
-        code: "CLASS_BATCH_MISMATCH"
+      if (auth.role !== "admin" && !(auth.batchIds || []).includes(cls.batchId)) {
+        return res.status(403).json({
+          error: "Access Denied: You are not authorized to access this class. It belongs to another batch.",
+          code: "CLASS_BATCH_MISMATCH"
+        });
+      }
+
+      const [batchRecordings, batchMaterials, batchAssignments] = await Promise.all([
+        getRecordingsDb(cls.batchId),
+        getStudyMaterialsDb({ batchId: cls.batchId, includeUnpublished: auth.role === "admin" }),
+        getAssignmentsDb(cls.batchId)
+      ]);
+
+      const clsRecording = batchRecordings.find(r => r.classId === classId) || null;
+      const clsMaterials = batchMaterials.filter(m => m.classId === classId || (m.batchId === cls.batchId && !m.classId));
+      const clsAssignments = batchAssignments.filter(a => a.classId === classId || (a.batchId === cls.batchId && !a.classId));
+
+      return res.json({
+        class: cls,
+        recording: clsRecording,
+        materials: clsMaterials,
+        assignments: clsAssignments
       });
+    } catch (err: any) {
+      console.error("[Class GET] Database query failed:", err?.message || err);
+      return res.status(500).json({ error: "Failed to retrieve class details." });
     }
-
-    const clsRecording = recordings.find(r => r.classId === classId);
-    const clsMaterials = studyMaterials.filter(m => m.classId === classId || (m.batchId === cls.batchId && !m.classId));
-    const clsAssignments = assignments.filter(a => a.classId === classId || (a.batchId === cls.batchId && !a.classId));
-
-    res.json({
-      class: cls,
-      recording: clsRecording,
-      materials: clsMaterials,
-      assignments: clsAssignments
-    });
   });
 
-  // 6. ATTENDANCE: Join Class (Logs Attendance on Server)
-  app.post("/api/classes/:classId/join", (req, res) => {
+  // 6. ATTENDANCE: Join Class (Neon PostgreSQL)
+  app.post("/api/classes/:classId/join", async (req, res) => {
     const { classId } = req.params;
     const auth = verifyAuthToken(req);
 
@@ -2492,24 +2498,21 @@ try {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const cls = classes.find(c => c.id === classId);
-    if (!cls) {
-      return res.status(404).json({ error: "Class not found." });
-    }
+    try {
+      const cls = await getClassByIdDb(classId);
+      if (!cls) {
+        return res.status(404).json({ error: "Class not found." });
+      }
 
-    if (auth.role !== "admin" && !auth.batchIds.includes(cls.batchId)) {
-      return res.status(403).json({ error: "Access Denied: You cannot join a live class for an unauthorized batch." });
-    }
+      if (auth.role !== "admin" && !(auth.batchIds || []).includes(cls.batchId)) {
+        return res.status(403).json({ error: "Access Denied: You cannot join a live class for an unauthorized batch." });
+      }
 
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-    // Check existing attendance or create record
-    let att = attendanceRecords.find(a => a.studentId === auth.userId && a.classId === classId);
-    if (!att) {
-      att = {
-        id: `att-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      const att = await logAttendanceJoinDb({
         studentId: auth.userId,
         studentName: auth.name,
         batchId: cls.batchId,
@@ -2517,51 +2520,48 @@ try {
         classId: cls.id,
         classTitle: cls.title,
         joinTime: timeStr,
-        durationMinutes: 1,
-        status: "Present",
         date: dateStr
-      };
-      attendanceRecords.unshift(att);
-    }
+      });
 
-    res.json({
-      success: true,
-      message: "Attendance recorded successfully.",
-      attendanceId: att.id,
-      joinedAt: timeStr,
-      liveSession: {
-        classId: cls.id,
-        title: cls.title,
-        batchName: cls.batchName,
-        instructor: cls.teacherName,
-        isLive: cls.status === "Live"
-      }
-    });
+      return res.json({
+        success: true,
+        message: "Attendance recorded successfully.",
+        attendanceId: att.id,
+        joinedAt: timeStr,
+        liveSession: {
+          classId: cls.id,
+          title: cls.title,
+          batchName: cls.batchName,
+          instructor: cls.teacherName,
+          isLive: cls.status === "Live"
+        }
+      });
+    } catch (err: any) {
+      console.error("[Attendance Join] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to record attendance." });
+    }
   });
 
-  // 7. ATTENDANCE: Leave Class (Updates duration)
-  app.post("/api/classes/:classId/leave", (req, res) => {
+  // 7. ATTENDANCE: Leave Class (Neon PostgreSQL)
+  app.post("/api/classes/:classId/leave", async (req, res) => {
     const { classId } = req.params;
     const auth = verifyAuthToken(req);
-    const { durationMinutes } = req.body;
 
     if (!auth) return res.status(401).json({ error: "Unauthorized" });
 
-    const att = attendanceRecords.find(a => a.studentId === auth.userId && a.classId === classId);
-    if (att) {
+    try {
       const now = new Date();
-      att.leaveTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      if (durationMinutes && typeof durationMinutes === "number") {
-        att.durationMinutes = Math.max(att.durationMinutes, durationMinutes);
-      }
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      await logAttendanceLeaveDb(classId, auth.userId, timeStr);
+      return res.json({ success: true, message: "Attendance session closed." });
+    } catch (err: any) {
+      console.error("[Attendance Leave] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to close attendance session." });
     }
-
-    res.json({ success: true, message: "Attendance session closed." });
   });
 
-  // 8. VIDEO SECURITY: Get Signed Expiring Playback Token
-  // CRITICAL REQUIREMENT: Strict verification at backend level. Expiring signed token.
-  app.get("/api/classes/:classId/recording-token", (req, res) => {
+  // 8. VIDEO SECURITY: Get Signed Expiring Playback Token (Neon PostgreSQL)
+  app.get("/api/classes/:classId/recording-token", async (req, res) => {
     const { classId } = req.params;
     const auth = verifyAuthToken(req);
 
@@ -2569,48 +2569,52 @@ try {
       return res.status(401).json({ error: "Authentication required to watch recording." });
     }
 
-    const cls = classes.find(c => c.id === classId);
-    if (!cls) {
-      return res.status(404).json({ error: "Class not found." });
-    }
-
-    // Backend access check: does student's assigned batch match the class batch?
-    if (auth.role !== "admin" && !auth.batchIds.includes(cls.batchId)) {
-      return res.status(403).json({
-        error: "Access Denied: You do not have permission to access recordings for this batch.",
-        code: "UNAUTHORIZED_RECORDING_ACCESS"
-      });
-    }
-
-    const rec = recordings.find(r => r.classId === classId);
-    if (!rec) {
-      return res.status(404).json({ error: "No recording available for this class yet." });
-    }
-
-    // Generate signed token with 1 hour expiration
-    const token = generateSignedPlaybackToken(auth.userId, classId, cls.batchId);
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-
-    res.json({
-      success: true,
-      playbackToken: token,
-      streamUrl: `/api/stream/recording/${token}`,
-      expiresAt,
-      watermarkText: `${auth.name} • ${auth.userId} • Wits Lingo Academy Authorized Student`,
-      recording: {
-        id: rec.id,
-        title: rec.title,
-        topic: rec.topic,
-        classNumber: rec.classNumber,
-        date: rec.date,
-        duration: rec.duration,
-        notesSummary: rec.notesSummary
+    try {
+      const cls = await getClassByIdDb(classId);
+      if (!cls) {
+        return res.status(404).json({ error: "Class not found." });
       }
-    });
+
+      if (auth.role !== "admin" && !(auth.batchIds || []).includes(cls.batchId)) {
+        return res.status(403).json({
+          error: "Access Denied: You do not have permission to access recordings for this batch.",
+          code: "UNAUTHORIZED_RECORDING_ACCESS"
+        });
+      }
+
+      const batchRecordings = await getRecordingsDb(cls.batchId);
+      const rec = batchRecordings.find(r => r.classId === classId);
+      if (!rec) {
+        return res.status(404).json({ error: "No recording available for this class yet." });
+      }
+
+      const token = generateSignedPlaybackToken(auth.userId, classId, cls.batchId);
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+      return res.json({
+        success: true,
+        playbackToken: token,
+        streamUrl: `/api/stream/recording/${token}`,
+        expiresAt,
+        watermarkText: `${auth.name} • ${auth.userId} • Wits Lingo Academy Authorized Student`,
+        recording: {
+          id: rec.id,
+          title: rec.title,
+          topic: rec.topic,
+          classNumber: rec.classNumber,
+          date: rec.date,
+          duration: rec.duration,
+          notesSummary: rec.notesSummary
+        }
+      });
+    } catch (err: any) {
+      console.error("[Recording Token] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to generate recording token." });
+    }
   });
 
-  // 9. SECURE STREAMING GATEWAY: Validates signed token before serving video metadata/stream
-  app.get("/api/stream/recording/:token", (req, res) => {
+  // 9. SECURE STREAMING GATEWAY (Neon PostgreSQL)
+  app.get("/api/stream/recording/:token", async (req, res) => {
     const { token } = req.params;
     const verified = verifyPlaybackToken(token);
 
@@ -2621,30 +2625,38 @@ try {
       });
     }
 
-    const cls = classes.find(c => c.id === verified.classId);
-    const rec = recordings.find(r => r.classId === verified.classId);
-    const user = users.find(u => u.id === verified.studentId);
+    try {
+      const [cls, user, recordingsList] = await Promise.all([
+        getClassByIdDb(verified.classId),
+        getUserByIdDb(verified.studentId),
+        getRecordingsDb(verified.batchId)
+      ]);
 
-    if (!cls || !rec) {
-      return res.status(404).json({ error: "Recording stream not found." });
+      const rec = recordingsList.find(r => r.classId === verified.classId);
+
+      if (!cls || !rec) {
+        return res.status(404).json({ error: "Recording stream not found." });
+      }
+
+      if (user && user.role !== "admin" && !(user.batchIds || []).includes(verified.batchId)) {
+        return res.status(403).json({ error: "Revoked authorization: Student no longer belongs to this batch." });
+      }
+
+      return res.json({
+        secureStream: true,
+        classId: cls.id,
+        title: cls.title,
+        duration: rec.duration,
+        watermark: `${user?.name || 'Student'} • WL-VERIFIED • Session Expiry ${new Date(verified.expiresAt).toLocaleTimeString()}`,
+        videoKey: rec.videoKey,
+        mimeType: "video/mp4",
+        playbackProtocol: "HLS_Signed_VOD",
+        notes: rec.notesSummary
+      });
+    } catch (err: any) {
+      console.error("[Stream recording] Error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to access recording stream." });
     }
-
-    // Check user still in batch
-    if (user && user.role !== "admin" && !user.batchIds.includes(verified.batchId)) {
-      return res.status(403).json({ error: "Revoked authorization: Student no longer belongs to this batch." });
-    }
-
-    res.json({
-      secureStream: true,
-      classId: cls.id,
-      title: cls.title,
-      duration: rec.duration,
-      watermark: `${user?.name || 'Student'} • WL-VERIFIED • Session Expiry ${new Date(verified.expiresAt).toLocaleTimeString()}`,
-      videoKey: rec.videoKey,
-      mimeType: "video/mp4",
-      playbackProtocol: "HLS_Signed_VOD",
-      notes: rec.notesSummary
-    });
   });
 
   // 10. BATCH MATERIALS (Authorized, Neon PostgreSQL)
@@ -2673,27 +2685,35 @@ try {
     }
   });
 
-  // 11. BATCH ASSIGNMENTS (Authorized)
-  app.get("/api/batches/:batchId/assignments", (req, res) => {
+  // 11. BATCH ASSIGNMENTS (Authorized, Neon PostgreSQL)
+  app.get("/api/batches/:batchId/assignments", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     const { batchId } = req.params;
     const auth = verifyAuthToken(req);
 
     if (!auth) return res.status(401).json({ error: "Authentication required." });
-    if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
+    if (auth.role !== "admin" && !(auth.batchIds || []).includes(batchId)) {
       return res.status(403).json({ error: "Access Denied: You are not authorized to access assignments for this batch." });
     }
 
-    const batchAssignments = assignments.filter(a => a.batchId === batchId);
-    const mySubmissions = submissions.filter(s => s.studentId === auth.userId);
+    try {
+      const [batchAssignments, mySubmissions] = await Promise.all([
+        getAssignmentsDb(batchId),
+        getAssignmentSubmissionsDb({ batchId, studentId: auth.userId })
+      ]);
 
-    res.json({
-      assignments: batchAssignments,
-      submissions: mySubmissions
-    });
+      return res.json({
+        assignments: batchAssignments,
+        submissions: mySubmissions
+      });
+    } catch (err: any) {
+      console.error("[Assignments GET] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to retrieve assignments from database." });
+    }
   });
 
-  // 12. SUBMIT ASSIGNMENT
-  app.post("/api/assignments/:assignmentId/submit", (req, res) => {
+  // 12. SUBMIT ASSIGNMENT (Neon PostgreSQL)
+  app.post("/api/assignments/:assignmentId/submit", async (req, res) => {
     const { assignmentId } = req.params;
     const auth = verifyAuthToken(req);
     const { content } = req.body;
@@ -2701,28 +2721,32 @@ try {
     if (!auth) return res.status(401).json({ error: "Authentication required." });
     if (!content || !content.trim()) return res.status(400).json({ error: "Submission content cannot be empty." });
 
-    const asg = assignments.find(a => a.id === assignmentId);
-    if (!asg) return res.status(404).json({ error: "Assignment not found." });
+    try {
+      const asg = await getAssignmentByIdDb(assignmentId);
+      if (!asg) return res.status(404).json({ error: "Assignment not found." });
 
-    if (auth.role !== "admin" && !auth.batchIds.includes(asg.batchId)) {
-      return res.status(403).json({ error: "Access Denied: You do not belong to this assignment's batch." });
+      if (auth.role !== "admin" && !(auth.batchIds || []).includes(asg.batchId)) {
+        return res.status(403).json({ error: "Access Denied: You do not belong to this assignment's batch." });
+      }
+
+      const submission = await createAssignmentSubmissionDb({
+        assignmentId,
+        studentId: auth.userId,
+        studentName: auth.name,
+        batchId: asg.batchId,
+        content: content.trim(),
+        status: "Submitted"
+      });
+
+      return res.json({
+        success: true,
+        message: "Assignment submitted successfully! Teacher will review it soon.",
+        submission
+      });
+    } catch (err: any) {
+      console.error("[Assignment Submit] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to submit assignment." });
     }
-
-    const submission: DBAssignmentSubmission = {
-      id: `sub-${Date.now()}`,
-      assignmentId,
-      studentId: auth.userId,
-      studentName: auth.name,
-      batchId: asg.batchId,
-      submittedAt: new Date().toISOString(),
-      content: content.trim(),
-      status: "Submitted"
-    };
-
-    submissions.unshift(submission);
-    asg.submissionsCount += 1;
-
-    res.json({ success: true, message: "Assignment submitted successfully! Teacher will review it soon.", submission });
   });
 
   // 13. BATCH ANNOUNCEMENTS (Authorized)
@@ -2775,7 +2799,7 @@ try {
     });
   });
 
-  // 1. Create Official Razorpay Payment Order (Server-Side Price Calculation)
+  // 1. Create Official Razorpay Payment Order (Neon PostgreSQL)
   app.post("/api/payments/razorpay/order", async (req, res) => {
     try {
       const { courseId, batchId, studentName, studentEmail, studentPhone } = req.body;
@@ -2783,7 +2807,7 @@ try {
         return res.status(400).json({ error: "courseId is required to generate an order." });
       }
 
-      let course = (cmsContent.courses || []).find((c: any) => c.id === courseId || (c.name && c.name.toLowerCase().trim() === courseId.toLowerCase().trim()));
+      let course = await getCourseByIdDb(courseId);
       if (!course) {
         const clientCourseName = (req.body.courseName || courseId.replace(/^course-/, '').replace(/-\d+$/, '').replace(/-/g, ' ')).trim();
         course = {
@@ -2795,13 +2819,10 @@ try {
           learningFormat: "Live Online Classroom",
           badge: "Live",
           isPublished: true
-        };
-        if (!Array.isArray(cmsContent.courses)) cmsContent.courses = [];
-        cmsContent.courses.push(course);
-        saveCmsContent();
+        } as CourseData;
       }
 
-      const batch = batchId ? batches.find(b => b.id === batchId) : null;
+      const batch = batchId ? await getBatchByIdDb(batchId) : null;
       const { keyId, keySecret } = getRazorpayConfig();
 
       if (!keyId || !keySecret) {
@@ -2861,7 +2882,7 @@ try {
     }
   });
 
-  // 2. Verify Razorpay Payment Signature & Confirm Student Enrollment
+  // 2. Verify Razorpay Payment Signature & Confirm Student Enrollment (Neon PostgreSQL)
   app.post("/api/payments/razorpay/verify", async (req, res) => {
     try {
       const {
@@ -2916,12 +2937,13 @@ try {
         });
       }
 
-      const batch = batches.find(b => b.id === batchId);
+      const batch = await getBatchByIdDb(batchId);
       if (!batch) {
         return res.status(404).json({ error: "Selected batch not found." });
       }
 
-      const course = cmsContent.courses.find((c: any) => c.id === courseId) || { name: "Spoken English", fee: 1499 };
+      let course = await getCourseByIdDb(courseId);
+      const resolvedCourse = course || { id: courseId, name: "Spoken English", fee: 1499 };
 
       // Format phones
       const pCode = phoneCountryCode || '+91';
@@ -2935,11 +2957,44 @@ try {
       const whatsappCleanRecipient = `${fullCountryDigits}${cleanWhatsapp}`;
 
       // Unique Admission ID
-      const batchYearMonth = batch.batchCode.replace(/[^A-Za-z0-9]/g, '');
+      const batchYearMonth = (batch.batchCode || "WL").replace(/[^A-Za-z0-9]/g, '');
       const randomSeq = Math.floor(1000 + Math.random() * 9000);
       const admissionId = `WL-${batchYearMonth}-${randomSeq}`;
 
-      const studentReg: DBStudentRegistration = {
+      const confirmationText = 
+`🎓 *WITS LINGO — OFFICIAL ADMISSION CONFIRMATION*
+━━━━━━━━━━━━━━━━━━━━
+Dear *${name.trim()}*,
+Congratulations! Your seat has been successfully confirmed at *WITS LINGO — A Global Language Platform*.
+
+📋 *ADMISSION SUMMARY*
+• *Admission ID / Roll No:* ${admissionId}
+• *Student Name:* ${name.trim()}
+• *Father's Name:* ${fatherName.trim()}
+• *Enrolled Course:* ${resolvedCourse.name}
+• *Assigned Batch:* ${batch.name} (${batch.batchCode})
+• *Batch Timings:* ${batch.scheduleTime || 'Daily 1-Hour Live Class'}
+• *Batch Start Date:* ${batch.startDate || '1st of the month'}
+• *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
+• *Fee Paid:* ₹${resolvedCourse.fee} (Verified via Razorpay)
+• *Payment Ref:* ${razorpayPaymentId}
+
+🔐 *STUDENT PORTAL LOGIN*
+• *Portal URL:* https://witslingo.com/login
+• *Username:* ${email.trim().toLowerCase()} (or ${admissionId})
+• *Password:* ${(studentPassword || "WitsLingo@2026").trim()}
+
+📱 *BATCH WHATSAPP GROUP & SUPPORT*
+📞 *${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}*
+
+Welcome to WITS LINGO!
+www.witslingo.com`;
+
+      const encodedMsg = encodeURIComponent(confirmationText);
+      const whatsappStudentUrl = `https://api.whatsapp.com/send?phone=${whatsappCleanRecipient}&text=${encodedMsg}`;
+      const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
+
+      const studentReg = await createRegistrationDb({
         id: `reg-${Date.now()}`,
         admissionId,
         name: name.trim(),
@@ -2957,33 +3012,33 @@ try {
         qualification: qualification || "Undergraduate",
         currentEnglishLevel: currentEnglishLevel || "Beginner",
         courseId,
-        courseName: course.name,
+        courseName: resolvedCourse.name,
         batchId: batch.id,
         batchName: batch.name,
-        feeAmount: course.fee,
+        feeAmount: Number(resolvedCourse.fee),
         paymentStatus: "Paid",
         paymentMethod: "Razorpay",
         paymentCurrency: "INR",
-        paymentAmountFormatted: `₹${course.fee.toLocaleString()}`,
+        paymentAmountFormatted: `₹${Number(resolvedCourse.fee).toLocaleString()}`,
         paymentTxnId: razorpayPaymentId,
         razorpayOrderId,
         razorpayPaymentId,
         razorpaySignature,
         googleMeetLink: batch.googleMeetLink || "",
         whatsappDeliveryStatus: "pending",
+        whatsappConfirmationMessage: confirmationText,
+        whatsappStudentUrl,
+        whatsappAdminUrl,
         registeredAt: new Date().toISOString()
-      };
+      });
 
-      registrations.unshift(studentReg);
-      batch.currentStudentsCount = (batch.currentStudentsCount || 0) + 1;
-
-      // Record Payment
-      const paymentRecord: DBPayment = {
+      // Record Payment in Neon
+      const paymentRecord = await createPaymentDb({
         id: `pay-${Date.now()}`,
         orderId: razorpayOrderId,
         paymentId: razorpayPaymentId,
         signature: razorpaySignature,
-        amount: course.fee,
+        amount: Number(resolvedCourse.fee),
         currency: "INR",
         status: "Paid",
         studentName: studentReg.name,
@@ -2995,51 +3050,35 @@ try {
         batchName: studentReg.batchName,
         admissionId: studentReg.admissionId,
         method: "Razorpay",
-        createdAt: new Date().toISOString(),
-        verifiedAt: new Date().toISOString(),
         source: "razorpay_verify"
-      };
-      payments.unshift(paymentRecord);
+      });
 
-      // User Account
+      // User Account in Neon
       const assignedPassword = (studentPassword || "WitsLingo@2026").trim();
-      let user = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      let user = await getUserByEmailDb(email.trim().toLowerCase());
       if (user) {
-        if (!user.batchIds.includes(batch.id)) {
-          user.batchIds.push(batch.id);
-        }
-        if (assignedPassword && assignedPassword !== "student123") {
-          user.passwordHash = assignedPassword;
-        }
-        if (!user.admissionId) {
-          user.admissionId = admissionId;
-        }
+        const currentBatchIds = user.batchIds || [];
+        const updatedBatchIds = currentBatchIds.includes(batch.id) ? currentBatchIds : [...currentBatchIds, batch.id];
+        user = await updateUserDb(user.id, {
+          batchIds: updatedBatchIds,
+          admissionId: user.admissionId || admissionId
+        }) || user;
       } else {
-        user = {
-          id: `usr-${Date.now()}`,
+        const passwordHash = await bcrypt.hash(assignedPassword, 10);
+        user = await createUserDb({
           name: name.trim(),
           email: email.trim().toLowerCase(),
-          passwordHash: assignedPassword,
+          passwordHash,
           role: "student",
           phone: fullPhoneFormatted,
-          batchIds: [],
-          admissionId,
-          registrationDate: new Date().toISOString().split("T")[0]
-        };
-        users.push(user);
+          batchIds: [batch.id],
+          admissionId
+        });
       }
 
-      const token = generateAuthToken(user);
+      const token = generateAuthToken(user as any);
 
-      // Save persisted changes to durable cloud storage
-      await Promise.all([
-        saveRegistrations(),
-        saveUsers(),
-        saveBatches(),
-        savePayments()
-      ]);
-
-      // Await WhatsApp Confirmation to ensure Vercel Lambda doesn't terminate early
+      // Async WhatsApp Confirmation
       try {
         const waRes = await sendWhatsAppEnrollmentMessage({
           studentName: studentReg.name,
@@ -3048,70 +3087,28 @@ try {
           courseId: studentReg.courseId,
           batchId: studentReg.batchId,
           startDate: batch.startDate || "Upcoming",
-          classTiming: batch.classTime || batch.scheduleTime || "Daily Live Class",
-          googleMeetLink: batch.googleMeetLink || batch.meetLink,
+          classTiming: batch.scheduleTime || "Daily Live Class",
+          googleMeetLink: batch.googleMeetLink || "",
           amount: studentReg.feeAmount,
           admissionId: studentReg.admissionId,
           recipientPhone: studentReg.whatsapp || studentReg.phone,
-          facilities: course.facilities
+          facilities: (resolvedCourse as any).facilities
         });
-        if (waRes.success) {
-          studentReg.whatsappDeliveryStatus = "sent";
-          if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
-        } else {
-          studentReg.whatsappDeliveryStatus = "failed";
-          if (waRes.error) studentReg.whatsappError = waRes.error;
-        }
-        saveRegistrations();
+        await updateRegistrationDb(studentReg.id, {
+          whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+          whatsappMessageId: waRes.messageId,
+          whatsappError: waRes.error
+        });
       } catch (err: any) {
         console.warn("[WhatsApp] Async dispatch error:", err);
-        studentReg.whatsappDeliveryStatus = "failed";
-        studentReg.whatsappError = err?.message || "Dispatch error";
-        saveRegistrations();
       }
 
-      const confirmationText = 
-`🎓 *WITS LINGO — OFFICIAL ADMISSION CONFIRMATION*
-━━━━━━━━━━━━━━━━━━━━
-Dear *${name.trim()}*,
-Congratulations! Your seat has been successfully confirmed at *WITS LINGO — A Global Language Platform*.
-
-📋 *ADMISSION SUMMARY*
-• *Admission ID / Roll No:* ${admissionId}
-• *Student Name:* ${name.trim()}
-• *Father's Name:* ${fatherName.trim()}
-• *Enrolled Course:* ${course.name}
-• *Assigned Batch:* ${batch.name} (${batch.batchCode})
-• *Batch Timings:* ${batch.scheduleTime || 'Daily 1-Hour Live Class'}
-• *Batch Start Date:* ${batch.startDate || '1st of the month'}
-• *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
-• *Fee Paid:* ₹${course.fee} (Verified via Razorpay)
-• *Payment Ref:* ${razorpayPaymentId}
-
-🔐 *STUDENT PORTAL LOGIN*
-• *Portal URL:* https://witslingo.com/login
-• *Username:* ${user.email} (or ${admissionId})
-• *Password:* ${user.passwordHash}
-
-📱 *BATCH WHATSAPP GROUP & SUPPORT*
-📞 *${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}*
-
-Welcome to WITS LINGO!
-www.witslingo.com`;
-
-      const encodedMsg = encodeURIComponent(confirmationText);
-      const whatsappStudentUrl = `https://api.whatsapp.com/send?phone=${whatsappCleanRecipient}&text=${encodedMsg}`;
-      const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
-
-      studentReg.whatsappConfirmationMessage = confirmationText;
-      studentReg.whatsappStudentUrl = whatsappStudentUrl;
-      studentReg.whatsappAdminUrl = whatsappAdminUrl;
-
-      res.json({
+      return res.json({
         success: true,
         message: "Payment verified and enrollment confirmed! Welcome to WITS LINGO.",
         admissionId,
         registration: studentReg,
+        payment: paymentRecord,
         token,
         user: {
           id: user.id,
@@ -3124,7 +3121,7 @@ www.witslingo.com`;
         credentials: {
           username: user.email,
           alternativeUsername: admissionId,
-          password: user.passwordHash
+          password: assignedPassword
         },
         whatsapp: {
           recipientNumber: fullWhatsappFormatted,
@@ -3135,8 +3132,8 @@ www.witslingo.com`;
         }
       });
     } catch (err: any) {
-      console.error("[Razorpay] Verification endpoint exception:", err);
-      res.status(500).json({ success: false, error: "Internal server error verifying payment." });
+      console.error("[Razorpay Verify] Error:", err);
+      return res.status(500).json({ success: false, error: "Internal server error verifying payment." });
     }
   });
 
@@ -3172,27 +3169,28 @@ www.witslingo.com`;
           const amount = paymentEntity.amount ? paymentEntity.amount / 100 : 0;
 
           // 1. Check idempotency: If payment already recorded, acknowledge and return
-          const existingPayment = payments.find(p => p.paymentId === paymentId);
+          const existingPayments = await getPaymentsDb();
+          const existingPayment = existingPayments.find(p => p.paymentId === paymentId);
           if (existingPayment) {
             console.log(`[Razorpay Webhook] Payment ${paymentId} already recorded. Idempotent return.`);
             return res.json({ status: "already_processed" });
           }
 
           // 2. Resolve matching Order
-          const matchedOrder = orders.find(o => o.razorpayOrderId === orderId || o.id === paymentEntity.notes?.orderId);
+          let matchedOrder = orderId ? await getOrderByRazorpayOrderIdDb(orderId) : null;
+          if (!matchedOrder && paymentEntity.notes?.orderId) {
+            matchedOrder = await getOrderByIdDb(paymentEntity.notes.orderId);
+          }
+
           if (matchedOrder) {
-            matchedOrder.orderStatus = "paid";
-            matchedOrder.razorpayPaymentId = paymentId;
-            matchedOrder.updatedAt = new Date().toISOString();
-            await saveOrders();
+            await updateOrderStatusDb(matchedOrder.id, "paid", paymentId, orderId);
           }
 
           // 3. Resolve matching student registration
-          const reg = registrations.find(r => r.razorpayOrderId === orderId || (matchedOrder && r.phone === matchedOrder.studentPhone));
+          const allRegs = await getRegistrationsDb();
+          const reg = allRegs.find(r => r.razorpayOrderId === orderId || (matchedOrder && r.phone === matchedOrder.studentPhone));
           if (reg) {
-            reg.paymentStatus = "Paid";
-            reg.razorpayPaymentId = paymentId;
-            await saveRegistrations();
+            await updateRegistrationDb(reg.id, { paymentStatus: "Paid", razorpayPaymentId: paymentId });
           }
 
           const studentName = reg?.name || matchedOrder?.studentName || paymentEntity.notes?.studentName || "Student";
@@ -3204,7 +3202,7 @@ www.witslingo.com`;
           const batchName = reg?.batchName || matchedOrder?.batchName || paymentEntity.notes?.batchName || "Assigned Batch";
           const admissionId = reg?.admissionId || `WL-2026-${Date.now().toString().slice(-4)}`;
 
-          const newPaymentRecord: DBPayment = {
+          const newPaymentRecord = await createPaymentDb({
             id: `pay-${Date.now()}`,
             orderId: orderId || matchedOrder?.id || "",
             paymentId: paymentId || "",
@@ -3220,39 +3218,32 @@ www.witslingo.com`;
             batchName,
             admissionId,
             method: paymentEntity.method || "Razorpay",
-            createdAt: new Date().toISOString(),
-            verifiedAt: new Date().toISOString(),
             source: "razorpay_webhook",
             rawPayload: paymentEntity
-          };
+          });
 
-          payments.unshift(newPaymentRecord);
-          savePayments();
-
-          // 4. Ensure Student Login Account Activated
-          let userRecord = users.find(u => u.phone === studentPhone || (studentEmail && u.email.toLowerCase() === studentEmail.toLowerCase()));
+          // 4. Ensure Student Login Account Activated in Neon
+          let userRecord = studentEmail ? await getUserByEmailDb(studentEmail) : null;
           if (!userRecord) {
-            userRecord = {
-              id: `usr-${Date.now()}`,
+            const passwordHash = await bcrypt.hash((studentPhone || "").slice(-6) || "student123", 10);
+            await createUserDb({
               name: studentName,
               email: studentEmail || `${studentPhone}@student.witslingo.com`,
-              passwordHash: hashPassword(studentPhone.slice(-6) || "student123"),
+              passwordHash,
               role: "student",
               phone: studentPhone,
-              batchIds: [],
-              admissionId,
-              registrationDate: new Date().toISOString()
-            };
-            users.push(userRecord);
+              batchIds: [batchId],
+              admissionId
+            });
           } else {
-            if (!userRecord.batchIds.includes(batchId)) {
-              userRecord.batchIds.push(batchId);
+            const curBatchIds = userRecord.batchIds || [];
+            if (!curBatchIds.includes(batchId)) {
+              await updateUserDb(userRecord.id, { batchIds: [...curBatchIds, batchId] });
             }
           }
-          saveUsers();
 
           // 5. Send Automated WhatsApp Payment Confirmation
-          const effectiveOrder: DBOrder = matchedOrder || {
+          const effectiveOrder = matchedOrder || {
             id: `ord_${orderId || paymentId}`,
             studentId: `std_${(studentPhone || "").replace(/\D/g, "")}`,
             studentName,
@@ -3273,12 +3264,11 @@ www.witslingo.com`;
             updatedAt: new Date().toISOString()
           };
           if (!matchedOrder) {
-            orders.unshift(effectiveOrder);
-            saveOrders();
+            await createOrderDb(effectiveOrder);
           }
 
           try {
-            const waWebhookRes = await sendPaymentConfirmationWhatsApp(effectiveOrder, newPaymentRecord);
+            const waWebhookRes = await sendPaymentConfirmationWhatsApp(effectiveOrder as any, newPaymentRecord as any);
             console.log(`[Razorpay Webhook] WhatsApp dispatch result:`, waWebhookRes);
           } catch (err) {
             console.warn("[Razorpay Webhook] Async WhatsApp dispatch error:", err);
@@ -3288,11 +3278,9 @@ www.witslingo.com`;
         const paymentEntity = payload?.payload?.payment?.entity;
         const orderId = paymentEntity?.order_id;
         if (orderId) {
-          const matchedOrder = orders.find(o => o.razorpayOrderId === orderId || o.id === paymentEntity?.notes?.orderId);
+          const matchedOrder = (await getOrderByRazorpayOrderIdDb(orderId)) || (paymentEntity?.notes?.orderId ? await getOrderByIdDb(paymentEntity.notes.orderId) : null);
           if (matchedOrder) {
-            matchedOrder.orderStatus = "failed";
-            matchedOrder.updatedAt = new Date().toISOString();
-            saveOrders();
+            await updateOrderStatusDb(matchedOrder.id, "failed");
             console.log(`[Razorpay Webhook] Order ${matchedOrder.id} marked as failed from webhook.`);
           }
         }
@@ -3306,7 +3294,7 @@ www.witslingo.com`;
   });
 
   // =========================================================================
-  // STUDENT CHECKOUT & ORDER CREATION (SERVER-SIDE PRICE VERIFICATION)
+  // STUDENT CHECKOUT & ORDER CREATION (Neon PostgreSQL)
   // =========================================================================
 
   app.post("/api/orders/create", async (req, res) => {
@@ -3326,37 +3314,7 @@ www.witslingo.com`;
         return res.status(400).json({ success: false, error: "Please select a course to continue." });
       }
 
-      // Determine price strictly on server side from trusted course records
-      let foundCourse = (cmsContent.courses || []).find((c: any) => 
-        c.id === courseId ||
-        (courseId === 'course-communication' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
-        (courseId === 'course-communication-skills' && (c.id === 'course-communication-skills' || c.id === 'course-communication')) ||
-        (courseId === 'course-advanced' && (c.id === 'course-advanced-english' || c.id === 'course-advanced')) ||
-        (courseId === 'course-advanced-english' && (c.id === 'course-advanced-english' || c.id === 'course-advanced')) ||
-        (c.name && courseId && c.name.toLowerCase().trim() === courseId.toLowerCase().trim()) ||
-        (c.name && req.body.courseName && c.name.toLowerCase().trim() === req.body.courseName.toLowerCase().trim())
-      ) || (cmsContent.courses || []).find((c: any) => c.id === courseId);
-
-      // If not found in memory, try loading from durable storage
-      if (!foundCourse) {
-        try {
-          const durableCms = await durableStorageService.getCollection<any>("cmsContent", []);
-          if (Array.isArray(durableCms) && durableCms.length > 0 && durableCms[0]?.courses) {
-            cmsContent.courses = durableCms[0].courses;
-          }
-          const durableCourses = await durableStorageService.getCollection<any>("courses", []);
-          if (Array.isArray(durableCourses) && durableCourses.length > 0) {
-            cmsContent.courses = [...(cmsContent.courses || []), ...durableCourses];
-          }
-          foundCourse = (cmsContent.courses || []).find((c: any) => 
-            c.id === courseId || 
-            (c.name && courseId && c.name.toLowerCase().trim() === courseId.toLowerCase().trim()) ||
-            (c.name && req.body.courseName && c.name.toLowerCase().trim() === req.body.courseName.toLowerCase().trim())
-          );
-        } catch (e) {}
-      }
-
-      // If STILL not found in backend memory or durable storage, dynamically register from client payload so order never fails
+      let foundCourse = await getCourseByIdDb(courseId);
       if (!foundCourse) {
         const clientCourseName = (req.body.courseName || req.body.courseTitle || courseId.replace(/^course-/, '').replace(/-\d+$/, '').replace(/-/g, ' ')).trim();
         const clientFee = Number(req.body.courseFee || req.body.fee) || 1499;
@@ -3369,26 +3327,8 @@ www.witslingo.com`;
           duration: req.body.duration || "2 Months (40 Sessions)",
           learningFormat: req.body.learningFormat || "Live Online Classroom",
           badge: req.body.badge || "Live",
-          isPublished: true,
-          whatYouWillLearn: [
-            "Master natural conversational speaking",
-            "Overcome public hesitation and stage fear",
-            "Daily vocabulary in context",
-            "Pronunciation and accent clarity"
-          ],
-          facilities: [
-            "Live Interactive Online Classes on Google Meet",
-            "Digital PDF Study Notes & Practice Workbooks",
-            "Telegram & WhatsApp Student Practice Community",
-            "Course Completion Certificate",
-            "Class Recording Access for Revision"
-          ]
-        };
-
-        if (!Array.isArray(cmsContent.courses)) cmsContent.courses = [];
-        cmsContent.courses.push(foundCourse);
-        saveCmsContent();
-        console.log(`[Orders] Registered and cached new course "${foundCourse.name}" (${foundCourse.id}) dynamically.`);
+          isPublished: true
+        } as CourseData;
       }
 
       const originalFee = Number(foundCourse.fee) || 1499;
@@ -3432,12 +3372,11 @@ www.witslingo.com`;
         }
       }
 
-      // If keys are not configured or external API is offline, create simulated order ID
       if (!razorpayOrderId) {
         razorpayOrderId = `order_test_${orderId}`;
       }
 
-      const newOrder: DBOrder = {
+      const newOrder = await createOrderDb({
         id: orderId,
         studentId: `std_${cleanWhatsapp}`,
         studentName: studentName.trim(),
@@ -3447,19 +3386,13 @@ www.witslingo.com`;
         courseName: foundCourse.name,
         coursePrice: originalFee,
         discountAmount: 0,
-        discountCode: undefined,
         expectedAmount: finalPayable,
         currency: "INR",
         orderStatus: "pending",
-        razorpayOrderId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+        razorpayOrderId
+      });
 
-      orders.unshift(newOrder);
-      saveOrders();
-
-      res.json({
+      return res.json({
         success: true,
         order: newOrder,
         keyId: keyId || "rzp_test_TxdOEl65TI6T87",
@@ -3475,36 +3408,43 @@ www.witslingo.com`;
       });
     } catch (err: any) {
       console.error("[Orders] Create order error:", err);
-      res.status(500).json({ success: false, error: "Internal server error creating order." });
+      return res.status(500).json({ success: false, error: "Internal server error creating order." });
     }
   });
 
-  // Get Order Status (for polling during payment verification)
-  app.get("/api/orders/:orderId/status", (req, res) => {
+  // Get Order Status (Neon PostgreSQL)
+  app.get("/api/orders/:orderId/status", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     const { orderId } = req.params;
-    const order = orders.find(o => o.id === orderId || o.razorpayOrderId === orderId);
-    if (!order) {
-      return res.status(404).json({ success: false, error: "Order not found." });
-    }
-
-    const payment = payments.find(p => p.orderId === order.id || (order.razorpayOrderId && p.orderId === order.razorpayOrderId) || (order.razorpayPaymentId && p.paymentId === order.razorpayPaymentId));
-    const allNotifs = whatsappNotificationService.getAllNotifications();
-    const notification = allNotifs.find(n => n.orderId === order.id) || notifications.find(n => n.orderId === order.id);
-
-    res.json({
-      success: true,
-      order,
-      payment: payment || null,
-      notification: notification || null,
-      joiningDetails: {
-        meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,
-        startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
-        scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME
+    try {
+      const order = (await getOrderByIdDb(orderId)) || (await getOrderByRazorpayOrderIdDb(orderId));
+      if (!order) {
+        return res.status(404).json({ success: false, error: "Order not found." });
       }
-    });
+
+      const allPayments = await getPaymentsDb();
+      const payment = allPayments.find(p => p.orderId === order.id || (order.razorpayOrderId && p.orderId === order.razorpayOrderId) || (order.razorpayPaymentId && p.paymentId === order.razorpayPaymentId));
+      const allNotifs = whatsappNotificationService.getAllNotifications();
+      const notification = allNotifs.find(n => n.orderId === order.id);
+
+      return res.json({
+        success: true,
+        order,
+        payment: payment || null,
+        notification: notification || null,
+        joiningDetails: {
+          meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,
+          startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
+          scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME
+        }
+      });
+    } catch (err: any) {
+      console.error("[Orders Status] Database error:", err?.message || err);
+      return res.status(500).json({ success: false, error: "Failed to retrieve order status." });
+    }
   });
 
-  // Verify Checkout Payment & Confirm Order
+  // Verify Checkout Payment & Confirm Order (Neon PostgreSQL)
   app.post("/api/payments/razorpay/verify-order", async (req, res) => {
     try {
       const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
@@ -3513,14 +3453,15 @@ www.witslingo.com`;
         return res.status(400).json({ success: false, error: "Missing required order verification parameters." });
       }
 
-      const order = orders.find(o => o.id === orderId || o.razorpayOrderId === razorpayOrderId);
+      const order = (await getOrderByIdDb(orderId)) || (await getOrderByRazorpayOrderIdDb(razorpayOrderId));
       if (!order) {
         return res.status(404).json({ success: false, error: "Order not found." });
       }
 
       // Idempotency: If order is already paid, return confirmed state immediately
       if (order.orderStatus === "paid") {
-        const existingPayment = payments.find(p => p.orderId === order.id || p.paymentId === razorpayPaymentId);
+        const allPayments = await getPaymentsDb();
+        const existingPayment = allPayments.find(p => p.orderId === order.id || p.paymentId === razorpayPaymentId);
         return res.json({
           success: true,
           message: "Payment already verified (Idempotent).",
@@ -3546,16 +3487,12 @@ www.witslingo.com`;
         }
       }
 
-      // 1. Mark Order as Paid
-      order.orderStatus = "paid";
-      order.razorpayOrderId = razorpayOrderId || order.razorpayOrderId;
-      order.razorpayPaymentId = razorpayPaymentId;
-      order.updatedAt = new Date().toISOString();
-      saveOrders();
+      // 1. Mark Order as Paid in Neon
+      const updatedOrder = await updateOrderStatusDb(order.id, "paid", razorpayPaymentId, razorpayOrderId);
 
-      // 2. Record Payment
+      // 2. Record Payment in Neon
       const admissionId = `WL-2026-${Date.now().toString().slice(-4)}`;
-      const newPayment: DBPayment = {
+      const newPayment = await createPaymentDb({
         id: `pay-${Date.now()}`,
         orderId: order.id,
         paymentId: razorpayPaymentId,
@@ -3572,23 +3509,14 @@ www.witslingo.com`;
         batchName: order.batchName || "Assigned Batch",
         admissionId,
         method: "Razorpay",
-        createdAt: new Date().toISOString(),
-        verifiedAt: new Date().toISOString(),
         source: "razorpay_verify"
-      };
+      });
 
-      const existingPayIdx = payments.findIndex(p => p.paymentId === razorpayPaymentId);
-      if (existingPayIdx >= 0) {
-        payments[existingPayIdx] = newPayment;
-      } else {
-        payments.unshift(newPayment);
-      }
-      savePayments();
-
-      // 3. Activate Course Enrolment & Student Access
-      let existingReg = registrations.find(r => r.phone === order.studentPhone || r.whatsapp === order.studentPhone);
+      // 3. Activate Course Enrolment in Neon
+      const allRegs = await getRegistrationsDb();
+      let existingReg = allRegs.find(r => r.phone === order.studentPhone || r.whatsapp === order.studentPhone);
       if (!existingReg) {
-        existingReg = {
+        existingReg = await createRegistrationDb({
           id: `reg-${Date.now()}`,
           admissionId,
           name: order.studentName,
@@ -3612,51 +3540,49 @@ www.witslingo.com`;
           paymentMethod: "Razorpay",
           paymentTxnId: razorpayPaymentId,
           razorpayOrderId,
-          razorpayPaymentId,
-          registeredAt: new Date().toISOString()
-        };
-        registrations.unshift(existingReg);
+          razorpayPaymentId
+        });
       } else {
-        existingReg.paymentStatus = "Paid";
-        existingReg.paymentTxnId = razorpayPaymentId;
-        existingReg.razorpayPaymentId = razorpayPaymentId;
-        existingReg.courseId = order.courseId;
-        existingReg.courseName = order.courseName;
+        await updateRegistrationDb(existingReg.id, {
+          paymentStatus: "Paid",
+          paymentTxnId: razorpayPaymentId,
+          razorpayPaymentId,
+          courseId: order.courseId,
+          courseName: order.courseName
+        });
       }
-      await saveRegistrations();
 
-      // 4. Ensure Student Login Account
-      let existingUser = users.find(u => u.phone === order.studentPhone || u.email.toLowerCase() === order.studentEmail.toLowerCase());
+      // 4. Ensure Student Login Account in Neon
+      let existingUser = await getUserByEmailDb(order.studentEmail);
       if (!existingUser) {
-        existingUser = {
-          id: `usr-${Date.now()}`,
+        const passwordHash = await bcrypt.hash((order.studentPhone || "").slice(-6) || "student123", 10);
+        await createUserDb({
           name: order.studentName,
           email: order.studentEmail,
-          passwordHash: hashPassword(order.studentPhone.slice(-6) || "student123"),
+          passwordHash,
           role: "student",
           phone: order.studentPhone,
-          batchIds: [],
-          admissionId,
-          registrationDate: new Date().toISOString()
-        };
-        users.push(existingUser);
+          batchIds: [order.batchId || "batch-spoken-oct-2026"],
+          admissionId
+        });
       } else {
-        if (!existingUser.batchIds.includes(order.batchId || "batch-spoken-oct-2026")) {
-          existingUser.batchIds.push(order.batchId || "batch-spoken-oct-2026");
+        const curBatchIds = existingUser.batchIds || [];
+        const targetBatch = order.batchId || "batch-spoken-oct-2026";
+        if (!curBatchIds.includes(targetBatch)) {
+          await updateUserDb(existingUser.id, { batchIds: [...curBatchIds, targetBatch] });
         }
       }
-      await saveUsers();
 
       // 5. Send Automatic WhatsApp Confirmation (Awaited for Vercel serverless execution)
       let waConfirmationResult: any = null;
       try {
-        waConfirmationResult = await sendPaymentConfirmationWhatsApp(order, newPayment);
+        waConfirmationResult = await sendPaymentConfirmationWhatsApp((updatedOrder || order) as any, newPayment as any);
         console.log(`[WhatsApp] Payment confirmation dispatch to ${order.studentPhone}:`, waConfirmationResult);
       } catch (waErr) {
         console.warn("[WhatsApp] Async confirmation error:", waErr);
       }
 
-      // 6. Send Automatic Admin Email Notification (Student & Course Purchase Details)
+      // 6. Send Automatic Admin Email Notification
       try {
         await adminNotificationService.notifyAdminOnPurchase({
           orderId: order.id,
@@ -3677,7 +3603,7 @@ www.witslingo.com`;
       res.json({
         success: true,
         message: "Payment successfully verified! Your course access is activated.",
-        order,
+        order: updatedOrder || order,
         payment: newPayment,
         admissionId,
         whatsappConfirmation: waConfirmationResult,
@@ -3973,121 +3899,172 @@ www.witslingo.com`;
   // =========================================================================
   app.use("/api/admin", requireAdminAuth);
 
-  // 1. Admin Orders List & Stats
-  app.get("/api/admin/orders", (_req, res) => {
-    const total = orders.length;
-    const paid = orders.filter(o => o.orderStatus === "paid").length;
-    const pending = orders.filter(o => o.orderStatus === "pending").length;
-    const failed = orders.filter(o => o.orderStatus === "failed" || o.orderStatus === "cancelled").length;
+  // 1. Admin Orders List & Stats (Neon PostgreSQL)
+  app.get("/api/admin/orders", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const ordersList = await getOrdersDb();
+      const total = ordersList.length;
+      const paid = ordersList.filter(o => o.orderStatus === "paid").length;
+      const pending = ordersList.filter(o => o.orderStatus === "pending").length;
+      const failed = ordersList.filter(o => o.orderStatus === "failed" || o.orderStatus === "cancelled").length;
 
-    res.json({
-      success: true,
-      stats: { total, paid, pending, failed },
-      orders
-    });
-  });
-
-  // 2. Admin Payments List
-  app.get("/api/admin/payments", (_req, res) => {
-    res.json({
-      success: true,
-      payments
-    });
-  });
-
-  // 3. Admin WhatsApp Notifications List & Stats
-  app.get("/api/admin/notifications", (_req, res) => {
-    const allNotifs = whatsappNotificationService.getAllNotifications();
-    const total = allNotifs.length;
-    const sent = allNotifs.filter(n => n.messageStatus === "sent" || n.messageStatus === "accepted" || n.messageStatus === "delivered" || n.messageStatus === "read").length;
-    const failed = allNotifs.filter(n => n.messageStatus === "failed").length;
-    const pending = allNotifs.filter(n => (n.messageStatus as string) === "pending").length;
-
-    res.json({
-      success: true,
-      stats: { total, sent, failed, pending },
-      notifications: allNotifs
-    });
-  });
-
-  // 4. Admin Retry WhatsApp Notification
-  app.post("/api/admin/notifications/:id/retry", async (req, res) => {
-    const notif = notifications.find(n => n.id === req.params.id);
-    if (!notif) return res.status(404).json({ error: "Notification record not found." });
-
-    const order = orders.find(o => o.id === notif.orderId);
-    const payment = payments.find(p => p.orderId === notif.orderId);
-
-    if (!order) return res.status(400).json({ error: "Related order not found." });
-
-    const sendRes = await sendPaymentConfirmationWhatsApp(
-      order,
-      payment || ({ amount: order.expectedAmount, paymentId: "Manual Retry" } as any),
-      true // force resend
-    );
-
-    res.json({ success: sendRes.success, sendRes, notification: notif });
-  });
-
-  // 5. Admin Support Tickets List & Stats
-  app.get("/api/admin/tickets", (_req, res) => {
-    const total = supportTickets.length;
-    const open = supportTickets.filter(t => t.status === "Open").length;
-    const assigned = supportTickets.filter(t => t.status === "Assigned").length;
-    const inProgress = supportTickets.filter(t => t.status === "In Progress").length;
-    const waitingForStudent = supportTickets.filter(t => t.status === "Waiting for Student").length;
-    const resolved = supportTickets.filter(t => t.status === "Resolved" || t.status === "Closed").length;
-
-    res.json({
-      success: true,
-      stats: { total, open, assigned, inProgress, waitingForStudent, resolved },
-      tickets: supportTickets
-    });
-  });
-
-  // 6. Admin Update Support Ticket
-  app.patch("/api/admin/tickets/:id", (req, res) => {
-    const ticket = supportTickets.find(t => t.id === req.params.id || t.ticketNumber === req.params.id);
-    if (!ticket) return res.status(404).json({ error: "Ticket not found." });
-
-    const { status, assignedAgentId, assignedAgentName, resolutionNotes, priority } = req.body;
-    if (status !== undefined) ticket.status = status;
-    if (assignedAgentId !== undefined) ticket.assignedAgentId = assignedAgentId;
-    if (assignedAgentName !== undefined) ticket.assignedAgentName = assignedAgentName;
-    if (resolutionNotes !== undefined) ticket.resolutionNotes = resolutionNotes;
-    if (priority !== undefined) ticket.priority = priority;
-    ticket.updatedAt = new Date().toISOString();
-
-    saveSupportTickets();
-    res.json({ success: true, ticket });
-  });
-
-  // 7. Admin Knowledge Base List & Management
-  app.get("/api/admin/knowledge-base", (_req, res) => {
-    const items = getAiSupportService().getKnowledgeBase();
-    res.json({ success: true, items });
-  });
-
-  app.post("/api/admin/knowledge-base", (req, res) => {
-    const { id, title, category, keywords, content } = req.body;
-    if (!title || !content) {
-      return res.status(400).json({ error: "Title and content are required." });
+      res.json({
+        success: true,
+        stats: { total, paid, pending, failed },
+        orders: ordersList
+      });
+    } catch (err: any) {
+      console.error("[Admin Orders GET] Database error:", err?.message || err);
+      res.status(500).json({ success: false, error: "Failed to retrieve orders from database." });
     }
-
-    const item = getAiSupportService().addOrUpdateKnowledgeItem({
-      id: id || `kb_${Date.now()}`,
-      title,
-      category: category || "faq",
-      keywords: Array.isArray(keywords) ? keywords : (keywords || "").split(",").map((k: string) => k.trim()),
-      content
-    });
-
-    res.json({ success: true, item, items: getAiSupportService().getKnowledgeBase() });
   });
 
-  app.delete("/api/admin/knowledge-base/:id", (req, res) => {
-    const deleted = getAiSupportService().deleteKnowledgeItem(req.params.id);
-    res.json({ success: deleted, items: getAiSupportService().getKnowledgeBase() });
+  // 2. Admin Payments List (Neon PostgreSQL)
+  app.get("/api/admin/payments", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const paymentsList = await getPaymentsDb();
+      res.json({
+        success: true,
+        payments: paymentsList
+      });
+    } catch (err: any) {
+      console.error("[Admin Payments GET] Database error:", err?.message || err);
+      res.status(500).json({ success: false, error: "Failed to retrieve payments from database." });
+    }
+  });
+
+  // 3. Admin WhatsApp Notifications List & Stats (Neon PostgreSQL + Cloud Service)
+  app.get("/api/admin/notifications", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const allNotifs = whatsappNotificationService.getAllNotifications();
+      const dbNotifs = await getNotificationsDb();
+      const combinedNotifs = [...allNotifs, ...adminNotificationService.getAllNotifications()];
+
+      const total = combinedNotifs.length;
+      const sent = combinedNotifs.filter((n: any) => n.messageStatus === "sent" || n.messageStatus === "accepted" || n.messageStatus === "delivered" || n.messageStatus === "read").length;
+      const failed = combinedNotifs.filter((n: any) => n.messageStatus === "failed").length;
+      const pending = combinedNotifs.filter((n: any) => (n.messageStatus as string) === "pending").length;
+
+      res.json({
+        success: true,
+        stats: { total, sent, failed, pending },
+        notifications: combinedNotifs,
+        dbNotifications: dbNotifs
+      });
+    } catch (err: any) {
+      console.error("[Admin Notifications GET] Error:", err?.message || err);
+      res.status(500).json({ success: false, error: "Failed to retrieve notifications." });
+    }
+  });
+
+  // 4. Admin Retry WhatsApp Notification (Neon PostgreSQL)
+  app.post("/api/admin/notifications/:id/retry", async (req, res) => {
+    try {
+      const notifs = whatsappNotificationService.getAllNotifications();
+      const notif = notifs.find(n => n.id === req.params.id);
+      if (!notif) return res.status(404).json({ error: "Notification record not found." });
+
+      const order = notif.orderId ? ((await getOrderByIdDb(notif.orderId)) || (await getOrderByRazorpayOrderIdDb(notif.orderId))) : null;
+      const allPayments = await getPaymentsDb();
+      const payment = notif.orderId ? allPayments.find(p => p.orderId === notif.orderId) : null;
+
+      if (!order) return res.status(400).json({ error: "Related order not found." });
+
+      const sendRes = await sendPaymentConfirmationWhatsApp(
+        order as any,
+        payment ? (payment as any) : ({ amount: order.expectedAmount, paymentId: "Manual Retry" } as any),
+        true // force resend
+      );
+
+      res.json({ success: sendRes.success, sendRes, notification: notif });
+    } catch (err: any) {
+      console.error("[Admin Notification Retry] Error:", err?.message || err);
+      res.status(500).json({ error: "Failed to retry notification." });
+    }
+  });
+
+  // 5. Admin Support Tickets List & Stats (Neon PostgreSQL)
+  app.get("/api/admin/tickets", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const ticketsList = await getSupportTicketsDb();
+      const total = ticketsList.length;
+      const open = ticketsList.filter((t: any) => t.status === "Open").length;
+      const assigned = ticketsList.filter((t: any) => t.status === "Assigned").length;
+      const inProgress = ticketsList.filter((t: any) => t.status === "In Progress").length;
+      const waitingForStudent = ticketsList.filter((t: any) => t.status === "Waiting for Student").length;
+      const resolved = ticketsList.filter((t: any) => t.status === "Resolved" || t.status === "Closed").length;
+
+      res.json({
+        success: true,
+        stats: { total, open, assigned, inProgress, waitingForStudent, resolved },
+        tickets: ticketsList
+      });
+    } catch (err: any) {
+      console.error("[Admin Tickets GET] Database error:", err?.message || err);
+      res.status(500).json({ error: "Failed to retrieve support tickets." });
+    }
+  });
+
+  // 6. Admin Update Support Ticket (Neon PostgreSQL)
+  app.patch("/api/admin/tickets/:id", async (req, res) => {
+    try {
+      const updated = await updateSupportTicketDb(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ error: "Ticket not found." });
+      res.json({ success: true, ticket: updated });
+    } catch (err: any) {
+      console.error("[Admin Ticket PATCH] Database error:", err?.message || err);
+      res.status(500).json({ error: "Failed to update support ticket." });
+    }
+  });
+
+  // 7. Admin Knowledge Base List & Management (Neon PostgreSQL)
+  app.get("/api/admin/knowledge-base", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const items = await getKnowledgeBaseDb();
+      res.json({ success: true, items });
+    } catch (err: any) {
+      console.error("[Knowledge Base GET] Database error:", err?.message || err);
+      res.status(500).json({ error: "Failed to retrieve knowledge base items." });
+    }
+  });
+
+  app.post("/api/admin/knowledge-base", async (req, res) => {
+    try {
+      const { category, question, answer, title, content } = req.body;
+      const finalQuestion = question || title;
+      const finalAnswer = answer || content;
+      if (!finalQuestion || !finalAnswer) {
+        return res.status(400).json({ error: "Question/Title and Answer/Content are required." });
+      }
+
+      const item = await createKnowledgeBaseDb({
+        category: category || "General",
+        question: finalQuestion,
+        answer: finalAnswer
+      });
+
+      const items = await getKnowledgeBaseDb();
+      res.json({ success: true, item, items });
+    } catch (err: any) {
+      console.error("[Knowledge Base POST] Database error:", err?.message || err);
+      res.status(500).json({ error: "Failed to add knowledge base item." });
+    }
+  });
+
+  app.delete("/api/admin/knowledge-base/:id", async (req, res) => {
+    try {
+      const deleted = await deleteKnowledgeBaseDb(req.params.id);
+      const items = await getKnowledgeBaseDb();
+      res.json({ success: Boolean(deleted), items });
+    } catch (err: any) {
+      console.error("[Knowledge Base DELETE] Database error:", err?.message || err);
+      res.status(500).json({ error: "Failed to delete knowledge base item." });
+    }
   });
 
   // 8. Admin Student Conversations & Chat History
@@ -4810,89 +4787,47 @@ www.witslingo.com`;
     const fullPhoneFormatted = `${pCode} ${cleanPhone}`;
     const fullWhatsappFormatted = `${wCode} ${cleanWhatsapp}`;
 
-    const batch = batches.find(b => b.id === batchId);
+    let batch = await getBatchByIdDb(batchId);
     if (!batch) {
       return res.status(404).json({ error: "Selected batch not found." });
     }
 
-    const course = cmsContent.courses.find((c: any) => c.id === courseId) || { name: "Spoken English", fee: 1499 };
+    let course = await getCourseByIdDb(courseId);
+    const resolvedCourse = course || { id: courseId, name: "Spoken English", fee: 1499 };
 
     // Fee payment validation
     const paymentStatus: "Paid" | "Pending" = (isFeePaid && isAdmin) || isFeePaid ? "Paid" : "Pending";
 
     // Generate unique Admission ID
-    const batchYearMonth = batch.batchCode.replace(/[^A-Za-z0-9]/g, '');
+    const batchYearMonth = (batch.batchCode || "WL").replace(/[^A-Za-z0-9]/g, '');
     const randomSeq = Math.floor(1000 + Math.random() * 9000);
     const admissionId = `WL-${batchYearMonth}-${randomSeq}`;
 
-    const studentReg: DBStudentRegistration = {
-      id: `reg-${Date.now()}`,
-      admissionId,
-      name: name.trim(),
-      fatherName: fatherName.trim(),
-      dob,
-      gender: gender || "Not Specified",
-      country: country?.trim() || "India",
-      district: district.trim(),
-      state: state.trim(),
-      pincode: pincode?.trim() || "",
-      phone: fullPhoneFormatted,
-      whatsapp: fullWhatsappFormatted,
-      email: email.trim().toLowerCase(),
-      address: address?.trim() || `${district}, ${state}, ${country || 'India'}${pincode ? ' - ' + pincode : ''}`,
-      qualification: qualification || "Undergraduate",
-      currentEnglishLevel: currentEnglishLevel || "Beginner",
-      courseId,
-      courseName: course.name,
-      batchId: batch.id,
-      batchName: batch.name,
-      feeAmount: course.fee,
-      paymentStatus,
-      paymentMethod: paymentMethod || "UPI / Direct",
-      paymentCurrency: req.body.paymentCurrency || "INR",
-      paymentAmountFormatted: req.body.paymentAmountFormatted || `₹${course.fee.toLocaleString()}`,
-      paymentTxnId: paymentTxnId || `adm_${Date.now()}`,
-      googleMeetLink: batch.googleMeetLink || "",
-      registeredAt: new Date().toISOString()
-    };
-
-    registrations.unshift(studentReg);
-
-    // Update batch student count
-    if (paymentStatus === "Paid") {
-      batch.currentStudentsCount = (batch.currentStudentsCount || 0) + 1;
-    }
-
-    // Check if user account already exists or create new student account
     const assignedPassword = (req.body.password || req.body.studentPassword || "WitsLingo@2026").trim();
 
-    let user = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+    // Check if user account already exists or create new student account
+    let user = await getUserByEmailDb(email.trim().toLowerCase());
     if (user) {
-      if (!user.batchIds.includes(batch.id)) {
-        user.batchIds.push(batch.id);
-      }
-      if (assignedPassword && assignedPassword !== "student123") {
-        user.passwordHash = assignedPassword;
-      }
-      if (!user.admissionId) {
-        user.admissionId = admissionId;
-      }
+      const currentBatchIds = user.batchIds || [];
+      const updatedBatchIds = currentBatchIds.includes(batch.id) ? currentBatchIds : [...currentBatchIds, batch.id];
+      user = await updateUserDb(user.id, {
+        batchIds: updatedBatchIds,
+        admissionId: user.admissionId || admissionId
+      }) || user;
     } else {
-      user = {
-        id: `usr-${Date.now()}`,
+      const passwordHash = await bcrypt.hash(assignedPassword, 10);
+      user = await createUserDb({
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        passwordHash: assignedPassword,
+        passwordHash,
         role: "student",
         phone: fullPhoneFormatted,
-        batchIds: [],
-        admissionId,
-        registrationDate: new Date().toISOString().split("T")[0]
-      };
-      users.push(user);
+        batchIds: [batch.id],
+        admissionId
+      });
     }
 
-    const token = generateAuthToken(user);
+    const token = generateAuthToken(user as any);
 
     // Official WhatsApp Confirmation Message
     const fullCountryDigits = (wCodeDigits || "91").replace(/\D/g, "") || "91";
@@ -4907,18 +4842,18 @@ Congratulations! Your seat has been successfully confirmed at *WITS LINGO — A 
 • *Admission ID / Roll No:* ${admissionId}
 • *Student Name:* ${name.trim()}
 • *Father's Name:* ${fatherName.trim()}
-• *Enrolled Course:* ${course.name}
+• *Enrolled Course:* ${resolvedCourse.name}
 • *Assigned Batch:* ${batch.name} (${batch.batchCode})
 • *Batch Timings:* ${batch.scheduleTime || 'Daily 1-Hour Live Class'}
 • *Batch Start Date:* ${batch.startDate || '1st of the month'}
 • *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
-• *Fee Status:* ${paymentStatus} (${studentReg.paymentAmountFormatted || '₹' + course.fee})
-• *Payment Ref:* ${studentReg.paymentTxnId}
+• *Fee Status:* ${paymentStatus} (${req.body.paymentAmountFormatted || '₹' + resolvedCourse.fee})
+• *Payment Ref:* ${paymentTxnId || `adm_${Date.now()}`}
 
 🔐 *PURCHASED BATCH PORTAL LOGIN*
 • *Portal URL:* https://witslingo.com/login
 • *Username:* ${user.email} (or ${admissionId})
-• *Password:* ${user.passwordHash}
+• *Password:* ${assignedPassword}
 
 📱 *BATCH WHATSAPP GROUP & SUPPORT*
 Save our official mentor helpline on WhatsApp:
@@ -4936,20 +4871,41 @@ www.witslingo.com`;
     const waMeStudentUrl = `https://wa.me/${whatsappCleanRecipient}?text=${encodedWhatsappMsg}`;
     const waMeAdminUrl = `https://wa.me/${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}?text=${encodedWhatsappMsg}`;
 
-    studentReg.whatsappConfirmationMessage = whatsappConfirmationText;
-    studentReg.whatsappStudentUrl = whatsappStudentUrl;
-    studentReg.whatsappAdminUrl = whatsappAdminUrl;
-
-    // Save persisted state to durable storage
-    await Promise.all([
-      saveRegistrations(),
-      saveUsers(),
-      saveBatches()
-    ]);
+    const studentReg = await createRegistrationDb({
+      id: `reg-${Date.now()}`,
+      admissionId,
+      name: name.trim(),
+      fatherName: fatherName.trim(),
+      dob,
+      gender: gender || "Not Specified",
+      country: country?.trim() || "India",
+      district: district.trim(),
+      state: state.trim(),
+      pincode: pincode?.trim() || "",
+      phone: fullPhoneFormatted,
+      whatsapp: fullWhatsappFormatted,
+      email: email.trim().toLowerCase(),
+      address: address?.trim() || `${district}, ${state}, ${country || 'India'}${pincode ? ' - ' + pincode : ''}`,
+      qualification: qualification || "Undergraduate",
+      currentEnglishLevel: currentEnglishLevel || "Beginner",
+      courseId,
+      courseName: resolvedCourse.name,
+      batchId: batch.id,
+      batchName: batch.name,
+      feeAmount: Number(resolvedCourse.fee),
+      paymentStatus,
+      paymentMethod: paymentMethod || "UPI / Direct",
+      paymentCurrency: req.body.paymentCurrency || "INR",
+      paymentAmountFormatted: req.body.paymentAmountFormatted || `₹${resolvedCourse.fee.toLocaleString()}`,
+      paymentTxnId: paymentTxnId || `adm_${Date.now()}`,
+      googleMeetLink: batch.googleMeetLink || "",
+      whatsappConfirmationMessage: whatsappConfirmationText,
+      whatsappStudentUrl,
+      whatsappAdminUrl
+    });
 
     // Async WhatsApp dispatch (Meta Cloud API)
     if (paymentStatus === "Paid") {
-      const courseObj = (cmsContent.courses || []).find((c: any) => c.id === studentReg.courseId || c.name === studentReg.courseName);
       sendWhatsAppEnrollmentMessage({
         studentName: studentReg.name,
         courseName: studentReg.courseName,
@@ -4957,26 +4913,22 @@ www.witslingo.com`;
         courseId: studentReg.courseId,
         batchId: studentReg.batchId,
         startDate: batch.startDate || "Upcoming",
-        classTiming: batch.classTime || batch.scheduleTime || "Daily Live Session",
-        googleMeetLink: batch.googleMeetLink || batch.meetLink,
+        classTiming: batch.scheduleTime || "Daily Live Session",
+        googleMeetLink: batch.googleMeetLink || "",
         amount: studentReg.feeAmount,
         admissionId: studentReg.admissionId,
         recipientPhone: studentReg.whatsapp || studentReg.phone,
-        facilities: courseObj?.facilities
-      }).then(waRes => {
-        if (waRes.success) {
-          studentReg.whatsappDeliveryStatus = "sent";
-          if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
-        } else {
-          studentReg.whatsappDeliveryStatus = "failed";
-          if (waRes.error) studentReg.whatsappError = waRes.error;
-        }
-        saveRegistrations();
+        facilities: (resolvedCourse as any).facilities
+      }).then(async waRes => {
+        try {
+          await updateRegistrationDb(studentReg.id, {
+            whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+            whatsappMessageId: waRes.messageId,
+            whatsappError: waRes.error
+          });
+        } catch {}
       }).catch(err => {
         console.warn("[WhatsApp] Async dispatch exception:", err);
-        studentReg.whatsappDeliveryStatus = "failed";
-        studentReg.whatsappError = err?.message || "Dispatch error";
-        saveRegistrations();
       });
     }
 
@@ -4997,9 +4949,9 @@ www.witslingo.com`;
       credentials: {
         username: user.email,
         alternativeUsername: admissionId,
-        password: user.passwordHash
+        password: assignedPassword
       },
-      defaultPasswordHint: user.passwordHash,
+      defaultPasswordHint: assignedPassword,
       whatsapp: {
         recipientNumber: fullWhatsappFormatted,
         cleanRecipient: whatsappCleanRecipient,
@@ -5012,28 +4964,34 @@ www.witslingo.com`;
     });
   });
 
-  // 14b. STUDENT: Get Own Admission Confirmation Slip & WhatsApp Links
-  app.get("/api/student/admission-slip", (req, res) => {
+  // 14b. STUDENT: Get Own Admission Confirmation Slip & WhatsApp Links (Neon PostgreSQL)
+  app.get("/api/student/admission-slip", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     const auth = verifyAuthToken(req);
     if (!auth) {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    const reg = registrations.find(r => 
-      (auth.admissionId && r.admissionId === auth.admissionId) ||
-      r.email.toLowerCase() === auth.email.toLowerCase()
-    );
+    try {
+      let reg: StudentRegistration | null = null;
+      if (auth.admissionId) {
+        reg = await getRegistrationByAdmissionIdDb(auth.admissionId);
+      }
+      if (!reg && auth.email) {
+        const allRegs = await getRegistrationsDb();
+        reg = allRegs.find(r => r.email.toLowerCase() === auth.email.toLowerCase()) || null;
+      }
 
-    if (!reg) {
-      return res.status(404).json({ error: "No admission registration found for this student account." });
-    }
+      if (!reg) {
+        return res.status(404).json({ error: "No admission registration found for this student account." });
+      }
 
-    const batch = batches.find(b => b.id === reg.batchId);
-    const rawCleanPhone = (reg.whatsapp || reg.phone || '').replace(/\D/g, '');
-    const recipientDigits = rawCleanPhone.length === 10 ? `91${rawCleanPhone}` : rawCleanPhone;
+      const batch = reg.batchId ? await getBatchByIdDb(reg.batchId) : null;
+      const rawCleanPhone = (reg.whatsapp || reg.phone || '').replace(/\D/g, '');
+      const recipientDigits = rawCleanPhone.length === 10 ? `91${rawCleanPhone}` : rawCleanPhone;
 
-    const encodedMsg = encodeURIComponent(
-      reg.whatsappConfirmationMessage || 
+      const encodedMsg = encodeURIComponent(
+        (reg as any).whatsappConfirmationMessage || 
 `🎓 *WITS LINGO — OFFICIAL ADMISSION CONFIRMATION*
 ━━━━━━━━━━━━━━━━━━━━
 Dear *${reg.name}*,
@@ -5048,146 +5006,155 @@ Your seat is confirmed at *WITS LINGO — A Global Language Platform*!
 
 Mentor WhatsApp Support: ${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}
 www.witslingo.com`
-    );
+      );
 
-    const studentUrl = reg.whatsappStudentUrl || `https://api.whatsapp.com/send?phone=${recipientDigits}&text=${encodedMsg}`;
-    const adminUrl = reg.whatsappAdminUrl || `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
+      const studentUrl = (reg as any).whatsappStudentUrl || `https://api.whatsapp.com/send?phone=${recipientDigits}&text=${encodedMsg}`;
+      const adminUrl = (reg as any).whatsappAdminUrl || `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
 
-    res.json({
-      success: true,
-      slip: {
-        admissionId: reg.admissionId,
-        name: reg.name,
-        fatherName: reg.fatherName,
-        dob: reg.dob,
-        gender: reg.gender,
-        phone: reg.phone,
-        whatsapp: reg.whatsapp,
-        email: reg.email,
-        country: reg.country || "India",
-        state: reg.state,
-        district: reg.district,
-        pincode: reg.pincode,
-        address: reg.address,
+      return res.json({
+        success: true,
+        slip: {
+          admissionId: reg.admissionId,
+          name: reg.name,
+          fatherName: reg.fatherName,
+          dob: reg.dob,
+          gender: reg.gender,
+          phone: reg.phone,
+          whatsapp: reg.whatsapp,
+          email: reg.email,
+          country: reg.country || "India",
+          state: reg.state,
+          district: reg.district,
+          pincode: reg.pincode,
+          address: reg.address,
+          courseName: reg.courseName,
+          batchName: reg.batchName,
+          batchCode: batch?.batchCode || "WL-2026",
+          batchTiming: batch?.scheduleTime || "Daily 1-Hour Live Class",
+          feeAmount: reg.feeAmount,
+          formattedAmount: reg.paymentAmountFormatted || `₹${reg.feeAmount}`,
+          paymentStatus: reg.paymentStatus,
+          paymentMethod: reg.paymentMethod,
+          txnId: reg.paymentTxnId,
+          registeredAt: reg.registeredAt,
+          username: auth.email,
+          password: auth.role === "student" ? "WitsLingo@2026" : undefined,
+          whatsappConfirmationMessage: (reg as any).whatsappConfirmationMessage,
+          whatsappStudentUrl: studentUrl,
+          whatsappAdminUrl: adminUrl
+        }
+      });
+    } catch (err: any) {
+      console.error("[Admission Slip] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to retrieve admission slip." });
+    }
+  });
+
+  // 15. ADMIN: List Registered Students (Neon PostgreSQL)
+  app.get("/api/admin/students", requireAdmin, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const { batchId } = req.query;
+      const list = await getRegistrationsDb(batchId && batchId !== "all" ? String(batchId) : undefined);
+      return res.json({ students: list, totalCount: list.length });
+    } catch (err: any) {
+      console.error("[Admin Students GET] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to retrieve registered students from database." });
+    }
+  });
+
+  // 15b. ADMIN: Resend WhatsApp Enrollment Confirmation (Neon PostgreSQL)
+  app.post("/api/admin/students/:id/resend-whatsapp", requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    try {
+      const reg = (await getRegistrationByIdDb(id)) || (await getRegistrationByAdmissionIdDb(id));
+      if (!reg) {
+        return res.status(404).json({ error: "Student enrollment record not found." });
+      }
+
+      const batch = reg.batchId ? await getBatchByIdDb(reg.batchId) : null;
+      const course = reg.courseId ? await getCourseByIdDb(reg.courseId) : null;
+
+      const waRes = await sendWhatsAppEnrollmentMessage({
+        studentName: reg.name,
         courseName: reg.courseName,
         batchName: reg.batchName,
-        batchCode: batch?.batchCode || "WL-2026",
-        batchTiming: batch?.scheduleTime || "Daily 1-Hour Live Class",
-        feeAmount: reg.feeAmount,
-        formattedAmount: reg.paymentAmountFormatted || `₹${reg.feeAmount}`,
-        paymentStatus: reg.paymentStatus,
-        paymentMethod: reg.paymentMethod,
-        txnId: reg.paymentTxnId,
-        registeredAt: reg.registeredAt,
-        username: auth.email,
-        password: auth.role === "student" ? "WitsLingo@2026" : undefined,
-        whatsappConfirmationMessage: reg.whatsappConfirmationMessage,
-        whatsappStudentUrl: studentUrl,
-        whatsappAdminUrl: adminUrl
-      }
-    });
-  });
+        courseId: reg.courseId,
+        batchId: reg.batchId,
+        startDate: batch?.startDate || "Upcoming",
+        classTiming: batch?.scheduleTime || "Daily Live Session",
+        googleMeetLink: batch?.googleMeetLink || "",
+        amount: reg.feeAmount,
+        admissionId: reg.admissionId,
+        recipientPhone: reg.whatsapp || reg.phone,
+        facilities: (course as any)?.facilities,
+        forceResend: true
+      });
 
-  // 15. ADMIN: List Registered Students (Batch-wise filter support)
-  app.get("/api/admin/students", (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Access Denied: Admin authorization required." });
+      await updateRegistrationDb(reg.id, {
+        whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+        whatsappMessageId: waRes.messageId,
+        whatsappError: waRes.error
+      });
+
+      return res.json({
+        success: waRes.success,
+        whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+        messageId: waRes.messageId,
+        error: waRes.error,
+        skipped: waRes.skipped
+      });
+    } catch (err: any) {
+      console.error("[Resend WhatsApp] Error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to resend WhatsApp notification." });
     }
-
-    const { batchId } = req.query;
-    let list = registrations;
-    if (batchId && typeof batchId === "string" && batchId !== "all") {
-      list = list.filter(r => r.batchId === batchId);
-    }
-
-    res.json({ students: list, totalCount: list.length });
-  });
-
-  // 15b. ADMIN: Resend WhatsApp Enrollment Confirmation (Idempotent / Forced Retry)
-  app.post("/api/admin/students/:id/resend-whatsapp", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Access Denied: Admin authorization required." });
-    }
-
-    const { id } = req.params;
-    const reg = registrations.find(r => r.id === id || r.admissionId === id);
-    if (!reg) {
-      return res.status(404).json({ error: "Student enrollment record not found." });
-    }
-
-    const batch = batches.find(b => b.id === reg.batchId);
-    const course = (cmsContent.courses || []).find((c: any) => c.id === reg.courseId || c.name === reg.courseName);
-
-    const waRes = await sendWhatsAppEnrollmentMessage({
-      studentName: reg.name,
-      courseName: reg.courseName,
-      batchName: reg.batchName,
-      courseId: reg.courseId,
-      batchId: reg.batchId,
-      startDate: batch?.startDate || "Upcoming",
-      classTiming: batch?.classTime || batch?.scheduleTime || "Daily Live Session",
-      googleMeetLink: batch?.googleMeetLink || batch?.meetLink,
-      amount: reg.feeAmount,
-      admissionId: reg.admissionId,
-      recipientPhone: reg.whatsapp || reg.phone,
-      facilities: course?.facilities,
-      forceResend: true
-    });
-
-    await saveRegistrations();
-
-    res.json({
-      success: waRes.success,
-      whatsappDeliveryStatus: reg.whatsappDeliveryStatus,
-      messageId: reg.whatsappMessageId,
-      error: waRes.error,
-      skipped: waRes.skipped
-    });
   });
 
   // Alias for /api/admin/registrations/:id/resend-whatsapp
-  app.post("/api/admin/registrations/:id/resend-whatsapp", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Access Denied: Admin authorization required." });
-    }
-
+  app.post("/api/admin/registrations/:id/resend-whatsapp", requireAdmin, async (req, res) => {
     const { id } = req.params;
-    const reg = registrations.find(r => r.id === id || r.admissionId === id);
-    if (!reg) {
-      return res.status(404).json({ error: "Student enrollment record not found." });
+    try {
+      const reg = (await getRegistrationByIdDb(id)) || (await getRegistrationByAdmissionIdDb(id));
+      if (!reg) {
+        return res.status(404).json({ error: "Student enrollment record not found." });
+      }
+
+      const batch = reg.batchId ? await getBatchByIdDb(reg.batchId) : null;
+      const course = reg.courseId ? await getCourseByIdDb(reg.courseId) : null;
+
+      const waRes = await sendWhatsAppEnrollmentMessage({
+        studentName: reg.name,
+        courseName: reg.courseName,
+        batchName: reg.batchName,
+        courseId: reg.courseId,
+        batchId: reg.batchId,
+        startDate: batch?.startDate || "Upcoming",
+        classTiming: batch?.scheduleTime || "Daily Live Session",
+        googleMeetLink: batch?.googleMeetLink || "",
+        amount: reg.feeAmount,
+        admissionId: reg.admissionId,
+        recipientPhone: reg.whatsapp || reg.phone,
+        facilities: (course as any)?.facilities,
+        forceResend: true
+      });
+
+      await updateRegistrationDb(reg.id, {
+        whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+        whatsappMessageId: waRes.messageId,
+        whatsappError: waRes.error
+      });
+
+      return res.json({
+        success: waRes.success,
+        whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+        messageId: waRes.messageId,
+        error: waRes.error,
+        skipped: waRes.skipped
+      });
+    } catch (err: any) {
+      console.error("[Resend WhatsApp] Error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to resend WhatsApp notification." });
     }
-
-    const batch = batches.find(b => b.id === reg.batchId);
-    const course = (cmsContent.courses || []).find((c: any) => c.id === reg.courseId || c.name === reg.courseName);
-
-    const waRes = await sendWhatsAppEnrollmentMessage({
-      studentName: reg.name,
-      courseName: reg.courseName,
-      batchName: reg.batchName,
-      courseId: reg.courseId,
-      batchId: reg.batchId,
-      startDate: batch?.startDate || "Upcoming",
-      classTiming: batch?.classTime || batch?.scheduleTime || "Daily Live Session",
-      googleMeetLink: batch?.googleMeetLink || batch?.meetLink,
-      amount: reg.feeAmount,
-      admissionId: reg.admissionId,
-      recipientPhone: reg.whatsapp || reg.phone,
-      facilities: course?.facilities,
-      forceResend: true
-    });
-
-    await saveRegistrations();
-
-    res.json({
-      success: waRes.success,
-      whatsappDeliveryStatus: reg.whatsappDeliveryStatus,
-      messageId: reg.whatsappMessageId,
-      error: waRes.error,
-      skipped: waRes.skipped
-    });
   });
 
   // 16. ADMIN: Batch Management (Create Batch, Neon PostgreSQL)
@@ -5222,148 +5189,131 @@ www.witslingo.com`
     }
   });
 
-  // 17. ADMIN: Schedule New Class or Toggle Live
-  app.post("/api/admin/schedule-class", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Access Denied: Admin authorization required." });
-    }
+  // 17. ADMIN: Schedule New Class or Toggle Live (Neon PostgreSQL)
+  app.post("/api/admin/schedule-class", requireAdmin, async (req, res) => {
+    try {
+      const { batchId, title, topic, classNumber, date, startTime, endTime, durationMinutes, teacherName, description, status } = req.body;
+      const batch = await getBatchByIdDb(batchId);
+      if (!batch) return res.status(400).json({ error: "Invalid batch." });
 
-    const { batchId, title, topic, classNumber, date, startTime, endTime, durationMinutes, teacherName, description, status } = req.body;
-    const batch = batches.find(b => b.id === batchId);
-    if (!batch) return res.status(400).json({ error: "Invalid batch." });
+      const existingClasses = await getClassesDb(batchId);
+      const nextNum = Number(classNumber) || (existingClasses.length + 1);
 
-    const newClass: DBClass = {
-      id: `cls-${Date.now()}`,
-      batchId,
-      batchName: batch.name,
-      title: title || `Class ${classNumber || (classes.length + 1)} — ${topic || 'English Session'}`,
-      topic: topic || "English Practice",
-      classNumber: Number(classNumber) || classes.length + 1,
-      date: date || new Date().toLocaleDateString('en-GB'),
-      startTime: startTime || "7:00 PM",
-      endTime: endTime || "8:00 PM",
-      durationMinutes: Number(durationMinutes) || 60,
-      teacherName: teacherName || "Ziyaur Rehman Zia",
-      description: description || "Interactive class session.",
-      status: status || "Upcoming",
-      hasStudyMaterial: false,
-      hasAssignment: false
-    };
-
-    classes.push(newClass);
-
-    // If live, dispatch notification announcement
-    if (status === "Live") {
-      announcements.unshift({
-        id: `ann-${Date.now()}`,
-        batchId: batch.id,
+      const newClass = await createClassDb({
+        batchId,
         batchName: batch.name,
-        title: `🔴 Class is LIVE: ${newClass.title}`,
-        message: `Instructor ${newClass.teacherName} has started the live class. Click 'Join Live Class' in your student dashboard to attend now!`,
-        date: new Date().toLocaleDateString('en-GB'),
-        author: newClass.teacherName,
-        priority: "Urgent"
+        title: title || `Class ${nextNum} — ${topic || 'English Session'}`,
+        topic: topic || "English Practice",
+        classNumber: nextNum,
+        date: date || new Date().toLocaleDateString('en-GB'),
+        startTime: startTime || "7:00 PM",
+        endTime: endTime || "8:00 PM",
+        durationMinutes: Number(durationMinutes) || 60,
+        teacherName: teacherName || "Ziyaur Rehman Zia",
+        description: description || "Interactive class session.",
+        status: status || "Upcoming"
       });
-      await saveAnnouncements();
-    }
 
-    await saveClasses();
-    res.json({ success: true, class: newClass });
+      // If live, dispatch notification announcement
+      if (status === "Live") {
+        await createAnnouncementDb({
+          batchId: batch.id,
+          batchName: batch.name,
+          title: `🔴 Class is LIVE: ${newClass.title}`,
+          message: `Instructor ${newClass.teacherName} has started the live class. Click 'Join Live Class' in your student dashboard to attend now!`,
+          date: new Date().toLocaleDateString('en-GB'),
+          author: newClass.teacherName,
+          priority: "Urgent"
+        });
+      }
+
+      return res.json({ success: true, class: newClass });
+    } catch (err: any) {
+      console.error("[Schedule Class] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to schedule class in database." });
+    }
   });
 
-  // 18. ADMIN: Toggle Class Status (Live / Completed / Upcoming) & Auto-recording
-  app.post("/api/admin/classes/:classId/status", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Access Denied: Admin authorization required." });
-    }
-
+  // 18. ADMIN: Toggle Class Status (Live / Completed / Upcoming) & Auto-recording (Neon PostgreSQL)
+  app.post("/api/admin/classes/:classId/status", requireAdmin, async (req, res) => {
     const { classId } = req.params;
     const { status, autoRecord } = req.body;
 
-    const cls = classes.find(c => c.id === classId);
-    if (!cls) return res.status(404).json({ error: "Class not found." });
+    try {
+      const cls = await getClassByIdDb(classId);
+      if (!cls) return res.status(404).json({ error: "Class not found." });
 
-    const oldStatus = cls.status;
-    cls.status = status;
+      const oldStatus = cls.status;
+      const updatedClass = await updateClassDb(classId, { status });
 
-    // Requirement: "After the class ends: Live Class → Recording Processing → Recorded Class. The recording should automatically be attached to that particular class and batch."
-    if (oldStatus === "Live" && status === "Completed" && autoRecord !== false) {
-      const recId = `rec-${cls.id}`;
-      let rec = recordings.find(r => r.classId === cls.id);
-      if (!rec) {
-        rec = {
-          id: recId,
-          classId: cls.id,
+      // After the class ends: Live Class → Recording Processing → Recorded Class
+      if (oldStatus === "Live" && status === "Completed" && autoRecord !== false) {
+        const batchRecordings = await getRecordingsDb(cls.batchId);
+        let rec = batchRecordings.find(r => r.classId === cls.id);
+        if (!rec) {
+          rec = await createRecordingDb({
+            id: `rec-${cls.id}`,
+            classId: cls.id,
+            batchId: cls.batchId,
+            batchName: cls.batchName,
+            title: cls.title,
+            topic: cls.topic,
+            classNumber: cls.classNumber,
+            date: cls.date,
+            duration: `${cls.durationMinutes || 60} min`,
+            status: "Available",
+            videoKey: `video_rec_${cls.batchId}_${cls.id}`,
+            notesSummary: `Auto-recorded session for ${cls.title}. Complete recording available for authorized batch students.`
+          });
+          await updateClassDb(classId, { recordingId: rec.id });
+        }
+
+        // Add announcement for students
+        await createAnnouncementDb({
           batchId: cls.batchId,
           batchName: cls.batchName,
-          title: cls.title,
-          topic: cls.topic,
-          classNumber: cls.classNumber,
-          date: cls.date,
-          duration: `${cls.durationMinutes || 60} min`,
-          status: "Available",
-          videoKey: `video_rec_${cls.batchId}_${cls.id}`,
-          notesSummary: `Auto-recorded session for ${cls.title}. Complete recording available for authorized batch students.`
-        };
-        recordings.unshift(rec);
-        cls.recordingId = rec.id;
+          title: `▶ Recording Available: ${cls.title}`,
+          message: `The recording for ${cls.title} has completed processing and is now available in your Recorded Classes section.`,
+          date: new Date().toLocaleDateString('en-GB'),
+          author: "Wits Lingo Academy",
+          priority: "Normal"
+        });
       }
 
-      // Add announcement for students
-      announcements.unshift({
-        id: `ann-${Date.now()}`,
-        batchId: cls.batchId,
-        batchName: cls.batchName,
-        title: `▶ Recording Available: ${cls.title}`,
-        message: `The recording for ${cls.title} has completed processing and is now available in your Recorded Classes section.`,
-        date: new Date().toLocaleDateString('en-GB'),
-        author: "Wits Lingo Academy",
-        priority: "Normal"
-      });
-      await saveAnnouncements();
+      return res.json({ success: true, class: updatedClass || cls });
+    } catch (err: any) {
+      console.error("[Class Status] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to update class status." });
     }
-
-    await saveClasses();
-    await saveRecordings();
-    res.json({ success: true, class: cls });
   });
 
-  // 19. ADMIN: Upload or Attach Manual Recording
-  app.post("/api/admin/recordings", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  // 19. ADMIN: Upload or Attach Manual Recording (Neon PostgreSQL)
+  app.post("/api/admin/recordings", requireAdmin, async (req, res) => {
+    try {
+      const { classId, title, topic, duration, notesSummary } = req.body;
+      const cls = await getClassByIdDb(classId);
+      if (!cls) return res.status(400).json({ error: "Valid class ID is required." });
+
+      const newRec = await createRecordingDb({
+        classId: cls.id,
+        batchId: cls.batchId,
+        batchName: cls.batchName,
+        title: title || cls.title,
+        topic: topic || cls.topic,
+        classNumber: cls.classNumber,
+        date: cls.date,
+        duration: duration || "60 min",
+        status: "Available",
+        videoKey: `video_${cls.batchId}_manual_${Date.now()}`,
+        notesSummary: notesSummary || `Recorded lecture for ${cls.title}.`
+      });
+
+      await updateClassDb(cls.id, { recordingId: newRec.id, status: "Completed" });
+      return res.json({ success: true, recording: newRec });
+    } catch (err: any) {
+      console.error("[Recordings POST] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to create recording in database." });
     }
-
-    const { classId, title, topic, duration, notesSummary } = req.body;
-    const cls = classes.find(c => c.id === classId);
-    if (!cls) return res.status(400).json({ error: "Valid class ID is required." });
-
-    const newRec: DBRecording = {
-      id: `rec-${Date.now()}`,
-      classId: cls.id,
-      batchId: cls.batchId,
-      batchName: cls.batchName,
-      title: title || cls.title,
-      topic: topic || cls.topic,
-      classNumber: cls.classNumber,
-      date: cls.date,
-      duration: duration || "60 min",
-      status: "Available",
-      videoKey: `video_${cls.batchId}_manual_${Date.now()}`,
-      notesSummary: notesSummary || `Recorded lecture for ${cls.title}.`
-    };
-
-    recordings.unshift(newRec);
-    cls.recordingId = newRec.id;
-    cls.status = "Completed";
-
-    await saveRecordings();
-    await saveClasses();
-
-    res.json({ success: true, recording: newRec });
   });
 
   // Helper: Extract YouTube Video ID
@@ -6109,134 +6059,113 @@ www.witslingo.com`
     }
   });
 
-  // 22. ADMIN: View Attendance Logs (Batch-wise)
-  app.get("/api/admin/attendance", (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  // 22. ADMIN: View Attendance Logs (Neon PostgreSQL)
+  app.get("/api/admin/attendance", requireAdmin, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const { batchId, classId } = req.query;
+      const records = await getAttendanceRecordsDb({
+        batchId: batchId && batchId !== "all" ? String(batchId) : undefined,
+        classId: classId ? String(classId) : undefined
+      });
+      return res.json({ attendance: records, totalCount: records.length });
+    } catch (err: any) {
+      console.error("[Attendance GET] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to retrieve attendance records." });
     }
-
-    const { batchId, classId } = req.query;
-    let list = attendanceRecords;
-    if (batchId && typeof batchId === "string" && batchId !== "all") {
-      list = list.filter(a => a.batchId === batchId);
-    }
-    if (classId && typeof classId === "string") {
-      list = list.filter(a => a.classId === classId);
-    }
-
-    res.json({ attendance: list, totalCount: list.length });
   });
 
-  // CREATE Student / Admission
-  app.post("/api/admin/students", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
+  // CREATE Student / Admission (Neon PostgreSQL)
+  app.post("/api/admin/students", requireAdmin, async (req, res) => {
     const studentData = req.body;
     if (!studentData.name || !studentData.phone) {
       return res.status(400).json({ error: "Student name and phone are required." });
     }
 
-    const id = studentData.id || `reg-${Date.now()}`;
-    const randomSeq = Math.floor(1000 + Math.random() * 9000);
-    const admissionId = studentData.admissionId || `WL-OCT26-${randomSeq}`;
+    try {
+      const id = studentData.id || `reg-${Date.now()}`;
+      const randomSeq = Math.floor(1000 + Math.random() * 9000);
+      const admissionId = studentData.admissionId || `WL-${new Date().getFullYear()}-${randomSeq}`;
 
-    const record: DBStudentRegistration = {
-      ...studentData,
-      id,
-      admissionId,
-      registeredAt: studentData.registeredAt || new Date().toISOString()
-    };
+      const record = await createRegistrationDb({
+        ...studentData,
+        id,
+        admissionId,
+        registeredAt: studentData.registeredAt || new Date().toISOString()
+      });
 
-    registrations.unshift(record);
-
-    if (record.email) {
-      let existingUser = users.find(u => u.email.toLowerCase() === record.email.toLowerCase());
-      if (existingUser) {
-        if (record.batchId && !existingUser.batchIds.includes(record.batchId)) {
-          existingUser.batchIds.push(record.batchId);
-        }
-        if (!existingUser.admissionId) existingUser.admissionId = record.admissionId;
-      } else {
-        users.push({
-          id: `usr-${Date.now()}`,
+      if (record.email) {
+        const passwordHash = await bcrypt.hash("student123", 10);
+        await createUserDb({
           name: record.name,
           email: record.email.toLowerCase(),
-          passwordHash: "student123",
+          passwordHash,
           role: "student",
           phone: record.phone,
           batchIds: record.batchId ? [record.batchId] : [],
-          admissionId: record.admissionId,
-          registrationDate: new Date().toISOString().split("T")[0]
+          admissionId: record.admissionId
         });
       }
-      await saveUsers();
-    }
 
-    await saveRegistrations();
-    res.json({ success: true, student: record });
+      return res.json({ success: true, student: record });
+    } catch (err: any) {
+      console.error("[Admin Students POST] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to create student registration." });
+    }
   });
 
-  // DELETE Student / Admission
-  app.delete("/api/admin/students/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
+  // DELETE Student / Admission (Neon PostgreSQL)
+  app.delete("/api/admin/students/:id", requireAdmin, async (req, res) => {
     const { id } = req.params;
-    const target = String(id).toLowerCase().trim();
-    const regIdx = registrations.findIndex(r => 
-      (r.id && r.id.toLowerCase().trim() === target) || 
-      (r.admissionId && r.admissionId.toLowerCase().trim() === target)
-    );
-    if (regIdx !== -1) {
-      const reg = registrations[regIdx];
-      registrations.splice(regIdx, 1);
-      // Remove student user if exists
-      const userIdx = users.findIndex(u => 
-        (reg.admissionId && u.admissionId && u.admissionId.toLowerCase().trim() === reg.admissionId.toLowerCase().trim()) || 
-        (reg.email && u.email && u.email.toLowerCase().trim() === reg.email.toLowerCase().trim())
-      );
-      if (userIdx !== -1 && users[userIdx].role !== "admin") {
-        users.splice(userIdx, 1);
-        await saveUsers();
+    try {
+      const deleted = await deleteRegistrationDb(id);
+      if (deleted) {
+        if (deleted.email) {
+          const user = await getUserByEmailDb(deleted.email);
+          if (user && user.role !== "admin") {
+            await deleteUserDb(user.id);
+          }
+        }
+        const freshStudents = await getRegistrationsDb();
+        return res.json({
+          success: true,
+          message: "Student admission deleted successfully.",
+          remainingCount: freshStudents.length,
+          students: freshStudents
+        });
       }
-      await saveRegistrations();
-      return res.json({ success: true, message: "Student admission deleted successfully.", remainingCount: registrations.length, students: registrations });
+
+      // Check if ID corresponds to user
+      const user = await getUserByIdDb(id);
+      if (user && user.role !== "admin") {
+        await deleteUserDb(user.id);
+        const freshStudents = await getRegistrationsDb();
+        return res.json({
+          success: true,
+          message: "Student user deleted successfully.",
+          remainingCount: freshStudents.length,
+          students: freshStudents
+        });
+      }
+
+      return res.status(404).json({ error: "Student registration not found." });
+    } catch (err: any) {
+      console.error("[Admin Students DELETE] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to delete student registration." });
     }
-    // Also check users array
-    const userIdx = users.findIndex(u => 
-      (u.admissionId && u.admissionId.toLowerCase().trim() === target) ||
-      (u.id && u.id.toLowerCase().trim() === target)
-    );
-    if (userIdx !== -1 && users[userIdx].role !== "admin") {
-      users.splice(userIdx, 1);
-      await saveUsers();
-      await saveRegistrations();
-      return res.json({ success: true, message: "Student user deleted successfully.", remainingCount: registrations.length, students: registrations });
-    }
-    res.status(404).json({ error: "Student registration not found." });
   });
 
-  // UPDATE Student / Admission
-  app.put("/api/admin/students/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
+  // UPDATE Student / Admission (Neon PostgreSQL)
+  app.put("/api/admin/students/:id", requireAdmin, async (req, res) => {
     const { id } = req.params;
-    const target = String(id).toLowerCase().trim();
-    const reg = registrations.find(r => 
-      (r.id && r.id.toLowerCase().trim() === target) || 
-      (r.admissionId && r.admissionId.toLowerCase().trim() === target)
-    );
-    if (!reg) return res.status(404).json({ error: "Student registration not found." });
-
-    Object.assign(reg, req.body);
-    await saveRegistrations();
-    res.json({ success: true, student: reg });
+    try {
+      const updated = await updateRegistrationDb(id, req.body);
+      if (!updated) return res.status(404).json({ error: "Student registration not found." });
+      return res.json({ success: true, student: updated });
+    } catch (err: any) {
+      console.error("[Admin Students PUT] Database error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to update student registration." });
+    }
   });
 
   // UPDATE Batch (Neon PostgreSQL)
@@ -6271,66 +6200,60 @@ www.witslingo.com`
     }
   });
 
-  // UPDATE Class
-  app.put("/api/admin/classes/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  // UPDATE Class (Neon PostgreSQL)
+  app.put("/api/admin/classes/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updated = await updateClassDb(id, req.body);
+      if (!updated) return res.status(404).json({ error: "Class not found." });
+      const allClasses = await getClassesDb();
+      res.json({ success: true, class: updated, classes: allClasses });
+    } catch (err: any) {
+      console.error("[Classes PUT] Database error:", err?.message || err);
+      res.status(500).json({ error: "Failed to update class in database." });
     }
-    const { id } = req.params;
-    const cls = classes.find(c => c.id === id);
-    if (!cls) return res.status(404).json({ error: "Class not found." });
-
-    Object.assign(cls, req.body);
-    await saveClasses();
-    res.json({ success: true, class: cls, classes });
   });
 
-  // DELETE Class
-  app.delete("/api/admin/classes/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  // DELETE Class (Neon PostgreSQL)
+  app.delete("/api/admin/classes/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await deleteClassDb(id);
+      if (!deleted) return res.status(404).json({ error: "Class not found." });
+      const allClasses = await getClassesDb();
+      return res.json({ success: true, message: "Class deleted successfully.", classes: allClasses });
+    } catch (err: any) {
+      console.error("[Classes DELETE] Database error:", err?.message || err);
+      res.status(500).json({ error: "Failed to delete class from database." });
     }
-    const { id } = req.params;
-    const idx = classes.findIndex(c => c.id === id);
-    if (idx !== -1) {
-      classes.splice(idx, 1);
-      await saveClasses();
-      return res.json({ success: true, message: "Class deleted successfully.", classes });
-    }
-    res.status(404).json({ error: "Class not found." });
   });
 
-  // UPDATE Recording
-  app.put("/api/admin/recordings/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  // UPDATE Recording (Neon PostgreSQL)
+  app.put("/api/admin/recordings/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updated = await updateRecordingDb(id, req.body);
+      if (!updated) return res.status(404).json({ error: "Recording not found." });
+      const allRecordings = await getRecordingsDb();
+      res.json({ success: true, recording: updated, recordings: allRecordings });
+    } catch (err: any) {
+      console.error("[Recordings PUT] Database error:", err?.message || err);
+      res.status(500).json({ error: "Failed to update recording in database." });
     }
-    const { id } = req.params;
-    const rec = recordings.find(r => r.id === id);
-    if (!rec) return res.status(404).json({ error: "Recording not found." });
-
-    Object.assign(rec, req.body);
-    await saveRecordings();
-    res.json({ success: true, recording: rec, recordings });
   });
 
-  // DELETE Recording
-  app.delete("/api/admin/recordings/:id", async (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
+  // DELETE Recording (Neon PostgreSQL)
+  app.delete("/api/admin/recordings/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await deleteRecordingDb(id);
+      if (!deleted) return res.status(404).json({ error: "Recording not found." });
+      const allRecordings = await getRecordingsDb();
+      return res.json({ success: true, message: "Recording deleted successfully.", recordings: allRecordings });
+    } catch (err: any) {
+      console.error("[Recordings DELETE] Database error:", err?.message || err);
+      res.status(500).json({ error: "Failed to delete recording from database." });
     }
-    const { id } = req.params;
-    const idx = recordings.findIndex(r => r.id === id);
-    if (idx !== -1) {
-      recordings.splice(idx, 1);
-      await saveRecordings();
-      return res.json({ success: true, message: "Recording deleted successfully.", recordings });
-    }
-    res.status(404).json({ error: "Recording not found." });
   });
 
 
@@ -6704,13 +6627,6 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     }
   });
 
-  app.get("/api/admin/notifications", (req, res) => {
-    const auth = verifyAuthToken(req);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin access required." });
-    }
-    res.json({ success: true, notifications: adminNotificationService.getAllNotifications() });
-  });
 
   async function startServer() {
     // 25. VITE / STATIC MIDDLEWARE SETUP

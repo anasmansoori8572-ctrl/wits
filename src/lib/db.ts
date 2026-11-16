@@ -1,6 +1,20 @@
 import { neon, NeonQueryFunction } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { CourseData, Batch, StudyMaterial, Announcement, GalleryItem } from "../types";
+import {
+  CourseData,
+  Batch,
+  StudyMaterial,
+  Announcement,
+  GalleryItem,
+  User,
+  StudentRegistration,
+  ClassSession,
+  Recording,
+  Assignment,
+  AssignmentSubmission,
+  AttendanceRecord,
+  NotificationItem
+} from "../types";
 
 let cachedSql: NeonQueryFunction<false, false> | null = null;
 let cachedUrl: string | null = null;
@@ -1436,4 +1450,1153 @@ export async function deleteGalleryItemDb(id: string): Promise<GalleryItem | nul
     DELETE FROM gallery_items WHERE id = ${id} RETURNING *;
   `;
   return rows.length > 0 ? rowToGalleryItem(rows[0]) : null;
+}
+
+// ============================================================================
+// USERS & AUTHENTICATION (Neon PostgreSQL)
+// ============================================================================
+
+export interface DbUserRecord {
+  id: string;
+  name: string;
+  email: string;
+  username?: string;
+  passwordHash: string;
+  role: 'student' | 'teacher' | 'admin';
+  phone?: string;
+  batchIds: string[];
+  admissionId?: string;
+  avatarUrl?: string;
+  registrationDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+function rowToUser(row: any): DbUserRecord {
+  let parsedBatchIds: string[] = [];
+  if (Array.isArray(row.batch_ids)) {
+    parsedBatchIds = row.batch_ids;
+  } else if (typeof row.batch_ids === 'string') {
+    try {
+      parsedBatchIds = JSON.parse(row.batch_ids);
+    } catch {
+      parsedBatchIds = [];
+    }
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    username: row.username || undefined,
+    passwordHash: row.password_hash,
+    role: row.role,
+    phone: row.phone || undefined,
+    batchIds: parsedBatchIds,
+    admissionId: row.admission_id || undefined,
+    avatarUrl: row.avatar_url || undefined,
+    registrationDate: row.registration_date ? new Date(row.registration_date).toISOString() : undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export async function getUserByEmailDb(email: string): Promise<DbUserRecord | null> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM users WHERE LOWER(email) = LOWER(${email.trim()}) LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToUser(rows[0]) : null;
+}
+
+export async function getUserByIdDb(id: string): Promise<DbUserRecord | null> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM users WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToUser(rows[0]) : null;
+}
+
+export async function createUserDb(user: {
+  id?: string;
+  name: string;
+  email: string;
+  username?: string;
+  passwordHash: string;
+  role?: 'student' | 'teacher' | 'admin';
+  phone?: string;
+  batchIds?: string[];
+  admissionId?: string;
+  avatarUrl?: string;
+}): Promise<DbUserRecord> {
+  const sql = getDb();
+  const id = user.id || `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const role = user.role || 'student';
+  const batch_ids = JSON.stringify(user.batchIds || []);
+  const email = user.email.trim().toLowerCase();
+
+  const rows = await sql`
+    INSERT INTO users (
+      id, name, email, username, password_hash, role, phone, batch_ids, admission_id, avatar_url
+    ) VALUES (
+      ${id}, ${user.name}, ${email}, ${user.username || null}, ${user.passwordHash},
+      ${role}, ${user.phone || null}, ${batch_ids}::jsonb, ${user.admissionId || null}, ${user.avatarUrl || null}
+    )
+    ON CONFLICT (email) DO UPDATE SET
+      name = EXCLUDED.name,
+      phone = COALESCE(EXCLUDED.phone, users.phone),
+      batch_ids = EXCLUDED.batch_ids,
+      admission_id = COALESCE(EXCLUDED.admission_id, users.admission_id),
+      avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToUser(rows[0]);
+}
+
+export async function updateUserDb(id: string, updates: Partial<DbUserRecord>): Promise<DbUserRecord | null> {
+  const sql = getDb();
+  const existing = await getUserByIdDb(id);
+  if (!existing) return null;
+
+  const name = updates.name !== undefined ? updates.name : existing.name;
+  const email = updates.email !== undefined ? updates.email.trim().toLowerCase() : existing.email;
+  const username = updates.username !== undefined ? updates.username : existing.username;
+  const passwordHash = updates.passwordHash !== undefined ? updates.passwordHash : existing.passwordHash;
+  const role = updates.role !== undefined ? updates.role : existing.role;
+  const phone = updates.phone !== undefined ? updates.phone : existing.phone;
+  const batch_ids = JSON.stringify(updates.batchIds !== undefined ? updates.batchIds : existing.batchIds);
+  const admissionId = updates.admissionId !== undefined ? updates.admissionId : existing.admissionId;
+  const avatarUrl = updates.avatarUrl !== undefined ? updates.avatarUrl : existing.avatarUrl;
+
+  const rows = await sql`
+    UPDATE users SET
+      name = ${name},
+      email = ${email},
+      username = ${username || null},
+      password_hash = ${passwordHash},
+      role = ${role},
+      phone = ${phone || null},
+      batch_ids = ${batch_ids}::jsonb,
+      admission_id = ${admissionId || null},
+      avatar_url = ${avatarUrl || null},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToUser(rows[0]) : null;
+}
+
+export async function deleteUserDb(id: string): Promise<DbUserRecord | null> {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM users WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToUser(rows[0]) : null;
+}
+
+export async function getStudentsDb(): Promise<DbUserRecord[]> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM users WHERE role = 'student' ORDER BY created_at DESC;
+  `;
+  return rows.map(rowToUser);
+}
+
+// ============================================================================
+// STUDENT REGISTRATIONS (Neon PostgreSQL)
+// ============================================================================
+
+function rowToStudentRegistration(row: any): StudentRegistration {
+  return {
+    id: row.id,
+    admissionId: row.admission_id,
+    name: row.name,
+    fatherName: row.father_name || '',
+    dob: row.dob || '',
+    gender: row.gender || '',
+    country: row.country || 'India',
+    district: row.district || '',
+    state: row.state || '',
+    pincode: row.pincode || undefined,
+    phone: row.phone,
+    whatsapp: row.whatsapp,
+    email: row.email,
+    address: row.address || '',
+    qualification: row.qualification || '',
+    currentEnglishLevel: row.current_english_level || 'Beginner',
+    courseId: row.course_id || '',
+    courseName: row.course_name || '',
+    batchId: row.batch_id || '',
+    batchName: row.batch_name || '',
+    feeAmount: Number(row.fee_amount || 0),
+    paymentStatus: (row.payment_status || 'Pending') as any,
+    paymentMethod: row.payment_method || 'Online',
+    paymentCurrency: row.payment_currency || 'INR',
+    paymentAmountFormatted: row.payment_amount_formatted || undefined,
+    paymentTxnId: row.payment_txn_id || '',
+    razorpayOrderId: row.razorpay_order_id || undefined,
+    razorpayPaymentId: row.razorpay_payment_id || undefined,
+    razorpaySignature: row.razorpay_signature || undefined,
+    googleMeetLink: row.google_meet_link || undefined,
+    whatsappDeliveryStatus: row.whatsapp_delivery_status || 'pending',
+    whatsappMessageId: row.whatsapp_message_id || undefined,
+    whatsappSentAt: row.whatsapp_sent_at ? new Date(row.whatsapp_sent_at).toISOString() : undefined,
+    whatsappError: row.whatsapp_error || undefined,
+    facilities: Array.isArray(row.facilities) ? row.facilities : (typeof row.facilities === 'string' ? JSON.parse(row.facilities) : []),
+    registeredAt: row.registered_at ? new Date(row.registered_at).toISOString() : (row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString())
+  };
+}
+
+export async function getRegistrationsDb(batchId?: string): Promise<StudentRegistration[]> {
+  const sql = getDb();
+  let rows;
+  if (batchId) {
+    rows = await sql`
+      SELECT * FROM student_registrations WHERE batch_id = ${batchId} ORDER BY registered_at DESC;
+    `;
+  } else {
+    rows = await sql`
+      SELECT * FROM student_registrations ORDER BY registered_at DESC;
+    `;
+  }
+  return rows.map(rowToStudentRegistration);
+}
+
+export async function getRegistrationByIdDb(id: string): Promise<StudentRegistration | null> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM student_registrations WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToStudentRegistration(rows[0]) : null;
+}
+
+export async function getRegistrationByAdmissionIdDb(admissionId: string): Promise<StudentRegistration | null> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM student_registrations WHERE LOWER(admission_id) = LOWER(${admissionId.trim()}) LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToStudentRegistration(rows[0]) : null;
+}
+
+export async function createRegistrationDb(data: Partial<StudentRegistration> & { whatsappConfirmationMessage?: string; whatsappStudentUrl?: string; whatsappAdminUrl?: string }): Promise<StudentRegistration> {
+  const sql = getDb();
+  const id = data.id || `reg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const admissionId = data.admissionId || `WL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const facilities = JSON.stringify(data.facilities || []);
+
+  const rows = await sql`
+    INSERT INTO student_registrations (
+      id, admission_id, name, father_name, dob, gender, country, district, state, pincode,
+      phone, whatsapp, email, address, qualification, current_english_level,
+      course_id, course_name, batch_id, batch_name, fee_amount, payment_status,
+      payment_method, payment_currency, payment_amount_formatted, payment_txn_id,
+      razorpay_order_id, razorpay_payment_id, razorpay_signature, google_meet_link,
+      whatsapp_delivery_status, whatsapp_message_id, whatsapp_error, facilities,
+      whatsapp_confirmation_message, whatsapp_student_url, whatsapp_admin_url
+    ) VALUES (
+      ${id}, ${admissionId}, ${data.name || ''}, ${data.fatherName || null}, ${data.dob || null},
+      ${data.gender || null}, ${data.country || 'India'}, ${data.district || null}, ${data.state || null},
+      ${data.pincode || null}, ${data.phone || ''}, ${data.whatsapp || data.phone || ''}, ${data.email || ''},
+      ${data.address || null}, ${data.qualification || null}, ${data.currentEnglishLevel || null},
+      ${data.courseId || null}, ${data.courseName || null}, ${data.batchId || null}, ${data.batchName || null},
+      ${Number(data.feeAmount || 0)}, ${data.paymentStatus || 'Pending'}, ${data.paymentMethod || 'Online'},
+      ${data.paymentCurrency || 'INR'}, ${data.paymentAmountFormatted || null}, ${data.paymentTxnId || null},
+      ${data.razorpayOrderId || null}, ${data.razorpayPaymentId || null}, ${data.razorpaySignature || null},
+      ${data.googleMeetLink || null}, ${data.whatsappDeliveryStatus || 'pending'}, ${data.whatsappMessageId || null},
+      ${data.whatsappError || null}, ${facilities}::jsonb,
+      ${data.whatsappConfirmationMessage || null}, ${data.whatsappStudentUrl || null}, ${data.whatsappAdminUrl || null}
+    )
+    ON CONFLICT (admission_id) DO UPDATE SET
+      name = EXCLUDED.name,
+      phone = EXCLUDED.phone,
+      whatsapp = EXCLUDED.whatsapp,
+      email = EXCLUDED.email,
+      course_id = EXCLUDED.course_id,
+      course_name = EXCLUDED.course_name,
+      batch_id = EXCLUDED.batch_id,
+      batch_name = EXCLUDED.batch_name,
+      fee_amount = EXCLUDED.fee_amount,
+      payment_status = EXCLUDED.payment_status,
+      payment_txn_id = COALESCE(EXCLUDED.payment_txn_id, student_registrations.payment_txn_id),
+      razorpay_order_id = COALESCE(EXCLUDED.razorpay_order_id, student_registrations.razorpay_order_id),
+      razorpay_payment_id = COALESCE(EXCLUDED.razorpay_payment_id, student_registrations.razorpay_payment_id),
+      google_meet_link = COALESCE(EXCLUDED.google_meet_link, student_registrations.google_meet_link),
+      whatsapp_delivery_status = COALESCE(EXCLUDED.whatsapp_delivery_status, student_registrations.whatsapp_delivery_status),
+      whatsapp_message_id = COALESCE(EXCLUDED.whatsapp_message_id, student_registrations.whatsapp_message_id),
+      whatsapp_sent_at = CASE WHEN EXCLUDED.whatsapp_delivery_status = 'sent' THEN CURRENT_TIMESTAMP ELSE student_registrations.whatsapp_sent_at END,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToStudentRegistration(rows[0]);
+}
+
+export async function updateRegistrationDb(id: string, data: Partial<StudentRegistration>): Promise<StudentRegistration | null> {
+  const sql = getDb();
+  const existing = await getRegistrationByIdDb(id);
+  if (!existing) return null;
+
+  const name = data.name !== undefined ? data.name : existing.name;
+  const phone = data.phone !== undefined ? data.phone : existing.phone;
+  const whatsapp = data.whatsapp !== undefined ? data.whatsapp : existing.whatsapp;
+  const email = data.email !== undefined ? data.email : existing.email;
+  const courseId = data.courseId !== undefined ? data.courseId : existing.courseId;
+  const courseName = data.courseName !== undefined ? data.courseName : existing.courseName;
+  const batchId = data.batchId !== undefined ? data.batchId : existing.batchId;
+  const batchName = data.batchName !== undefined ? data.batchName : existing.batchName;
+  const feeAmount = data.feeAmount !== undefined ? Number(data.feeAmount) : existing.feeAmount;
+  const paymentStatus = data.paymentStatus !== undefined ? data.paymentStatus : existing.paymentStatus;
+  const paymentMethod = data.paymentMethod !== undefined ? data.paymentMethod : existing.paymentMethod;
+  const paymentTxnId = data.paymentTxnId !== undefined ? data.paymentTxnId : existing.paymentTxnId;
+  const googleMeetLink = data.googleMeetLink !== undefined ? data.googleMeetLink : existing.googleMeetLink;
+  const whatsappDeliveryStatus = data.whatsappDeliveryStatus !== undefined ? data.whatsappDeliveryStatus : existing.whatsappDeliveryStatus;
+  const whatsappMessageId = data.whatsappMessageId !== undefined ? data.whatsappMessageId : existing.whatsappMessageId;
+  const whatsappError = data.whatsappError !== undefined ? data.whatsappError : existing.whatsappError;
+
+  const rows = await sql`
+    UPDATE student_registrations SET
+      name = ${name},
+      phone = ${phone},
+      whatsapp = ${whatsapp},
+      email = ${email},
+      course_id = ${courseId || null},
+      course_name = ${courseName || null},
+      batch_id = ${batchId || null},
+      batch_name = ${batchName || null},
+      fee_amount = ${feeAmount},
+      payment_status = ${paymentStatus},
+      payment_method = ${paymentMethod || null},
+      payment_txn_id = ${paymentTxnId || null},
+      google_meet_link = ${googleMeetLink || null},
+      whatsapp_delivery_status = ${whatsappDeliveryStatus || 'pending'},
+      whatsapp_message_id = ${whatsappMessageId || null},
+      whatsapp_error = ${whatsappError || null},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToStudentRegistration(rows[0]) : null;
+}
+
+export async function deleteRegistrationDb(id: string): Promise<StudentRegistration | null> {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM student_registrations WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToStudentRegistration(rows[0]) : null;
+}
+
+// ============================================================================
+// CLASSES & TIMETABLE (Neon PostgreSQL)
+// ============================================================================
+
+function rowToClass(row: any): ClassSession {
+  return {
+    id: row.id,
+    batchId: row.batch_id,
+    batchName: row.batch_name || '',
+    title: row.title,
+    topic: row.topic || '',
+    classNumber: row.class_number ?? 1,
+    date: row.date || '',
+    startTime: row.start_time || '',
+    endTime: row.end_time || '',
+    time: row.start_time && row.end_time ? `${row.start_time} - ${row.end_time}` : (row.start_time || ''),
+    durationMinutes: row.duration_minutes ?? 60,
+    teacherName: row.teacher_name || 'Ziyaur Rehman Zia',
+    instructorName: row.teacher_name || 'Ziyaur Rehman Zia',
+    description: row.description || '',
+    status: row.status || 'Upcoming',
+    joinUrl: row.join_url || undefined,
+    recordingId: row.recording_id || undefined,
+    hasStudyMaterial: Boolean(row.has_study_material),
+    hasAssignment: Boolean(row.has_assignment),
+    videoKey: row.video_key || undefined
+  };
+}
+
+export async function getClassesDb(batchId?: string): Promise<ClassSession[]> {
+  const sql = getDb();
+  let rows;
+  if (batchId) {
+    rows = await sql`
+      SELECT * FROM classes WHERE batch_id = ${batchId} ORDER BY date ASC, start_time ASC;
+    `;
+  } else {
+    rows = await sql`
+      SELECT * FROM classes ORDER BY date ASC, start_time ASC;
+    `;
+  }
+  return rows.map(rowToClass);
+}
+
+export async function getClassByIdDb(id: string): Promise<ClassSession | null> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM classes WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToClass(rows[0]) : null;
+}
+
+export async function createClassDb(data: Partial<ClassSession>): Promise<ClassSession> {
+  const sql = getDb();
+  const id = data.id || `cls-${Date.now()}`;
+  const batch_id = data.batchId!;
+  const batch_name = data.batchName || '';
+  const title = data.title || 'Live Interactive Class';
+  const topic = data.topic || '';
+  const class_number = data.classNumber ?? 1;
+  const date = data.date || new Date().toISOString().split('T')[0];
+  const start_time = data.startTime || '07:30 PM';
+  const end_time = data.endTime || '08:30 PM';
+  const duration_minutes = data.durationMinutes ?? 60;
+  const teacher_name = data.teacherName || 'Ziyaur Rehman Zia';
+  const description = data.description || '';
+  const status = data.status || 'Upcoming';
+  const join_url = data.joinUrl || null;
+  const recording_id = data.recordingId || null;
+  const has_study_material = Boolean(data.hasStudyMaterial);
+  const has_assignment = Boolean(data.hasAssignment);
+  const video_key = data.videoKey || null;
+
+  const rows = await sql`
+    INSERT INTO classes (
+      id, batch_id, batch_name, title, topic, class_number, date,
+      start_time, end_time, duration_minutes, teacher_name, description,
+      status, join_url, recording_id, has_study_material, has_assignment, video_key
+    ) VALUES (
+      ${id}, ${batch_id}, ${batch_name}, ${title}, ${topic}, ${class_number}, ${date},
+      ${start_time}, ${end_time}, ${duration_minutes}, ${teacher_name}, ${description},
+      ${status}, ${join_url}, ${recording_id}, ${has_study_material}, ${has_assignment}, ${video_key}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      batch_id = EXCLUDED.batch_id,
+      batch_name = EXCLUDED.batch_name,
+      title = EXCLUDED.title,
+      topic = EXCLUDED.topic,
+      class_number = EXCLUDED.class_number,
+      date = EXCLUDED.date,
+      start_time = EXCLUDED.start_time,
+      end_time = EXCLUDED.end_time,
+      duration_minutes = EXCLUDED.duration_minutes,
+      teacher_name = EXCLUDED.teacher_name,
+      description = EXCLUDED.description,
+      status = EXCLUDED.status,
+      join_url = EXCLUDED.join_url,
+      recording_id = EXCLUDED.recording_id,
+      has_study_material = EXCLUDED.has_study_material,
+      has_assignment = EXCLUDED.has_assignment,
+      video_key = EXCLUDED.video_key,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToClass(rows[0]);
+}
+
+export async function updateClassDb(id: string, data: Partial<ClassSession>): Promise<ClassSession | null> {
+  const sql = getDb();
+  const existing = await getClassByIdDb(id);
+  if (!existing) return null;
+
+  const title = data.title !== undefined ? data.title : existing.title;
+  const topic = data.topic !== undefined ? data.topic : existing.topic;
+  const class_number = data.classNumber !== undefined ? data.classNumber : existing.classNumber;
+  const date = data.date !== undefined ? data.date : existing.date;
+  const start_time = data.startTime !== undefined ? data.startTime : existing.startTime;
+  const end_time = data.endTime !== undefined ? data.endTime : existing.endTime;
+  const duration_minutes = data.durationMinutes !== undefined ? data.durationMinutes : existing.durationMinutes;
+  const teacher_name = data.teacherName !== undefined ? data.teacherName : existing.teacherName;
+  const description = data.description !== undefined ? data.description : existing.description;
+  const status = data.status !== undefined ? data.status : existing.status;
+  const join_url = data.joinUrl !== undefined ? data.joinUrl : (existing.joinUrl || null);
+  const recording_id = data.recordingId !== undefined ? data.recordingId : (existing.recordingId || null);
+  const has_study_material = data.hasStudyMaterial !== undefined ? Boolean(data.hasStudyMaterial) : existing.hasStudyMaterial;
+  const has_assignment = data.hasAssignment !== undefined ? Boolean(data.hasAssignment) : existing.hasAssignment;
+  const video_key = data.videoKey !== undefined ? data.videoKey : (existing.videoKey || null);
+
+  const rows = await sql`
+    UPDATE classes SET
+      title = ${title},
+      topic = ${topic},
+      class_number = ${class_number},
+      date = ${date},
+      start_time = ${start_time},
+      end_time = ${end_time},
+      duration_minutes = ${duration_minutes},
+      teacher_name = ${teacher_name},
+      description = ${description},
+      status = ${status},
+      join_url = ${join_url},
+      recording_id = ${recording_id},
+      has_study_material = ${has_study_material},
+      has_assignment = ${has_assignment},
+      video_key = ${video_key},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToClass(rows[0]) : null;
+}
+
+export async function deleteClassDb(id: string): Promise<ClassSession | null> {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM classes WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToClass(rows[0]) : null;
+}
+
+// ============================================================================
+// RECORDINGS (Neon PostgreSQL)
+// ============================================================================
+
+function rowToRecording(row: any): Recording {
+  return {
+    id: row.id,
+    classId: row.class_id || '',
+    batchId: row.batch_id,
+    batchName: row.batch_name || '',
+    title: row.title,
+    topic: row.topic || '',
+    classNumber: row.class_number ?? 1,
+    date: row.date || '',
+    recordedDate: row.date || '',
+    duration: row.duration || '60 min',
+    status: row.status || 'Available',
+    videoKey: row.video_key,
+    description: row.notes_summary || ''
+  };
+}
+
+export async function getRecordingsDb(batchId?: string): Promise<Recording[]> {
+  const sql = getDb();
+  let rows;
+  if (batchId) {
+    rows = await sql`
+      SELECT * FROM recordings WHERE batch_id = ${batchId} ORDER BY date DESC, class_number DESC;
+    `;
+  } else {
+    rows = await sql`
+      SELECT * FROM recordings ORDER BY date DESC, class_number DESC;
+    `;
+  }
+  return rows.map(rowToRecording);
+}
+
+export async function getRecordingByIdDb(id: string): Promise<Recording | null> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM recordings WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToRecording(rows[0]) : null;
+}
+
+export async function createRecordingDb(data: Partial<Recording>): Promise<Recording> {
+  const sql = getDb();
+  const id = data.id || `rec-${Date.now()}`;
+  const class_id = data.classId || null;
+  const batch_id = data.batchId!;
+  const batch_name = data.batchName || '';
+  const title = data.title || 'Recorded Lecture Session';
+  const topic = data.topic || '';
+  const class_number = data.classNumber ?? 1;
+  const date = data.date || new Date().toISOString().split('T')[0];
+  const duration = data.duration || '60 min';
+  const status = data.status || 'Available';
+  const video_key = data.videoKey || `video_rec_${batch_id}_${id}`;
+  const notes_summary = data.description || '';
+
+  const rows = await sql`
+    INSERT INTO recordings (
+      id, class_id, batch_id, batch_name, title, topic, class_number,
+      date, duration, status, video_key, notes_summary
+    ) VALUES (
+      ${id}, ${class_id}, ${batch_id}, ${batch_name}, ${title}, ${topic}, ${class_number},
+      ${date}, ${duration}, ${status}, ${video_key}, ${notes_summary}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      class_id = EXCLUDED.class_id,
+      batch_id = EXCLUDED.batch_id,
+      batch_name = EXCLUDED.batch_name,
+      title = EXCLUDED.title,
+      topic = EXCLUDED.topic,
+      class_number = EXCLUDED.class_number,
+      date = EXCLUDED.date,
+      duration = EXCLUDED.duration,
+      status = EXCLUDED.status,
+      video_key = EXCLUDED.video_key,
+      notes_summary = EXCLUDED.notes_summary,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToRecording(rows[0]);
+}
+
+export async function updateRecordingDb(id: string, data: Partial<Recording>): Promise<Recording | null> {
+  const sql = getDb();
+  const existing = await getRecordingByIdDb(id);
+  if (!existing) return null;
+
+  const title = data.title !== undefined ? data.title : existing.title;
+  const topic = data.topic !== undefined ? data.topic : existing.topic;
+  const date = data.date !== undefined ? data.date : existing.date;
+  const duration = data.duration !== undefined ? data.duration : existing.duration;
+  const status = data.status !== undefined ? data.status : existing.status;
+  const video_key = data.videoKey !== undefined ? data.videoKey : existing.videoKey;
+  const notes_summary = data.description !== undefined ? data.description : existing.description;
+
+  const rows = await sql`
+    UPDATE recordings SET
+      title = ${title},
+      topic = ${topic},
+      date = ${date},
+      duration = ${duration},
+      status = ${status},
+      video_key = ${video_key},
+      notes_summary = ${notes_summary},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToRecording(rows[0]) : null;
+}
+
+export async function deleteRecordingDb(id: string): Promise<Recording | null> {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM recordings WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToRecording(rows[0]) : null;
+}
+
+// ============================================================================
+// ASSIGNMENTS & HOMEWORK (Neon PostgreSQL)
+// Dynamic submissions_count via subquery
+// ============================================================================
+
+function rowToAssignment(row: any): Assignment {
+  return {
+    id: row.id,
+    batchId: row.batch_id,
+    classId: row.class_id || undefined,
+    title: row.title,
+    description: row.description || '',
+    dueDate: row.due_date || '',
+    totalPoints: row.total_points ?? 100,
+    submissionsCount: Number(row.submissions_count ?? 0)
+  };
+}
+
+export async function getAssignmentsDb(batchId?: string): Promise<Assignment[]> {
+  const sql = getDb();
+  let rows;
+  if (batchId) {
+    rows = await sql`
+      SELECT a.*, COALESCE((SELECT COUNT(*)::int FROM assignment_submissions s WHERE s.assignment_id = a.id), 0) AS submissions_count
+      FROM assignments a
+      WHERE a.batch_id = ${batchId}
+      ORDER BY a.created_at DESC;
+    `;
+  } else {
+    rows = await sql`
+      SELECT a.*, COALESCE((SELECT COUNT(*)::int FROM assignment_submissions s WHERE s.assignment_id = a.id), 0) AS submissions_count
+      FROM assignments a
+      ORDER BY a.created_at DESC;
+    `;
+  }
+  return rows.map(rowToAssignment);
+}
+
+export async function getAssignmentByIdDb(id: string): Promise<Assignment | null> {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT a.*, COALESCE((SELECT COUNT(*)::int FROM assignment_submissions s WHERE s.assignment_id = a.id), 0) AS submissions_count
+    FROM assignments a
+    WHERE a.id = ${id}
+    LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToAssignment(rows[0]) : null;
+}
+
+export async function createAssignmentDb(data: Partial<Assignment>): Promise<Assignment> {
+  const sql = getDb();
+  const id = data.id || `asg-${Date.now()}`;
+  const batch_id = data.batchId!;
+  const class_id = data.classId || null;
+  const title = data.title || 'Assignment Task';
+  const description = data.description || '';
+  const due_date = data.dueDate || '';
+  const total_points = data.totalPoints ?? 100;
+
+  const rows = await sql`
+    INSERT INTO assignments (id, batch_id, class_id, title, description, due_date, total_points)
+    VALUES (${id}, ${batch_id}, ${class_id}, ${title}, ${description}, ${due_date}, ${total_points})
+    ON CONFLICT (id) DO UPDATE SET
+      title = EXCLUDED.title,
+      description = EXCLUDED.description,
+      due_date = EXCLUDED.due_date,
+      total_points = EXCLUDED.total_points,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *, 0 AS submissions_count;
+  `;
+  return rowToAssignment(rows[0]);
+}
+
+function rowToSubmission(row: any): AssignmentSubmission {
+  return {
+    id: row.id,
+    assignmentId: row.assignment_id,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    batchId: row.batch_id,
+    submittedAt: row.submitted_at ? new Date(row.submitted_at).toISOString() : new Date().toISOString(),
+    content: row.content,
+    status: row.status || 'Submitted',
+    score: row.score !== null && row.score !== undefined ? Number(row.score) : undefined,
+    feedback: row.feedback || undefined
+  };
+}
+
+export async function getAssignmentSubmissionsDb(opts?: { assignmentId?: string; batchId?: string; studentId?: string }): Promise<AssignmentSubmission[]> {
+  const sql = getDb();
+  const assignmentId = opts?.assignmentId;
+  const batchId = opts?.batchId;
+  const studentId = opts?.studentId;
+
+  let rows;
+  if (assignmentId) {
+    rows = await sql`SELECT * FROM assignment_submissions WHERE assignment_id = ${assignmentId} ORDER BY submitted_at DESC;`;
+  } else if (studentId) {
+    rows = await sql`SELECT * FROM assignment_submissions WHERE student_id = ${studentId} ORDER BY submitted_at DESC;`;
+  } else if (batchId) {
+    rows = await sql`SELECT * FROM assignment_submissions WHERE batch_id = ${batchId} ORDER BY submitted_at DESC;`;
+  } else {
+    rows = await sql`SELECT * FROM assignment_submissions ORDER BY submitted_at DESC;`;
+  }
+  return rows.map(rowToSubmission);
+}
+
+export async function createAssignmentSubmissionDb(data: Partial<AssignmentSubmission>): Promise<AssignmentSubmission> {
+  const sql = getDb();
+  const id = data.id || `sub-${Date.now()}`;
+  const assignment_id = data.assignmentId!;
+  const student_id = data.studentId!;
+  const student_name = data.studentName || 'Student';
+  const batch_id = data.batchId!;
+  const content = data.content || '';
+  const status = data.status || 'Submitted';
+
+  const rows = await sql`
+    INSERT INTO assignment_submissions (id, assignment_id, student_id, student_name, batch_id, content, status)
+    VALUES (${id}, ${assignment_id}, ${student_id}, ${student_name}, ${batch_id}, ${content}, ${status})
+    RETURNING *;
+  `;
+  return rowToSubmission(rows[0]);
+}
+
+export async function gradeAssignmentSubmissionDb(id: string, score: number, feedback?: string): Promise<AssignmentSubmission | null> {
+  const sql = getDb();
+  const rows = await sql`
+    UPDATE assignment_submissions
+    SET score = ${score}, feedback = ${feedback || null}, status = 'Graded', updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToSubmission(rows[0]) : null;
+}
+
+// ============================================================================
+// ATTENDANCE RECORDS (Neon PostgreSQL)
+// ============================================================================
+
+function rowToAttendance(row: any): AttendanceRecord {
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    batchId: row.batch_id,
+    batchName: row.batch_name || '',
+    classId: row.class_id,
+    classTitle: row.class_title || '',
+    joinTime: row.join_time || '',
+    leaveTime: row.leave_time || undefined,
+    durationMinutes: Number(row.duration_minutes ?? 0),
+    status: row.status || 'Present',
+    date: row.date || ''
+  };
+}
+
+export async function getAttendanceRecordsDb(opts?: { batchId?: string; classId?: string; studentId?: string }): Promise<AttendanceRecord[]> {
+  const sql = getDb();
+  const { batchId, classId, studentId } = opts || {};
+  let rows;
+  if (classId) {
+    rows = await sql`SELECT * FROM attendance_records WHERE class_id = ${classId} ORDER BY created_at DESC;`;
+  } else if (batchId) {
+    rows = await sql`SELECT * FROM attendance_records WHERE batch_id = ${batchId} ORDER BY created_at DESC;`;
+  } else if (studentId) {
+    rows = await sql`SELECT * FROM attendance_records WHERE student_id = ${studentId} ORDER BY created_at DESC;`;
+  } else {
+    rows = await sql`SELECT * FROM attendance_records ORDER BY created_at DESC;`;
+  }
+  return rows.map(rowToAttendance);
+}
+
+export async function logAttendanceJoinDb(data: {
+  studentId: string;
+  studentName: string;
+  batchId: string;
+  batchName?: string;
+  classId: string;
+  classTitle?: string;
+  joinTime?: string;
+  date?: string;
+}): Promise<AttendanceRecord> {
+  const sql = getDb();
+  const id = `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const joinTime = data.joinTime || new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const date = data.date || new Date().toISOString().split("T")[0];
+
+  const rows = await sql`
+    INSERT INTO attendance_records (
+      id, student_id, student_name, batch_id, batch_name, class_id, class_title, join_time, status, date
+    ) VALUES (
+      ${id}, ${data.studentId}, ${data.studentName}, ${data.batchId}, ${data.batchName || null},
+      ${data.classId}, ${data.classTitle || null}, ${joinTime}, 'Present', ${date}
+    )
+    RETURNING *;
+  `;
+  return rowToAttendance(rows[0]);
+}
+
+export async function logAttendanceLeaveDb(classId: string, studentId: string, leaveTime?: string): Promise<AttendanceRecord | null> {
+  const sql = getDb();
+  const time = leaveTime || new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const rows = await sql`
+    UPDATE attendance_records
+    SET leave_time = ${time}
+    WHERE class_id = ${classId} AND student_id = ${studentId} AND leave_time IS NULL
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToAttendance(rows[0]) : null;
+}
+
+// ============================================================================
+// ORDERS & CHECKOUT (Neon PostgreSQL)
+// ============================================================================
+
+export interface DbOrderRecord {
+  id: string;
+  studentId?: string;
+  studentName: string;
+  studentPhone: string;
+  studentEmail: string;
+  courseId?: string;
+  courseName: string;
+  batchId?: string;
+  batchName?: string;
+  coursePrice: number;
+  discountAmount: number;
+  discountCode?: string;
+  expectedAmount: number;
+  currency: string;
+  orderStatus: 'pending' | 'paid' | 'failed' | 'cancelled';
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function rowToOrder(row: any): DbOrderRecord {
+  return {
+    id: row.id,
+    studentId: row.student_id || undefined,
+    studentName: row.student_name,
+    studentPhone: row.student_phone,
+    studentEmail: row.student_email,
+    courseId: row.course_id || undefined,
+    courseName: row.course_name,
+    batchId: row.batch_id || undefined,
+    batchName: row.batch_name || undefined,
+    coursePrice: Number(row.course_price),
+    discountAmount: Number(row.discount_amount || 0),
+    discountCode: row.discount_code || undefined,
+    expectedAmount: Number(row.expected_amount),
+    currency: row.currency || 'INR',
+    orderStatus: row.order_status || 'pending',
+    razorpayOrderId: row.razorpay_order_id || undefined,
+    razorpayPaymentId: row.razorpay_payment_id || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export async function createOrderDb(data: Partial<DbOrderRecord>): Promise<DbOrderRecord> {
+  const sql = getDb();
+  const id = data.id || `ord-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+  const rows = await sql`
+    INSERT INTO orders (
+      id, student_id, student_name, student_phone, student_email,
+      course_id, course_name, batch_id, batch_name, course_price,
+      discount_amount, discount_code, expected_amount, currency,
+      order_status, razorpay_order_id, razorpay_payment_id
+    ) VALUES (
+      ${id}, ${data.studentId || null}, ${data.studentName || ''}, ${data.studentPhone || ''}, ${data.studentEmail || ''},
+      ${data.courseId || null}, ${data.courseName || ''}, ${data.batchId || null}, ${data.batchName || null},
+      ${Number(data.coursePrice || 0)}, ${Number(data.discountAmount || 0)}, ${data.discountCode || null},
+      ${Number(data.expectedAmount || 0)}, ${data.currency || 'INR'},
+      ${data.orderStatus || 'pending'}, ${data.razorpayOrderId || null}, ${data.razorpayPaymentId || null}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      order_status = EXCLUDED.order_status,
+      razorpay_order_id = COALESCE(EXCLUDED.razorpay_order_id, orders.razorpay_order_id),
+      razorpay_payment_id = COALESCE(EXCLUDED.razorpay_payment_id, orders.razorpay_payment_id),
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToOrder(rows[0]);
+}
+
+export async function getOrderByIdDb(id: string): Promise<DbOrderRecord | null> {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1;`;
+  return rows.length > 0 ? rowToOrder(rows[0]) : null;
+}
+
+export async function getOrderByRazorpayOrderIdDb(razorpayOrderId: string): Promise<DbOrderRecord | null> {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM orders WHERE razorpay_order_id = ${razorpayOrderId} LIMIT 1;`;
+  return rows.length > 0 ? rowToOrder(rows[0]) : null;
+}
+
+export async function updateOrderStatusDb(
+  id: string,
+  status: string,
+  razorpayPaymentId?: string,
+  razorpayOrderId?: string
+): Promise<DbOrderRecord | null> {
+  const sql = getDb();
+  const rows = await sql`
+    UPDATE orders
+    SET order_status = ${status},
+        razorpay_payment_id = COALESCE(${razorpayPaymentId || null}, razorpay_payment_id),
+        razorpay_order_id = COALESCE(${razorpayOrderId || null}, razorpay_order_id),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToOrder(rows[0]) : null;
+}
+
+export async function getOrdersDb(): Promise<DbOrderRecord[]> {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM orders ORDER BY created_at DESC;`;
+  return rows.map(rowToOrder);
+}
+
+// ============================================================================
+// PAYMENTS & AUDIT (Neon PostgreSQL)
+// ============================================================================
+
+export interface DbPaymentRecord {
+  id: string;
+  orderId?: string;
+  paymentId: string;
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
+  signature?: string;
+  amount: number;
+  currency: string;
+  status: 'Paid' | 'Failed' | 'Refunded';
+  studentName?: string;
+  studentEmail?: string;
+  studentPhone?: string;
+  courseId?: string;
+  courseName?: string;
+  batchId?: string;
+  batchName?: string;
+  admissionId?: string;
+  method?: string;
+  source?: string;
+  rawPayload?: any;
+  verifiedAt?: string;
+  createdAt: string;
+}
+
+function rowToPayment(row: any): DbPaymentRecord {
+  return {
+    id: row.id,
+    orderId: row.order_id || undefined,
+    paymentId: row.payment_id,
+    razorpayPaymentId: row.razorpay_payment_id || undefined,
+    razorpayOrderId: row.razorpay_order_id || undefined,
+    signature: row.signature || undefined,
+    amount: Number(row.amount),
+    currency: row.currency || 'INR',
+    status: row.status || 'Paid',
+    studentName: row.student_name || undefined,
+    studentEmail: row.student_email || undefined,
+    studentPhone: row.student_phone || undefined,
+    courseId: row.course_id || undefined,
+    courseName: row.course_name || undefined,
+    batchId: row.batch_id || undefined,
+    batchName: row.batch_name || undefined,
+    admissionId: row.admission_id || undefined,
+    method: row.method || undefined,
+    source: row.source || 'razorpay_verify',
+    rawPayload: row.raw_payload || undefined,
+    verifiedAt: row.verified_at ? new Date(row.verified_at).toISOString() : undefined,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+  };
+}
+
+export async function createPaymentDb(data: Partial<DbPaymentRecord>): Promise<DbPaymentRecord> {
+  const sql = getDb();
+  const id = data.id || `pay-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const paymentId = data.paymentId || data.razorpayPaymentId || `pay_manual_${Date.now()}`;
+  const rawPayload = data.rawPayload ? JSON.stringify(data.rawPayload) : null;
+
+  const rows = await sql`
+    INSERT INTO payments (
+      id, order_id, payment_id, razorpay_payment_id, razorpay_order_id,
+      signature, amount, currency, status, student_name, student_email,
+      student_phone, course_id, course_name, batch_id, batch_name,
+      admission_id, method, source, raw_payload, verified_at
+    ) VALUES (
+      ${id}, ${data.orderId || null}, ${paymentId}, ${data.razorpayPaymentId || null},
+      ${data.razorpayOrderId || null}, ${data.signature || null}, ${Number(data.amount || 0)},
+      ${data.currency || 'INR'}, ${data.status || 'Paid'}, ${data.studentName || null},
+      ${data.studentEmail || null}, ${data.studentPhone || null}, ${data.courseId || null},
+      ${data.courseName || null}, ${data.batchId || null}, ${data.batchName || null},
+      ${data.admissionId || null}, ${data.method || 'online'}, ${data.source || 'razorpay_verify'},
+      ${rawPayload}::jsonb, ${data.verifiedAt ? new Date(data.verifiedAt).toISOString() : new Date().toISOString()}
+    )
+    ON CONFLICT (payment_id) DO UPDATE SET
+      status = EXCLUDED.status,
+      signature = COALESCE(EXCLUDED.signature, payments.signature),
+      verified_at = COALESCE(EXCLUDED.verified_at, payments.verified_at)
+    RETURNING *;
+  `;
+  return rowToPayment(rows[0]);
+}
+
+export async function getPaymentsDb(): Promise<DbPaymentRecord[]> {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM payments ORDER BY created_at DESC;`;
+  return rows.map(rowToPayment);
+}
+
+// ============================================================================
+// NOTIFICATIONS, SUPPORT TICKETS & KNOWLEDGE BASE (Neon PostgreSQL)
+// ============================================================================
+
+function rowToNotification(row: any): NotificationItem {
+  return {
+    id: row.id,
+    userId: row.user_id || undefined,
+    batchId: row.batch_id || undefined,
+    type: row.type || 'announcement',
+    title: row.title,
+    message: row.message,
+    read: Boolean(row.read),
+    timestamp: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+  };
+}
+
+export async function getNotificationsDb(userId?: string): Promise<NotificationItem[]> {
+  const sql = getDb();
+  let rows;
+  if (userId) {
+    rows = await sql`
+      SELECT * FROM notifications 
+      WHERE user_id = ${userId} OR user_id IS NULL 
+      ORDER BY created_at DESC LIMIT 50;
+    `;
+  } else {
+    rows = await sql`
+      SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50;
+    `;
+  }
+  return rows.map(rowToNotification);
+}
+
+export async function createNotificationDb(data: Partial<NotificationItem>): Promise<NotificationItem> {
+  const sql = getDb();
+  const id = data.id || `notif-${Date.now()}`;
+  const rows = await sql`
+    INSERT INTO notifications (id, user_id, batch_id, type, title, message, read)
+    VALUES (${id}, ${data.userId || null}, ${data.batchId || null}, ${data.type || 'announcement'}, ${data.title || 'Notification'}, ${data.message || ''}, ${Boolean(data.read)})
+    RETURNING *;
+  `;
+  return rowToNotification(rows[0]);
+}
+
+export async function markNotificationReadDb(id: string): Promise<void> {
+  const sql = getDb();
+  await sql`UPDATE notifications SET read = true WHERE id = ${id};`;
+}
+
+export async function getSupportTicketsDb(): Promise<any[]> {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM support_tickets ORDER BY created_at DESC;`;
+  return rows;
+}
+
+export async function createSupportTicketDb(data: any): Promise<any> {
+  const sql = getDb();
+  const id = data.id || `tkt-${Date.now()}`;
+  const rows = await sql`
+    INSERT INTO support_tickets (
+      id, ticket_number, student_id, student_name, student_phone, order_id,
+      category, priority, status, assigned_agent_id, assigned_agent_name,
+      original_question, conversation_id, resolution_notes
+    ) VALUES (
+      ${id}, ${data.ticketNumber || id}, ${data.studentId || null}, ${data.studentName || null},
+      ${data.studentPhone || ''}, ${data.orderId || null}, ${data.category || 'general_query'},
+      ${data.priority || 'medium'}, ${data.status || 'Open'}, ${data.assignedAgentId || null},
+      ${data.assignedAgentName || null}, ${data.originalQuestion || ''}, ${data.conversationId || null},
+      ${data.resolutionNotes || null}
+    )
+    RETURNING *;
+  `;
+  return rows[0];
+}
+
+export async function updateSupportTicketDb(id: string, updates: any): Promise<any> {
+  const sql = getDb();
+  const rows = await sql`
+    UPDATE support_tickets
+    SET status = COALESCE(${updates.status || null}, status),
+        assigned_agent_id = COALESCE(${updates.assignedAgentId || null}, assigned_agent_id),
+        assigned_agent_name = COALESCE(${updates.assignedAgentName || null}, assigned_agent_name),
+        resolution_notes = COALESCE(${updates.resolutionNotes || null}, resolution_notes),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export async function getKnowledgeBaseDb(): Promise<any[]> {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM knowledge_base ORDER BY created_at ASC;`;
+  return rows;
+}
+
+export async function createKnowledgeBaseDb(data: { category?: string; question: string; answer: string }): Promise<any> {
+  const sql = getDb();
+  const id = `kb-${Date.now()}`;
+  const rows = await sql`
+    INSERT INTO knowledge_base (id, category, question, answer)
+    VALUES (${id}, ${data.category || 'General'}, ${data.question}, ${data.answer})
+    RETURNING *;
+  `;
+  return rows[0];
+}
+
+export async function deleteKnowledgeBaseDb(id: string): Promise<any> {
+  const sql = getDb();
+  const rows = await sql`DELETE FROM knowledge_base WHERE id = ${id} RETURNING *;`;
+  return rows.length > 0 ? rows[0] : null;
 }

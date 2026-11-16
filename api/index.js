@@ -3864,6 +3864,882 @@ async function deleteGalleryItemDb(id) {
   `;
   return rows.length > 0 ? rowToGalleryItem(rows[0]) : null;
 }
+function rowToUser(row) {
+  let parsedBatchIds = [];
+  if (Array.isArray(row.batch_ids)) {
+    parsedBatchIds = row.batch_ids;
+  } else if (typeof row.batch_ids === "string") {
+    try {
+      parsedBatchIds = JSON.parse(row.batch_ids);
+    } catch {
+      parsedBatchIds = [];
+    }
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    username: row.username || void 0,
+    passwordHash: row.password_hash,
+    role: row.role,
+    phone: row.phone || void 0,
+    batchIds: parsedBatchIds,
+    admissionId: row.admission_id || void 0,
+    avatarUrl: row.avatar_url || void 0,
+    registrationDate: row.registration_date ? new Date(row.registration_date).toISOString() : void 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+async function getUserByEmailDb(email) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM users WHERE LOWER(email) = LOWER(${email.trim()}) LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToUser(rows[0]) : null;
+}
+async function getUserByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM users WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToUser(rows[0]) : null;
+}
+async function createUserDb(user) {
+  const sql = getDb();
+  const id = user.id || `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const role = user.role || "student";
+  const batch_ids = JSON.stringify(user.batchIds || []);
+  const email = user.email.trim().toLowerCase();
+  const rows = await sql`
+    INSERT INTO users (
+      id, name, email, username, password_hash, role, phone, batch_ids, admission_id, avatar_url
+    ) VALUES (
+      ${id}, ${user.name}, ${email}, ${user.username || null}, ${user.passwordHash},
+      ${role}, ${user.phone || null}, ${batch_ids}::jsonb, ${user.admissionId || null}, ${user.avatarUrl || null}
+    )
+    ON CONFLICT (email) DO UPDATE SET
+      name = EXCLUDED.name,
+      phone = COALESCE(EXCLUDED.phone, users.phone),
+      batch_ids = EXCLUDED.batch_ids,
+      admission_id = COALESCE(EXCLUDED.admission_id, users.admission_id),
+      avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToUser(rows[0]);
+}
+async function updateUserDb(id, updates) {
+  const sql = getDb();
+  const existing = await getUserByIdDb(id);
+  if (!existing) return null;
+  const name = updates.name !== void 0 ? updates.name : existing.name;
+  const email = updates.email !== void 0 ? updates.email.trim().toLowerCase() : existing.email;
+  const username = updates.username !== void 0 ? updates.username : existing.username;
+  const passwordHash = updates.passwordHash !== void 0 ? updates.passwordHash : existing.passwordHash;
+  const role = updates.role !== void 0 ? updates.role : existing.role;
+  const phone = updates.phone !== void 0 ? updates.phone : existing.phone;
+  const batch_ids = JSON.stringify(updates.batchIds !== void 0 ? updates.batchIds : existing.batchIds);
+  const admissionId = updates.admissionId !== void 0 ? updates.admissionId : existing.admissionId;
+  const avatarUrl = updates.avatarUrl !== void 0 ? updates.avatarUrl : existing.avatarUrl;
+  const rows = await sql`
+    UPDATE users SET
+      name = ${name},
+      email = ${email},
+      username = ${username || null},
+      password_hash = ${passwordHash},
+      role = ${role},
+      phone = ${phone || null},
+      batch_ids = ${batch_ids}::jsonb,
+      admission_id = ${admissionId || null},
+      avatar_url = ${avatarUrl || null},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToUser(rows[0]) : null;
+}
+async function deleteUserDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM users WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToUser(rows[0]) : null;
+}
+function rowToStudentRegistration(row) {
+  return {
+    id: row.id,
+    admissionId: row.admission_id,
+    name: row.name,
+    fatherName: row.father_name || "",
+    dob: row.dob || "",
+    gender: row.gender || "",
+    country: row.country || "India",
+    district: row.district || "",
+    state: row.state || "",
+    pincode: row.pincode || void 0,
+    phone: row.phone,
+    whatsapp: row.whatsapp,
+    email: row.email,
+    address: row.address || "",
+    qualification: row.qualification || "",
+    currentEnglishLevel: row.current_english_level || "Beginner",
+    courseId: row.course_id || "",
+    courseName: row.course_name || "",
+    batchId: row.batch_id || "",
+    batchName: row.batch_name || "",
+    feeAmount: Number(row.fee_amount || 0),
+    paymentStatus: row.payment_status || "Pending",
+    paymentMethod: row.payment_method || "Online",
+    paymentCurrency: row.payment_currency || "INR",
+    paymentAmountFormatted: row.payment_amount_formatted || void 0,
+    paymentTxnId: row.payment_txn_id || "",
+    razorpayOrderId: row.razorpay_order_id || void 0,
+    razorpayPaymentId: row.razorpay_payment_id || void 0,
+    razorpaySignature: row.razorpay_signature || void 0,
+    googleMeetLink: row.google_meet_link || void 0,
+    whatsappDeliveryStatus: row.whatsapp_delivery_status || "pending",
+    whatsappMessageId: row.whatsapp_message_id || void 0,
+    whatsappSentAt: row.whatsapp_sent_at ? new Date(row.whatsapp_sent_at).toISOString() : void 0,
+    whatsappError: row.whatsapp_error || void 0,
+    facilities: Array.isArray(row.facilities) ? row.facilities : typeof row.facilities === "string" ? JSON.parse(row.facilities) : [],
+    registeredAt: row.registered_at ? new Date(row.registered_at).toISOString() : row.created_at ? new Date(row.created_at).toISOString() : (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function getRegistrationsDb(batchId) {
+  const sql = getDb();
+  let rows;
+  if (batchId) {
+    rows = await sql`
+      SELECT * FROM student_registrations WHERE batch_id = ${batchId} ORDER BY registered_at DESC;
+    `;
+  } else {
+    rows = await sql`
+      SELECT * FROM student_registrations ORDER BY registered_at DESC;
+    `;
+  }
+  return rows.map(rowToStudentRegistration);
+}
+async function getRegistrationByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM student_registrations WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToStudentRegistration(rows[0]) : null;
+}
+async function getRegistrationByAdmissionIdDb(admissionId) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM student_registrations WHERE LOWER(admission_id) = LOWER(${admissionId.trim()}) LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToStudentRegistration(rows[0]) : null;
+}
+async function createRegistrationDb(data) {
+  const sql = getDb();
+  const id = data.id || `reg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const admissionId = data.admissionId || `WL-${(/* @__PURE__ */ new Date()).getFullYear()}-${Math.floor(1e3 + Math.random() * 9e3)}`;
+  const facilities = JSON.stringify(data.facilities || []);
+  const rows = await sql`
+    INSERT INTO student_registrations (
+      id, admission_id, name, father_name, dob, gender, country, district, state, pincode,
+      phone, whatsapp, email, address, qualification, current_english_level,
+      course_id, course_name, batch_id, batch_name, fee_amount, payment_status,
+      payment_method, payment_currency, payment_amount_formatted, payment_txn_id,
+      razorpay_order_id, razorpay_payment_id, razorpay_signature, google_meet_link,
+      whatsapp_delivery_status, whatsapp_message_id, whatsapp_error, facilities,
+      whatsapp_confirmation_message, whatsapp_student_url, whatsapp_admin_url
+    ) VALUES (
+      ${id}, ${admissionId}, ${data.name || ""}, ${data.fatherName || null}, ${data.dob || null},
+      ${data.gender || null}, ${data.country || "India"}, ${data.district || null}, ${data.state || null},
+      ${data.pincode || null}, ${data.phone || ""}, ${data.whatsapp || data.phone || ""}, ${data.email || ""},
+      ${data.address || null}, ${data.qualification || null}, ${data.currentEnglishLevel || null},
+      ${data.courseId || null}, ${data.courseName || null}, ${data.batchId || null}, ${data.batchName || null},
+      ${Number(data.feeAmount || 0)}, ${data.paymentStatus || "Pending"}, ${data.paymentMethod || "Online"},
+      ${data.paymentCurrency || "INR"}, ${data.paymentAmountFormatted || null}, ${data.paymentTxnId || null},
+      ${data.razorpayOrderId || null}, ${data.razorpayPaymentId || null}, ${data.razorpaySignature || null},
+      ${data.googleMeetLink || null}, ${data.whatsappDeliveryStatus || "pending"}, ${data.whatsappMessageId || null},
+      ${data.whatsappError || null}, ${facilities}::jsonb,
+      ${data.whatsappConfirmationMessage || null}, ${data.whatsappStudentUrl || null}, ${data.whatsappAdminUrl || null}
+    )
+    ON CONFLICT (admission_id) DO UPDATE SET
+      name = EXCLUDED.name,
+      phone = EXCLUDED.phone,
+      whatsapp = EXCLUDED.whatsapp,
+      email = EXCLUDED.email,
+      course_id = EXCLUDED.course_id,
+      course_name = EXCLUDED.course_name,
+      batch_id = EXCLUDED.batch_id,
+      batch_name = EXCLUDED.batch_name,
+      fee_amount = EXCLUDED.fee_amount,
+      payment_status = EXCLUDED.payment_status,
+      payment_txn_id = COALESCE(EXCLUDED.payment_txn_id, student_registrations.payment_txn_id),
+      razorpay_order_id = COALESCE(EXCLUDED.razorpay_order_id, student_registrations.razorpay_order_id),
+      razorpay_payment_id = COALESCE(EXCLUDED.razorpay_payment_id, student_registrations.razorpay_payment_id),
+      google_meet_link = COALESCE(EXCLUDED.google_meet_link, student_registrations.google_meet_link),
+      whatsapp_delivery_status = COALESCE(EXCLUDED.whatsapp_delivery_status, student_registrations.whatsapp_delivery_status),
+      whatsapp_message_id = COALESCE(EXCLUDED.whatsapp_message_id, student_registrations.whatsapp_message_id),
+      whatsapp_sent_at = CASE WHEN EXCLUDED.whatsapp_delivery_status = 'sent' THEN CURRENT_TIMESTAMP ELSE student_registrations.whatsapp_sent_at END,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToStudentRegistration(rows[0]);
+}
+async function updateRegistrationDb(id, data) {
+  const sql = getDb();
+  const existing = await getRegistrationByIdDb(id);
+  if (!existing) return null;
+  const name = data.name !== void 0 ? data.name : existing.name;
+  const phone = data.phone !== void 0 ? data.phone : existing.phone;
+  const whatsapp = data.whatsapp !== void 0 ? data.whatsapp : existing.whatsapp;
+  const email = data.email !== void 0 ? data.email : existing.email;
+  const courseId = data.courseId !== void 0 ? data.courseId : existing.courseId;
+  const courseName = data.courseName !== void 0 ? data.courseName : existing.courseName;
+  const batchId = data.batchId !== void 0 ? data.batchId : existing.batchId;
+  const batchName = data.batchName !== void 0 ? data.batchName : existing.batchName;
+  const feeAmount = data.feeAmount !== void 0 ? Number(data.feeAmount) : existing.feeAmount;
+  const paymentStatus = data.paymentStatus !== void 0 ? data.paymentStatus : existing.paymentStatus;
+  const paymentMethod = data.paymentMethod !== void 0 ? data.paymentMethod : existing.paymentMethod;
+  const paymentTxnId = data.paymentTxnId !== void 0 ? data.paymentTxnId : existing.paymentTxnId;
+  const googleMeetLink = data.googleMeetLink !== void 0 ? data.googleMeetLink : existing.googleMeetLink;
+  const whatsappDeliveryStatus = data.whatsappDeliveryStatus !== void 0 ? data.whatsappDeliveryStatus : existing.whatsappDeliveryStatus;
+  const whatsappMessageId = data.whatsappMessageId !== void 0 ? data.whatsappMessageId : existing.whatsappMessageId;
+  const whatsappError = data.whatsappError !== void 0 ? data.whatsappError : existing.whatsappError;
+  const rows = await sql`
+    UPDATE student_registrations SET
+      name = ${name},
+      phone = ${phone},
+      whatsapp = ${whatsapp},
+      email = ${email},
+      course_id = ${courseId || null},
+      course_name = ${courseName || null},
+      batch_id = ${batchId || null},
+      batch_name = ${batchName || null},
+      fee_amount = ${feeAmount},
+      payment_status = ${paymentStatus},
+      payment_method = ${paymentMethod || null},
+      payment_txn_id = ${paymentTxnId || null},
+      google_meet_link = ${googleMeetLink || null},
+      whatsapp_delivery_status = ${whatsappDeliveryStatus || "pending"},
+      whatsapp_message_id = ${whatsappMessageId || null},
+      whatsapp_error = ${whatsappError || null},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToStudentRegistration(rows[0]) : null;
+}
+async function deleteRegistrationDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM student_registrations WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToStudentRegistration(rows[0]) : null;
+}
+function rowToClass(row) {
+  return {
+    id: row.id,
+    batchId: row.batch_id,
+    batchName: row.batch_name || "",
+    title: row.title,
+    topic: row.topic || "",
+    classNumber: row.class_number ?? 1,
+    date: row.date || "",
+    startTime: row.start_time || "",
+    endTime: row.end_time || "",
+    time: row.start_time && row.end_time ? `${row.start_time} - ${row.end_time}` : row.start_time || "",
+    durationMinutes: row.duration_minutes ?? 60,
+    teacherName: row.teacher_name || "Ziyaur Rehman Zia",
+    instructorName: row.teacher_name || "Ziyaur Rehman Zia",
+    description: row.description || "",
+    status: row.status || "Upcoming",
+    joinUrl: row.join_url || void 0,
+    recordingId: row.recording_id || void 0,
+    hasStudyMaterial: Boolean(row.has_study_material),
+    hasAssignment: Boolean(row.has_assignment),
+    videoKey: row.video_key || void 0
+  };
+}
+async function getClassesDb(batchId) {
+  const sql = getDb();
+  let rows;
+  if (batchId) {
+    rows = await sql`
+      SELECT * FROM classes WHERE batch_id = ${batchId} ORDER BY date ASC, start_time ASC;
+    `;
+  } else {
+    rows = await sql`
+      SELECT * FROM classes ORDER BY date ASC, start_time ASC;
+    `;
+  }
+  return rows.map(rowToClass);
+}
+async function getClassByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM classes WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToClass(rows[0]) : null;
+}
+async function createClassDb(data) {
+  const sql = getDb();
+  const id = data.id || `cls-${Date.now()}`;
+  const batch_id = data.batchId;
+  const batch_name = data.batchName || "";
+  const title = data.title || "Live Interactive Class";
+  const topic = data.topic || "";
+  const class_number = data.classNumber ?? 1;
+  const date = data.date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const start_time = data.startTime || "07:30 PM";
+  const end_time = data.endTime || "08:30 PM";
+  const duration_minutes = data.durationMinutes ?? 60;
+  const teacher_name = data.teacherName || "Ziyaur Rehman Zia";
+  const description = data.description || "";
+  const status = data.status || "Upcoming";
+  const join_url = data.joinUrl || null;
+  const recording_id = data.recordingId || null;
+  const has_study_material = Boolean(data.hasStudyMaterial);
+  const has_assignment = Boolean(data.hasAssignment);
+  const video_key = data.videoKey || null;
+  const rows = await sql`
+    INSERT INTO classes (
+      id, batch_id, batch_name, title, topic, class_number, date,
+      start_time, end_time, duration_minutes, teacher_name, description,
+      status, join_url, recording_id, has_study_material, has_assignment, video_key
+    ) VALUES (
+      ${id}, ${batch_id}, ${batch_name}, ${title}, ${topic}, ${class_number}, ${date},
+      ${start_time}, ${end_time}, ${duration_minutes}, ${teacher_name}, ${description},
+      ${status}, ${join_url}, ${recording_id}, ${has_study_material}, ${has_assignment}, ${video_key}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      batch_id = EXCLUDED.batch_id,
+      batch_name = EXCLUDED.batch_name,
+      title = EXCLUDED.title,
+      topic = EXCLUDED.topic,
+      class_number = EXCLUDED.class_number,
+      date = EXCLUDED.date,
+      start_time = EXCLUDED.start_time,
+      end_time = EXCLUDED.end_time,
+      duration_minutes = EXCLUDED.duration_minutes,
+      teacher_name = EXCLUDED.teacher_name,
+      description = EXCLUDED.description,
+      status = EXCLUDED.status,
+      join_url = EXCLUDED.join_url,
+      recording_id = EXCLUDED.recording_id,
+      has_study_material = EXCLUDED.has_study_material,
+      has_assignment = EXCLUDED.has_assignment,
+      video_key = EXCLUDED.video_key,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToClass(rows[0]);
+}
+async function updateClassDb(id, data) {
+  const sql = getDb();
+  const existing = await getClassByIdDb(id);
+  if (!existing) return null;
+  const title = data.title !== void 0 ? data.title : existing.title;
+  const topic = data.topic !== void 0 ? data.topic : existing.topic;
+  const class_number = data.classNumber !== void 0 ? data.classNumber : existing.classNumber;
+  const date = data.date !== void 0 ? data.date : existing.date;
+  const start_time = data.startTime !== void 0 ? data.startTime : existing.startTime;
+  const end_time = data.endTime !== void 0 ? data.endTime : existing.endTime;
+  const duration_minutes = data.durationMinutes !== void 0 ? data.durationMinutes : existing.durationMinutes;
+  const teacher_name = data.teacherName !== void 0 ? data.teacherName : existing.teacherName;
+  const description = data.description !== void 0 ? data.description : existing.description;
+  const status = data.status !== void 0 ? data.status : existing.status;
+  const join_url = data.joinUrl !== void 0 ? data.joinUrl : existing.joinUrl || null;
+  const recording_id = data.recordingId !== void 0 ? data.recordingId : existing.recordingId || null;
+  const has_study_material = data.hasStudyMaterial !== void 0 ? Boolean(data.hasStudyMaterial) : existing.hasStudyMaterial;
+  const has_assignment = data.hasAssignment !== void 0 ? Boolean(data.hasAssignment) : existing.hasAssignment;
+  const video_key = data.videoKey !== void 0 ? data.videoKey : existing.videoKey || null;
+  const rows = await sql`
+    UPDATE classes SET
+      title = ${title},
+      topic = ${topic},
+      class_number = ${class_number},
+      date = ${date},
+      start_time = ${start_time},
+      end_time = ${end_time},
+      duration_minutes = ${duration_minutes},
+      teacher_name = ${teacher_name},
+      description = ${description},
+      status = ${status},
+      join_url = ${join_url},
+      recording_id = ${recording_id},
+      has_study_material = ${has_study_material},
+      has_assignment = ${has_assignment},
+      video_key = ${video_key},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToClass(rows[0]) : null;
+}
+async function deleteClassDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM classes WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToClass(rows[0]) : null;
+}
+function rowToRecording(row) {
+  return {
+    id: row.id,
+    classId: row.class_id || "",
+    batchId: row.batch_id,
+    batchName: row.batch_name || "",
+    title: row.title,
+    topic: row.topic || "",
+    classNumber: row.class_number ?? 1,
+    date: row.date || "",
+    recordedDate: row.date || "",
+    duration: row.duration || "60 min",
+    status: row.status || "Available",
+    videoKey: row.video_key,
+    description: row.notes_summary || ""
+  };
+}
+async function getRecordingsDb(batchId) {
+  const sql = getDb();
+  let rows;
+  if (batchId) {
+    rows = await sql`
+      SELECT * FROM recordings WHERE batch_id = ${batchId} ORDER BY date DESC, class_number DESC;
+    `;
+  } else {
+    rows = await sql`
+      SELECT * FROM recordings ORDER BY date DESC, class_number DESC;
+    `;
+  }
+  return rows.map(rowToRecording);
+}
+async function getRecordingByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT * FROM recordings WHERE id = ${id} LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToRecording(rows[0]) : null;
+}
+async function createRecordingDb(data) {
+  const sql = getDb();
+  const id = data.id || `rec-${Date.now()}`;
+  const class_id = data.classId || null;
+  const batch_id = data.batchId;
+  const batch_name = data.batchName || "";
+  const title = data.title || "Recorded Lecture Session";
+  const topic = data.topic || "";
+  const class_number = data.classNumber ?? 1;
+  const date = data.date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const duration = data.duration || "60 min";
+  const status = data.status || "Available";
+  const video_key = data.videoKey || `video_rec_${batch_id}_${id}`;
+  const notes_summary = data.description || "";
+  const rows = await sql`
+    INSERT INTO recordings (
+      id, class_id, batch_id, batch_name, title, topic, class_number,
+      date, duration, status, video_key, notes_summary
+    ) VALUES (
+      ${id}, ${class_id}, ${batch_id}, ${batch_name}, ${title}, ${topic}, ${class_number},
+      ${date}, ${duration}, ${status}, ${video_key}, ${notes_summary}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      class_id = EXCLUDED.class_id,
+      batch_id = EXCLUDED.batch_id,
+      batch_name = EXCLUDED.batch_name,
+      title = EXCLUDED.title,
+      topic = EXCLUDED.topic,
+      class_number = EXCLUDED.class_number,
+      date = EXCLUDED.date,
+      duration = EXCLUDED.duration,
+      status = EXCLUDED.status,
+      video_key = EXCLUDED.video_key,
+      notes_summary = EXCLUDED.notes_summary,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToRecording(rows[0]);
+}
+async function updateRecordingDb(id, data) {
+  const sql = getDb();
+  const existing = await getRecordingByIdDb(id);
+  if (!existing) return null;
+  const title = data.title !== void 0 ? data.title : existing.title;
+  const topic = data.topic !== void 0 ? data.topic : existing.topic;
+  const date = data.date !== void 0 ? data.date : existing.date;
+  const duration = data.duration !== void 0 ? data.duration : existing.duration;
+  const status = data.status !== void 0 ? data.status : existing.status;
+  const video_key = data.videoKey !== void 0 ? data.videoKey : existing.videoKey;
+  const notes_summary = data.description !== void 0 ? data.description : existing.description;
+  const rows = await sql`
+    UPDATE recordings SET
+      title = ${title},
+      topic = ${topic},
+      date = ${date},
+      duration = ${duration},
+      status = ${status},
+      video_key = ${video_key},
+      notes_summary = ${notes_summary},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToRecording(rows[0]) : null;
+}
+async function deleteRecordingDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    DELETE FROM recordings WHERE id = ${id} RETURNING *;
+  `;
+  return rows.length > 0 ? rowToRecording(rows[0]) : null;
+}
+function rowToAssignment(row) {
+  return {
+    id: row.id,
+    batchId: row.batch_id,
+    classId: row.class_id || void 0,
+    title: row.title,
+    description: row.description || "",
+    dueDate: row.due_date || "",
+    totalPoints: row.total_points ?? 100,
+    submissionsCount: Number(row.submissions_count ?? 0)
+  };
+}
+async function getAssignmentsDb(batchId) {
+  const sql = getDb();
+  let rows;
+  if (batchId) {
+    rows = await sql`
+      SELECT a.*, COALESCE((SELECT COUNT(*)::int FROM assignment_submissions s WHERE s.assignment_id = a.id), 0) AS submissions_count
+      FROM assignments a
+      WHERE a.batch_id = ${batchId}
+      ORDER BY a.created_at DESC;
+    `;
+  } else {
+    rows = await sql`
+      SELECT a.*, COALESCE((SELECT COUNT(*)::int FROM assignment_submissions s WHERE s.assignment_id = a.id), 0) AS submissions_count
+      FROM assignments a
+      ORDER BY a.created_at DESC;
+    `;
+  }
+  return rows.map(rowToAssignment);
+}
+async function getAssignmentByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT a.*, COALESCE((SELECT COUNT(*)::int FROM assignment_submissions s WHERE s.assignment_id = a.id), 0) AS submissions_count
+    FROM assignments a
+    WHERE a.id = ${id}
+    LIMIT 1;
+  `;
+  return rows.length > 0 ? rowToAssignment(rows[0]) : null;
+}
+function rowToSubmission(row) {
+  return {
+    id: row.id,
+    assignmentId: row.assignment_id,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    batchId: row.batch_id,
+    submittedAt: row.submitted_at ? new Date(row.submitted_at).toISOString() : (/* @__PURE__ */ new Date()).toISOString(),
+    content: row.content,
+    status: row.status || "Submitted",
+    score: row.score !== null && row.score !== void 0 ? Number(row.score) : void 0,
+    feedback: row.feedback || void 0
+  };
+}
+async function getAssignmentSubmissionsDb(opts) {
+  const sql = getDb();
+  const assignmentId = opts?.assignmentId;
+  const batchId = opts?.batchId;
+  const studentId = opts?.studentId;
+  let rows;
+  if (assignmentId) {
+    rows = await sql`SELECT * FROM assignment_submissions WHERE assignment_id = ${assignmentId} ORDER BY submitted_at DESC;`;
+  } else if (studentId) {
+    rows = await sql`SELECT * FROM assignment_submissions WHERE student_id = ${studentId} ORDER BY submitted_at DESC;`;
+  } else if (batchId) {
+    rows = await sql`SELECT * FROM assignment_submissions WHERE batch_id = ${batchId} ORDER BY submitted_at DESC;`;
+  } else {
+    rows = await sql`SELECT * FROM assignment_submissions ORDER BY submitted_at DESC;`;
+  }
+  return rows.map(rowToSubmission);
+}
+async function createAssignmentSubmissionDb(data) {
+  const sql = getDb();
+  const id = data.id || `sub-${Date.now()}`;
+  const assignment_id = data.assignmentId;
+  const student_id = data.studentId;
+  const student_name = data.studentName || "Student";
+  const batch_id = data.batchId;
+  const content = data.content || "";
+  const status = data.status || "Submitted";
+  const rows = await sql`
+    INSERT INTO assignment_submissions (id, assignment_id, student_id, student_name, batch_id, content, status)
+    VALUES (${id}, ${assignment_id}, ${student_id}, ${student_name}, ${batch_id}, ${content}, ${status})
+    RETURNING *;
+  `;
+  return rowToSubmission(rows[0]);
+}
+function rowToAttendance(row) {
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    batchId: row.batch_id,
+    batchName: row.batch_name || "",
+    classId: row.class_id,
+    classTitle: row.class_title || "",
+    joinTime: row.join_time || "",
+    leaveTime: row.leave_time || void 0,
+    durationMinutes: Number(row.duration_minutes ?? 0),
+    status: row.status || "Present",
+    date: row.date || ""
+  };
+}
+async function getAttendanceRecordsDb(opts) {
+  const sql = getDb();
+  const { batchId, classId, studentId } = opts || {};
+  let rows;
+  if (classId) {
+    rows = await sql`SELECT * FROM attendance_records WHERE class_id = ${classId} ORDER BY created_at DESC;`;
+  } else if (batchId) {
+    rows = await sql`SELECT * FROM attendance_records WHERE batch_id = ${batchId} ORDER BY created_at DESC;`;
+  } else if (studentId) {
+    rows = await sql`SELECT * FROM attendance_records WHERE student_id = ${studentId} ORDER BY created_at DESC;`;
+  } else {
+    rows = await sql`SELECT * FROM attendance_records ORDER BY created_at DESC;`;
+  }
+  return rows.map(rowToAttendance);
+}
+async function logAttendanceJoinDb(data) {
+  const sql = getDb();
+  const id = `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const joinTime = data.joinTime || (/* @__PURE__ */ new Date()).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const date = data.date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const rows = await sql`
+    INSERT INTO attendance_records (
+      id, student_id, student_name, batch_id, batch_name, class_id, class_title, join_time, status, date
+    ) VALUES (
+      ${id}, ${data.studentId}, ${data.studentName}, ${data.batchId}, ${data.batchName || null},
+      ${data.classId}, ${data.classTitle || null}, ${joinTime}, 'Present', ${date}
+    )
+    RETURNING *;
+  `;
+  return rowToAttendance(rows[0]);
+}
+async function logAttendanceLeaveDb(classId, studentId, leaveTime) {
+  const sql = getDb();
+  const time = leaveTime || (/* @__PURE__ */ new Date()).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const rows = await sql`
+    UPDATE attendance_records
+    SET leave_time = ${time}
+    WHERE class_id = ${classId} AND student_id = ${studentId} AND leave_time IS NULL
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToAttendance(rows[0]) : null;
+}
+function rowToOrder(row) {
+  return {
+    id: row.id,
+    studentId: row.student_id || void 0,
+    studentName: row.student_name,
+    studentPhone: row.student_phone,
+    studentEmail: row.student_email,
+    courseId: row.course_id || void 0,
+    courseName: row.course_name,
+    batchId: row.batch_id || void 0,
+    batchName: row.batch_name || void 0,
+    coursePrice: Number(row.course_price),
+    discountAmount: Number(row.discount_amount || 0),
+    discountCode: row.discount_code || void 0,
+    expectedAmount: Number(row.expected_amount),
+    currency: row.currency || "INR",
+    orderStatus: row.order_status || "pending",
+    razorpayOrderId: row.razorpay_order_id || void 0,
+    razorpayPaymentId: row.razorpay_payment_id || void 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+async function createOrderDb(data) {
+  const sql = getDb();
+  const id = data.id || `ord-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const rows = await sql`
+    INSERT INTO orders (
+      id, student_id, student_name, student_phone, student_email,
+      course_id, course_name, batch_id, batch_name, course_price,
+      discount_amount, discount_code, expected_amount, currency,
+      order_status, razorpay_order_id, razorpay_payment_id
+    ) VALUES (
+      ${id}, ${data.studentId || null}, ${data.studentName || ""}, ${data.studentPhone || ""}, ${data.studentEmail || ""},
+      ${data.courseId || null}, ${data.courseName || ""}, ${data.batchId || null}, ${data.batchName || null},
+      ${Number(data.coursePrice || 0)}, ${Number(data.discountAmount || 0)}, ${data.discountCode || null},
+      ${Number(data.expectedAmount || 0)}, ${data.currency || "INR"},
+      ${data.orderStatus || "pending"}, ${data.razorpayOrderId || null}, ${data.razorpayPaymentId || null}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      order_status = EXCLUDED.order_status,
+      razorpay_order_id = COALESCE(EXCLUDED.razorpay_order_id, orders.razorpay_order_id),
+      razorpay_payment_id = COALESCE(EXCLUDED.razorpay_payment_id, orders.razorpay_payment_id),
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+  return rowToOrder(rows[0]);
+}
+async function getOrderByIdDb(id) {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM orders WHERE id = ${id} LIMIT 1;`;
+  return rows.length > 0 ? rowToOrder(rows[0]) : null;
+}
+async function getOrderByRazorpayOrderIdDb(razorpayOrderId) {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM orders WHERE razorpay_order_id = ${razorpayOrderId} LIMIT 1;`;
+  return rows.length > 0 ? rowToOrder(rows[0]) : null;
+}
+async function updateOrderStatusDb(id, status, razorpayPaymentId, razorpayOrderId) {
+  const sql = getDb();
+  const rows = await sql`
+    UPDATE orders
+    SET order_status = ${status},
+        razorpay_payment_id = COALESCE(${razorpayPaymentId || null}, razorpay_payment_id),
+        razorpay_order_id = COALESCE(${razorpayOrderId || null}, razorpay_order_id),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rowToOrder(rows[0]) : null;
+}
+async function getOrdersDb() {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM orders ORDER BY created_at DESC;`;
+  return rows.map(rowToOrder);
+}
+function rowToPayment(row) {
+  return {
+    id: row.id,
+    orderId: row.order_id || void 0,
+    paymentId: row.payment_id,
+    razorpayPaymentId: row.razorpay_payment_id || void 0,
+    razorpayOrderId: row.razorpay_order_id || void 0,
+    signature: row.signature || void 0,
+    amount: Number(row.amount),
+    currency: row.currency || "INR",
+    status: row.status || "Paid",
+    studentName: row.student_name || void 0,
+    studentEmail: row.student_email || void 0,
+    studentPhone: row.student_phone || void 0,
+    courseId: row.course_id || void 0,
+    courseName: row.course_name || void 0,
+    batchId: row.batch_id || void 0,
+    batchName: row.batch_name || void 0,
+    admissionId: row.admission_id || void 0,
+    method: row.method || void 0,
+    source: row.source || "razorpay_verify",
+    rawPayload: row.raw_payload || void 0,
+    verifiedAt: row.verified_at ? new Date(row.verified_at).toISOString() : void 0,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function createPaymentDb(data) {
+  const sql = getDb();
+  const id = data.id || `pay-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const paymentId = data.paymentId || data.razorpayPaymentId || `pay_manual_${Date.now()}`;
+  const rawPayload = data.rawPayload ? JSON.stringify(data.rawPayload) : null;
+  const rows = await sql`
+    INSERT INTO payments (
+      id, order_id, payment_id, razorpay_payment_id, razorpay_order_id,
+      signature, amount, currency, status, student_name, student_email,
+      student_phone, course_id, course_name, batch_id, batch_name,
+      admission_id, method, source, raw_payload, verified_at
+    ) VALUES (
+      ${id}, ${data.orderId || null}, ${paymentId}, ${data.razorpayPaymentId || null},
+      ${data.razorpayOrderId || null}, ${data.signature || null}, ${Number(data.amount || 0)},
+      ${data.currency || "INR"}, ${data.status || "Paid"}, ${data.studentName || null},
+      ${data.studentEmail || null}, ${data.studentPhone || null}, ${data.courseId || null},
+      ${data.courseName || null}, ${data.batchId || null}, ${data.batchName || null},
+      ${data.admissionId || null}, ${data.method || "online"}, ${data.source || "razorpay_verify"},
+      ${rawPayload}::jsonb, ${data.verifiedAt ? new Date(data.verifiedAt).toISOString() : (/* @__PURE__ */ new Date()).toISOString()}
+    )
+    ON CONFLICT (payment_id) DO UPDATE SET
+      status = EXCLUDED.status,
+      signature = COALESCE(EXCLUDED.signature, payments.signature),
+      verified_at = COALESCE(EXCLUDED.verified_at, payments.verified_at)
+    RETURNING *;
+  `;
+  return rowToPayment(rows[0]);
+}
+async function getPaymentsDb() {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM payments ORDER BY created_at DESC;`;
+  return rows.map(rowToPayment);
+}
+function rowToNotification(row) {
+  return {
+    id: row.id,
+    userId: row.user_id || void 0,
+    batchId: row.batch_id || void 0,
+    type: row.type || "announcement",
+    title: row.title,
+    message: row.message,
+    read: Boolean(row.read),
+    timestamp: row.created_at ? new Date(row.created_at).toISOString() : (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function getNotificationsDb(userId) {
+  const sql = getDb();
+  let rows;
+  if (userId) {
+    rows = await sql`
+      SELECT * FROM notifications 
+      WHERE user_id = ${userId} OR user_id IS NULL 
+      ORDER BY created_at DESC LIMIT 50;
+    `;
+  } else {
+    rows = await sql`
+      SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50;
+    `;
+  }
+  return rows.map(rowToNotification);
+}
+async function getSupportTicketsDb() {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM support_tickets ORDER BY created_at DESC;`;
+  return rows;
+}
+async function updateSupportTicketDb(id, updates) {
+  const sql = getDb();
+  const rows = await sql`
+    UPDATE support_tickets
+    SET status = COALESCE(${updates.status || null}, status),
+        assigned_agent_id = COALESCE(${updates.assignedAgentId || null}, assigned_agent_id),
+        assigned_agent_name = COALESCE(${updates.assignedAgentName || null}, assigned_agent_name),
+        resolution_notes = COALESCE(${updates.resolutionNotes || null}, resolution_notes),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${id}
+    RETURNING *;
+  `;
+  return rows.length > 0 ? rows[0] : null;
+}
+async function getKnowledgeBaseDb() {
+  const sql = getDb();
+  const rows = await sql`SELECT * FROM knowledge_base ORDER BY created_at ASC;`;
+  return rows;
+}
+async function createKnowledgeBaseDb(data) {
+  const sql = getDb();
+  const id = `kb-${Date.now()}`;
+  const rows = await sql`
+    INSERT INTO knowledge_base (id, category, question, answer)
+    VALUES (${id}, ${data.category || "General"}, ${data.question}, ${data.answer})
+    RETURNING *;
+  `;
+  return rows[0];
+}
+async function deleteKnowledgeBaseDb(id) {
+  const sql = getDb();
+  const rows = await sql`DELETE FROM knowledge_base WHERE id = ${id} RETURNING *;`;
+  return rows.length > 0 ? rows[0] : null;
+}
 
 // server.ts
 var s3ClientInstance = null;
@@ -4174,38 +5050,12 @@ function verifyPassword(inputPassword, storedHashOrPlain, salt = "witslingo_salt
   }
   return false;
 }
-var defaultAdminUsers = [
-  {
-    id: "usr-admin-01",
-    name: "Ziyaur Rehman Zia",
-    email: "witslingo@gmail.com",
-    passwordHash: "admin123",
-    role: "admin",
-    phone: "7310952271",
-    batchIds: [],
-    registrationDate: "2026-01-01"
-  },
-  {
-    id: "usr-admin-02",
-    name: "Arsh (Admin)",
-    email: "arsh522011@gmail.com",
-    passwordHash: "admin123",
-    role: "admin",
-    phone: "7310952271",
-    batchIds: [],
-    registrationDate: "2026-01-01"
-  }
-];
-var users = [...defaultAdminUsers];
+var defaultAdminUsers = [];
+var users = [];
 var registrations = [];
 var batches = [];
 var classes = [];
 var recordings = [];
-var studyMaterials = [];
-var assignments = [];
-var submissions = [];
-var announcements = [];
-var attendanceRecords = [];
 var cmsContent = {
   academyName: "WITS LINGO",
   tagline: "A Global Language Platform",
@@ -4515,20 +5365,8 @@ async function loadAllPersistedDataAsync() {
         console.log(`[Persistence] Hydrated ${registrations.length} student registrations from Backblaze B2.`);
       }
       if (Array.isArray(cloudUsers)) {
-        const userMap = /* @__PURE__ */ new Map();
-        for (const admin of defaultAdminUsers) {
-          userMap.set(admin.email.toLowerCase(), admin);
-        }
-        for (const u of cloudUsers) {
-          if (u.role === "admin" && userMap.has(u.email.toLowerCase())) {
-            userMap.set(u.email.toLowerCase(), { ...userMap.get(u.email.toLowerCase()), ...u });
-          } else {
-            userMap.set(u.email.toLowerCase(), u);
-          }
-        }
         users.length = 0;
-        users.push(...Array.from(userMap.values()));
-        console.log(`[Persistence] Hydrated ${users.length} users from Backblaze B2.`);
+        users.push(...cloudUsers);
       }
       if (Array.isArray(cloudClasses)) {
         classes.length = 0;
@@ -4565,94 +5403,6 @@ function ensurePersistenceInitialized() {
     persistenceInitPromise = loadAllPersistedDataAsync();
   }
   return persistenceInitPromise;
-}
-async function saveRegistrations() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
-    } catch (e) {
-    }
-  }
-  await durableStorageService.saveCollection("registrations", registrations);
-}
-async function saveUsers() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
-    } catch (e) {
-    }
-  }
-  await durableStorageService.saveCollection("users", users);
-}
-async function saveBatches() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save batches:", e);
-    }
-  }
-  await durableStorageService.saveCollection("batches", batches);
-}
-async function saveClasses() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(CLASSES_STORAGE_FILE, JSON.stringify(classes, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save classes:", e);
-    }
-  }
-  await durableStorageService.saveCollection("classes", classes);
-}
-async function saveRecordings() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(RECORDINGS_STORAGE_FILE, JSON.stringify(recordings, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save recordings:", e);
-    }
-  }
-  await durableStorageService.saveCollection("recordings", recordings);
-}
-async function savePayments() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save payments:", e);
-    }
-  }
-  await durableStorageService.saveCollection("payments", payments);
-}
-async function saveCmsContent() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
-      fs7.writeFileSync(CMS_ALT_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save cmsContent:", e);
-    }
-  }
-  await durableStorageService.saveCollection("cmsContent", [cmsContent]);
-}
-async function saveAnnouncements() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(ANNOUNCEMENTS_STORAGE_FILE, JSON.stringify(announcements, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("[Persistence] Could not save announcements:", e);
-    }
-  }
-  await durableStorageService.saveCollection("announcements", announcements);
-}
-async function saveOrders() {
-  if (process.env.VERCEL !== "1") {
-    try {
-      fs7.writeFileSync(ORDERS_STORAGE_FILE, JSON.stringify(orders, null, 2), "utf-8");
-    } catch (e) {
-    }
-  }
-  await durableStorageService.saveCollection("orders", orders);
 }
 async function saveNotifications() {
   if (process.env.VERCEL !== "1") {
@@ -4693,7 +5443,11 @@ async function saveSupportTickets() {
 ensurePersistenceInitialized().catch(() => {
 });
 async function sendWhatsAppEnrollmentMessage(data) {
-  const studentReg = registrations.find((r) => r.admissionId === data.admissionId || r.id === data.admissionId);
+  let studentReg = null;
+  try {
+    studentReg = await getRegistrationByAdmissionIdDb(data.admissionId) || await getRegistrationByIdDb(data.admissionId);
+  } catch {
+  }
   if (studentReg && studentReg.whatsappDeliveryStatus === "sent" && !data.forceResend) {
     console.log(`[WhatsApp] Idempotency: Enrollment ${data.admissionId} already confirmed via WhatsApp (ID: ${studentReg.whatsappMessageId}). Skipping duplicate dispatch.`);
     return { success: true, skipped: true, messageId: studentReg.whatsappMessageId };
@@ -4718,9 +5472,11 @@ async function sendWhatsAppEnrollmentMessage(data) {
   if (!cleanRecipient || cleanRecipient.length < 10) {
     const errMsg = "Invalid recipient phone number for WhatsApp Cloud API";
     if (studentReg) {
-      studentReg.whatsappDeliveryStatus = "failed";
-      studentReg.whatsappError = errMsg;
-      saveRegistrations();
+      await updateRegistrationDb(studentReg.id, {
+        whatsappDeliveryStatus: "failed",
+        whatsappError: errMsg
+      }).catch(() => {
+      });
     }
     return { success: false, error: errMsg };
   }
@@ -4827,22 +5583,24 @@ https://witslingo.com`
     const errDetail = sendRes.sanitizedError || sendRes.error || "WhatsApp dispatch rejected by Meta Cloud API";
     console.warn(`[WhatsApp] Delivery failure to ${cleanRecipient}: ${errDetail}`);
     if (studentReg) {
-      studentReg.whatsappDeliveryStatus = "failed";
-      studentReg.whatsappError = errDetail;
-      studentReg.facilities = rawFacilities;
-      saveRegistrations();
+      await updateRegistrationDb(studentReg.id, {
+        whatsappDeliveryStatus: "failed",
+        whatsappError: errDetail,
+        facilities: rawFacilities
+      }).catch(() => {
+      });
     }
     return { success: false, error: errDetail };
   }
   const msgId = sendRes.messageId || `wa_msg_${Date.now()}`;
   console.log(`[WhatsApp] Automated enrollment notification sent to ${cleanRecipient} (Message ID: ${msgId})`);
   if (studentReg) {
-    studentReg.whatsappDeliveryStatus = "sent";
-    studentReg.whatsappMessageId = msgId;
-    studentReg.whatsappSentAt = (/* @__PURE__ */ new Date()).toISOString();
-    studentReg.whatsappError = void 0;
-    studentReg.facilities = rawFacilities;
-    saveRegistrations();
+    await updateRegistrationDb(studentReg.id, {
+      whatsappDeliveryStatus: "sent",
+      whatsappMessageId: msgId,
+      facilities: rawFacilities
+    }).catch(() => {
+    });
   }
   return { success: true, messageId: msgId };
 }
@@ -4881,19 +5639,21 @@ async function sendPaymentConfirmationWhatsApp(order, payment, forceResend = fal
 async function handleInboundStudentMessage(recipientPhone, messageText, provider, providerMsgId) {
   let cleanPhone = whatsappCloudApiService.normalizePhone(recipientPhone || "");
   if (!cleanPhone) cleanPhone = "unknown";
-  const matchedReg = registrations.find((r) => {
+  const allRegistrations = await getRegistrationsDb().catch(() => []);
+  const allOrders = await getOrdersDb().catch(() => []);
+  const matchedReg = allRegistrations.find((r) => {
     const p1 = (r.phone || "").replace(/\D/g, "");
     const p2 = (r.whatsapp || "").replace(/\D/g, "");
     return cleanPhone.endsWith(p1) || cleanPhone.endsWith(p2) || p1.endsWith(cleanPhone);
   });
-  const matchedOrder = orders.find((o) => {
+  const matchedOrder = allOrders.find((o) => {
     const op = (o.studentPhone || "").replace(/\D/g, "");
     return cleanPhone.endsWith(op) || op.endsWith(cleanPhone);
   });
   const studentName = matchedReg?.name || matchedOrder?.studentName || "Student";
   const studentEmail = matchedReg?.email || matchedOrder?.studentEmail;
   const studentEnrollments = [];
-  for (const r of registrations) {
+  for (const r of allRegistrations) {
     const p1 = (r.phone || "").replace(/\D/g, "");
     const p2 = (r.whatsapp || "").replace(/\D/g, "");
     if (cleanPhone.endsWith(p1) || cleanPhone.endsWith(p2) || p1.endsWith(cleanPhone)) {
@@ -5336,7 +6096,7 @@ app.post(["/api/auth/login", "/api/admin/auth/login", "/api/admin/login"], async
   const envAdminUsername = (process.env.ADMIN_USERNAME || ADMIN_USERNAME).trim().toLowerCase();
   const envAdminPassword = (process.env.ADMIN_PASSWORD || ADMIN_PASSWORD).trim();
   const isEnvAdminMatch = loginIdentifier.toLowerCase() === envAdminUsername || loginIdentifier.toLowerCase() === envAdminEmail || loginIdentifier.toLowerCase() === "admin@witslingo.com";
-  if (isEnvAdminMatch && (inputPass === envAdminPassword || verifyPassword(inputPass, envAdminPassword) || inputPass === "admin123")) {
+  if (isEnvAdminMatch && (inputPass === envAdminPassword || verifyPassword(inputPass, envAdminPassword))) {
     const primaryAdmin = {
       userId: "usr-admin-primary",
       name: process.env.ADMIN_NAME || "WITS LINGO Administrator",
@@ -5363,59 +6123,6 @@ app.post(["/api/auth/login", "/api/admin/auth/login", "/api/admin/login"], async
       }
     });
   }
-  const user = users.find(
-    (u) => u.email.toLowerCase() === loginIdentifier.toLowerCase() || u.admissionId && u.admissionId.toLowerCase() === loginIdentifier.toLowerCase() || u.username && u.username.toLowerCase() === loginIdentifier.toLowerCase()
-  );
-  if (user) {
-    const passwordMatches = verifyPassword(inputPass, user.passwordHash) || user.role === "admin" && (verifyPassword(inputPass, envAdminPassword) || inputPass === "admin123");
-    if (passwordMatches) {
-      if (user.role === "admin") {
-        const token2 = jwt.sign(
-          {
-            userId: user.id,
-            name: user.name,
-            email: user.email,
-            role: "admin",
-            batchIds: user.batchIds
-          },
-          JWT_SECRET,
-          { expiresIn: "24h" }
-        );
-        res.setHeader(
-          "Set-Cookie",
-          `admin_session_token=${token2}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${24 * 60 * 60}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
-        );
-        return res.json({
-          success: true,
-          token: token2,
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            phone: user.phone,
-            batchIds: user.batchIds,
-            registrationDate: user.registrationDate
-          }
-        });
-      }
-      const token = generateAuthToken(user);
-      return res.json({
-        success: true,
-        token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          phone: user.phone,
-          batchIds: user.batchIds,
-          admissionId: user.admissionId,
-          registrationDate: user.registrationDate
-        }
-      });
-    }
-  }
   return res.status(401).json({ error: "Invalid username or password" });
 });
 app.post(["/api/auth/logout", "/api/admin/auth/logout", "/api/admin/logout"], (req, res) => {
@@ -5425,20 +6132,25 @@ app.post(["/api/auth/logout", "/api/admin/auth/logout", "/api/admin/logout"], (r
   );
   res.json({ success: true, message: "Logged out successfully" });
 });
-app.get(["/api/auth/me", "/api/admin/auth/me"], (req, res) => {
+app.get(["/api/auth/me", "/api/admin/auth/me"], async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Unauthorized. Please log in." });
   }
   if (auth.role === "admin") {
+    let adminUser = null;
+    try {
+      if (auth.userId) adminUser = await getUserByIdDb(auth.userId);
+    } catch {
+    }
     return res.json({
       user: {
-        id: auth.userId || "usr-admin-primary",
-        name: auth.name || "WITS LINGO Administrator",
-        email: auth.email || "admin@witslingo.com",
+        id: adminUser?.id || auth.userId || "usr-admin-primary",
+        name: adminUser?.name || auth.name || "WITS LINGO Administrator",
+        email: adminUser?.email || auth.email || "admin@witslingo.com",
         role: "admin",
-        phone: "9027729917",
+        phone: adminUser?.phone || "9027729917",
         batchIds: [],
         registrationDate: "2026-01-01"
       },
@@ -5446,26 +6158,32 @@ app.get(["/api/auth/me", "/api/admin/auth/me"], (req, res) => {
       batches: []
     });
   }
-  let user = users.find((u) => u.id === auth.userId);
-  if (!user) {
-    return res.status(404).json({ error: "User not found." });
+  try {
+    const user = await getUserByIdDb(auth.userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+    const allBatches = await getBatchesDb(false);
+    const userBatches = allBatches.filter((b) => (user.batchIds || []).includes(b.id));
+    const userToken = generateAuthToken(user);
+    return res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        batchIds: user.batchIds,
+        admissionId: user.admissionId,
+        registrationDate: user.registrationDate
+      },
+      token: userToken,
+      batches: userBatches
+    });
+  } catch (err) {
+    console.error("[Auth /me] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to retrieve user session." });
   }
-  const userBatches = batches.filter((b) => user.batchIds.includes(b.id));
-  const userToken = generateAuthToken(user);
-  res.json({
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      phone: user.phone,
-      batchIds: user.batchIds,
-      admissionId: user.admissionId,
-      registrationDate: user.registrationDate
-    },
-    token: userToken,
-    batches: userBatches
-  });
 });
 app.get("/api/batches", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
@@ -5494,23 +6212,30 @@ app.get("/api/admin/batches", requireAdmin, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to retrieve batches from database." });
   }
 });
-app.get("/api/batches/:batchId/classes", (req, res) => {
+app.get("/api/batches/:batchId/classes", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
   const { batchId } = req.params;
   const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required. Please login to access batch classes." });
   }
-  if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
+  if (auth.role !== "admin" && !(auth.batchIds || []).includes(batchId)) {
     return res.status(403).json({
       error: "Access Denied: You do not have authorization to view or access this batch's classes.",
       code: "BATCH_UNAUTHORIZED",
       requestedBatchId: batchId
     });
   }
-  const batchClasses = classes.filter((c) => c.batchId === batchId);
-  res.json({ classes: batchClasses });
+  try {
+    const batchClasses = await getClassesDb(batchId);
+    return res.json({ classes: batchClasses });
+  } catch (err) {
+    console.error("[Classes GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ error: "Failed to load classes from database." });
+  }
 });
-app.get("/api/batches/:batchId/recordings", (req, res) => {
+app.get("/api/batches/:batchId/recordings", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
   const { batchId } = req.params;
   const auth = verifyAuthToken(req);
   if (!auth) {
@@ -5523,10 +6248,15 @@ app.get("/api/batches/:batchId/recordings", (req, res) => {
       requestedBatchId: batchId
     });
   }
-  const batchRecordings = recordings.filter((r) => r.batchId === batchId);
-  res.json({ recordings: batchRecordings });
+  try {
+    const batchRecordings = await getRecordingsDb(batchId);
+    return res.json({ recordings: batchRecordings });
+  } catch (err) {
+    console.error("[Recordings GET] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to load recordings from database." });
+  }
 });
-app.get("/api/batches/:batchId/recordings/:recordingId/stream-ticket", (req, res) => {
+app.get("/api/batches/:batchId/recordings/:recordingId/stream-ticket", async (req, res) => {
   const { batchId, recordingId } = req.params;
   const auth = verifyAuthToken(req);
   if (!auth) {
@@ -5538,67 +6268,81 @@ app.get("/api/batches/:batchId/recordings/:recordingId/stream-ticket", (req, res
       code: "UNAUTHORIZED_RECORDING_ACCESS"
     });
   }
-  const rec = recordings.find((r) => r.id === recordingId && r.batchId === batchId);
-  if (!rec) {
-    return res.status(404).json({ error: "Recording not found for this batch." });
+  try {
+    const rec = await getRecordingByIdDb(recordingId);
+    if (!rec || rec.batchId !== batchId) {
+      return res.status(404).json({ error: "Recording not found for this batch." });
+    }
+    const token = generateSignedPlaybackToken(auth.userId, rec.classId, batchId);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1e3).toISOString();
+    return res.json({
+      success: true,
+      playbackTicket: token,
+      streamUrl: `/api/stream/recording/${token}`,
+      expiresAt,
+      watermarkText: `${auth.name} \u2022 ${auth.userId} \u2022 Wits Lingo Academy Authorized Student`,
+      recording: rec
+    });
+  } catch (err) {
+    console.error("[Stream ticket] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to generate stream ticket." });
   }
-  const token = generateSignedPlaybackToken(auth.userId, rec.classId, batchId);
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1e3).toISOString();
-  res.json({
-    success: true,
-    playbackTicket: token,
-    streamUrl: `/api/stream/recording/${token}`,
-    expiresAt,
-    watermarkText: `${auth.name} \u2022 ${auth.userId} \u2022 Wits Lingo Academy Authorized Student`,
-    recording: rec
-  });
 });
-app.get("/api/classes/:classId", (req, res) => {
+app.get("/api/classes/:classId", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
   const { classId } = req.params;
   const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required." });
   }
-  const cls = classes.find((c) => c.id === classId);
-  if (!cls) {
-    return res.status(404).json({ error: "Class not found." });
-  }
-  if (auth.role !== "admin" && !auth.batchIds.includes(cls.batchId)) {
-    return res.status(403).json({
-      error: "Access Denied: You are not authorized to access this class. It belongs to another batch.",
-      code: "CLASS_BATCH_MISMATCH"
+  try {
+    const cls = await getClassByIdDb(classId);
+    if (!cls) {
+      return res.status(404).json({ error: "Class not found." });
+    }
+    if (auth.role !== "admin" && !(auth.batchIds || []).includes(cls.batchId)) {
+      return res.status(403).json({
+        error: "Access Denied: You are not authorized to access this class. It belongs to another batch.",
+        code: "CLASS_BATCH_MISMATCH"
+      });
+    }
+    const [batchRecordings, batchMaterials, batchAssignments] = await Promise.all([
+      getRecordingsDb(cls.batchId),
+      getStudyMaterialsDb({ batchId: cls.batchId, includeUnpublished: auth.role === "admin" }),
+      getAssignmentsDb(cls.batchId)
+    ]);
+    const clsRecording = batchRecordings.find((r) => r.classId === classId) || null;
+    const clsMaterials = batchMaterials.filter((m) => m.classId === classId || m.batchId === cls.batchId && !m.classId);
+    const clsAssignments = batchAssignments.filter((a) => a.classId === classId || a.batchId === cls.batchId && !a.classId);
+    return res.json({
+      class: cls,
+      recording: clsRecording,
+      materials: clsMaterials,
+      assignments: clsAssignments
     });
+  } catch (err) {
+    console.error("[Class GET] Database query failed:", err?.message || err);
+    return res.status(500).json({ error: "Failed to retrieve class details." });
   }
-  const clsRecording = recordings.find((r) => r.classId === classId);
-  const clsMaterials = studyMaterials.filter((m) => m.classId === classId || m.batchId === cls.batchId && !m.classId);
-  const clsAssignments = assignments.filter((a) => a.classId === classId || a.batchId === cls.batchId && !a.classId);
-  res.json({
-    class: cls,
-    recording: clsRecording,
-    materials: clsMaterials,
-    assignments: clsAssignments
-  });
 });
-app.post("/api/classes/:classId/join", (req, res) => {
+app.post("/api/classes/:classId/join", async (req, res) => {
   const { classId } = req.params;
   const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  const cls = classes.find((c) => c.id === classId);
-  if (!cls) {
-    return res.status(404).json({ error: "Class not found." });
-  }
-  if (auth.role !== "admin" && !auth.batchIds.includes(cls.batchId)) {
-    return res.status(403).json({ error: "Access Denied: You cannot join a live class for an unauthorized batch." });
-  }
-  const now = /* @__PURE__ */ new Date();
-  const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const dateStr = now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  let att = attendanceRecords.find((a) => a.studentId === auth.userId && a.classId === classId);
-  if (!att) {
-    att = {
-      id: `att-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+  try {
+    const cls = await getClassByIdDb(classId);
+    if (!cls) {
+      return res.status(404).json({ error: "Class not found." });
+    }
+    if (auth.role !== "admin" && !(auth.batchIds || []).includes(cls.batchId)) {
+      return res.status(403).json({ error: "Access Denied: You cannot join a live class for an unauthorized batch." });
+    }
+    const now = /* @__PURE__ */ new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const dateStr = now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    const att = await logAttendanceJoinDb({
       studentId: auth.userId,
       studentName: auth.name,
       batchId: cls.batchId,
@@ -5606,81 +6350,86 @@ app.post("/api/classes/:classId/join", (req, res) => {
       classId: cls.id,
       classTitle: cls.title,
       joinTime: timeStr,
-      durationMinutes: 1,
-      status: "Present",
       date: dateStr
-    };
-    attendanceRecords.unshift(att);
+    });
+    return res.json({
+      success: true,
+      message: "Attendance recorded successfully.",
+      attendanceId: att.id,
+      joinedAt: timeStr,
+      liveSession: {
+        classId: cls.id,
+        title: cls.title,
+        batchName: cls.batchName,
+        instructor: cls.teacherName,
+        isLive: cls.status === "Live"
+      }
+    });
+  } catch (err) {
+    console.error("[Attendance Join] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to record attendance." });
   }
-  res.json({
-    success: true,
-    message: "Attendance recorded successfully.",
-    attendanceId: att.id,
-    joinedAt: timeStr,
-    liveSession: {
-      classId: cls.id,
-      title: cls.title,
-      batchName: cls.batchName,
-      instructor: cls.teacherName,
-      isLive: cls.status === "Live"
-    }
-  });
 });
-app.post("/api/classes/:classId/leave", (req, res) => {
+app.post("/api/classes/:classId/leave", async (req, res) => {
   const { classId } = req.params;
   const auth = verifyAuthToken(req);
-  const { durationMinutes } = req.body;
   if (!auth) return res.status(401).json({ error: "Unauthorized" });
-  const att = attendanceRecords.find((a) => a.studentId === auth.userId && a.classId === classId);
-  if (att) {
+  try {
     const now = /* @__PURE__ */ new Date();
-    att.leaveTime = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    if (durationMinutes && typeof durationMinutes === "number") {
-      att.durationMinutes = Math.max(att.durationMinutes, durationMinutes);
-    }
+    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    await logAttendanceLeaveDb(classId, auth.userId, timeStr);
+    return res.json({ success: true, message: "Attendance session closed." });
+  } catch (err) {
+    console.error("[Attendance Leave] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to close attendance session." });
   }
-  res.json({ success: true, message: "Attendance session closed." });
 });
-app.get("/api/classes/:classId/recording-token", (req, res) => {
+app.get("/api/classes/:classId/recording-token", async (req, res) => {
   const { classId } = req.params;
   const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required to watch recording." });
   }
-  const cls = classes.find((c) => c.id === classId);
-  if (!cls) {
-    return res.status(404).json({ error: "Class not found." });
-  }
-  if (auth.role !== "admin" && !auth.batchIds.includes(cls.batchId)) {
-    return res.status(403).json({
-      error: "Access Denied: You do not have permission to access recordings for this batch.",
-      code: "UNAUTHORIZED_RECORDING_ACCESS"
-    });
-  }
-  const rec = recordings.find((r) => r.classId === classId);
-  if (!rec) {
-    return res.status(404).json({ error: "No recording available for this class yet." });
-  }
-  const token = generateSignedPlaybackToken(auth.userId, classId, cls.batchId);
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1e3).toISOString();
-  res.json({
-    success: true,
-    playbackToken: token,
-    streamUrl: `/api/stream/recording/${token}`,
-    expiresAt,
-    watermarkText: `${auth.name} \u2022 ${auth.userId} \u2022 Wits Lingo Academy Authorized Student`,
-    recording: {
-      id: rec.id,
-      title: rec.title,
-      topic: rec.topic,
-      classNumber: rec.classNumber,
-      date: rec.date,
-      duration: rec.duration,
-      notesSummary: rec.notesSummary
+  try {
+    const cls = await getClassByIdDb(classId);
+    if (!cls) {
+      return res.status(404).json({ error: "Class not found." });
     }
-  });
+    if (auth.role !== "admin" && !(auth.batchIds || []).includes(cls.batchId)) {
+      return res.status(403).json({
+        error: "Access Denied: You do not have permission to access recordings for this batch.",
+        code: "UNAUTHORIZED_RECORDING_ACCESS"
+      });
+    }
+    const batchRecordings = await getRecordingsDb(cls.batchId);
+    const rec = batchRecordings.find((r) => r.classId === classId);
+    if (!rec) {
+      return res.status(404).json({ error: "No recording available for this class yet." });
+    }
+    const token = generateSignedPlaybackToken(auth.userId, classId, cls.batchId);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1e3).toISOString();
+    return res.json({
+      success: true,
+      playbackToken: token,
+      streamUrl: `/api/stream/recording/${token}`,
+      expiresAt,
+      watermarkText: `${auth.name} \u2022 ${auth.userId} \u2022 Wits Lingo Academy Authorized Student`,
+      recording: {
+        id: rec.id,
+        title: rec.title,
+        topic: rec.topic,
+        classNumber: rec.classNumber,
+        date: rec.date,
+        duration: rec.duration,
+        notesSummary: rec.notesSummary
+      }
+    });
+  } catch (err) {
+    console.error("[Recording Token] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to generate recording token." });
+  }
 });
-app.get("/api/stream/recording/:token", (req, res) => {
+app.get("/api/stream/recording/:token", async (req, res) => {
   const { token } = req.params;
   const verified = verifyPlaybackToken(token);
   if (!verified) {
@@ -5689,26 +6438,34 @@ app.get("/api/stream/recording/:token", (req, res) => {
       code: "TOKEN_EXPIRED_OR_INVALID"
     });
   }
-  const cls = classes.find((c) => c.id === verified.classId);
-  const rec = recordings.find((r) => r.classId === verified.classId);
-  const user = users.find((u) => u.id === verified.studentId);
-  if (!cls || !rec) {
-    return res.status(404).json({ error: "Recording stream not found." });
+  try {
+    const [cls, user, recordingsList] = await Promise.all([
+      getClassByIdDb(verified.classId),
+      getUserByIdDb(verified.studentId),
+      getRecordingsDb(verified.batchId)
+    ]);
+    const rec = recordingsList.find((r) => r.classId === verified.classId);
+    if (!cls || !rec) {
+      return res.status(404).json({ error: "Recording stream not found." });
+    }
+    if (user && user.role !== "admin" && !(user.batchIds || []).includes(verified.batchId)) {
+      return res.status(403).json({ error: "Revoked authorization: Student no longer belongs to this batch." });
+    }
+    return res.json({
+      secureStream: true,
+      classId: cls.id,
+      title: cls.title,
+      duration: rec.duration,
+      watermark: `${user?.name || "Student"} \u2022 WL-VERIFIED \u2022 Session Expiry ${new Date(verified.expiresAt).toLocaleTimeString()}`,
+      videoKey: rec.videoKey,
+      mimeType: "video/mp4",
+      playbackProtocol: "HLS_Signed_VOD",
+      notes: rec.notesSummary
+    });
+  } catch (err) {
+    console.error("[Stream recording] Error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to access recording stream." });
   }
-  if (user && user.role !== "admin" && !user.batchIds.includes(verified.batchId)) {
-    return res.status(403).json({ error: "Revoked authorization: Student no longer belongs to this batch." });
-  }
-  res.json({
-    secureStream: true,
-    classId: cls.id,
-    title: cls.title,
-    duration: rec.duration,
-    watermark: `${user?.name || "Student"} \u2022 WL-VERIFIED \u2022 Session Expiry ${new Date(verified.expiresAt).toLocaleTimeString()}`,
-    videoKey: rec.videoKey,
-    mimeType: "video/mp4",
-    playbackProtocol: "HLS_Signed_VOD",
-    notes: rec.notesSummary
-  });
 });
 app.get("/api/batches/:batchId/materials", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
@@ -5730,44 +6487,57 @@ app.get("/api/batches/:batchId/materials", async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to retrieve batch materials from database." });
   }
 });
-app.get("/api/batches/:batchId/assignments", (req, res) => {
+app.get("/api/batches/:batchId/assignments", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
   const { batchId } = req.params;
   const auth = verifyAuthToken(req);
   if (!auth) return res.status(401).json({ error: "Authentication required." });
-  if (auth.role !== "admin" && !auth.batchIds.includes(batchId)) {
+  if (auth.role !== "admin" && !(auth.batchIds || []).includes(batchId)) {
     return res.status(403).json({ error: "Access Denied: You are not authorized to access assignments for this batch." });
   }
-  const batchAssignments = assignments.filter((a) => a.batchId === batchId);
-  const mySubmissions = submissions.filter((s) => s.studentId === auth.userId);
-  res.json({
-    assignments: batchAssignments,
-    submissions: mySubmissions
-  });
+  try {
+    const [batchAssignments, mySubmissions] = await Promise.all([
+      getAssignmentsDb(batchId),
+      getAssignmentSubmissionsDb({ batchId, studentId: auth.userId })
+    ]);
+    return res.json({
+      assignments: batchAssignments,
+      submissions: mySubmissions
+    });
+  } catch (err) {
+    console.error("[Assignments GET] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to retrieve assignments from database." });
+  }
 });
-app.post("/api/assignments/:assignmentId/submit", (req, res) => {
+app.post("/api/assignments/:assignmentId/submit", async (req, res) => {
   const { assignmentId } = req.params;
   const auth = verifyAuthToken(req);
   const { content } = req.body;
   if (!auth) return res.status(401).json({ error: "Authentication required." });
   if (!content || !content.trim()) return res.status(400).json({ error: "Submission content cannot be empty." });
-  const asg = assignments.find((a) => a.id === assignmentId);
-  if (!asg) return res.status(404).json({ error: "Assignment not found." });
-  if (auth.role !== "admin" && !auth.batchIds.includes(asg.batchId)) {
-    return res.status(403).json({ error: "Access Denied: You do not belong to this assignment's batch." });
+  try {
+    const asg = await getAssignmentByIdDb(assignmentId);
+    if (!asg) return res.status(404).json({ error: "Assignment not found." });
+    if (auth.role !== "admin" && !(auth.batchIds || []).includes(asg.batchId)) {
+      return res.status(403).json({ error: "Access Denied: You do not belong to this assignment's batch." });
+    }
+    const submission = await createAssignmentSubmissionDb({
+      assignmentId,
+      studentId: auth.userId,
+      studentName: auth.name,
+      batchId: asg.batchId,
+      content: content.trim(),
+      status: "Submitted"
+    });
+    return res.json({
+      success: true,
+      message: "Assignment submitted successfully! Teacher will review it soon.",
+      submission
+    });
+  } catch (err) {
+    console.error("[Assignment Submit] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to submit assignment." });
   }
-  const submission = {
-    id: `sub-${Date.now()}`,
-    assignmentId,
-    studentId: auth.userId,
-    studentName: auth.name,
-    batchId: asg.batchId,
-    submittedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    content: content.trim(),
-    status: "Submitted"
-  };
-  submissions.unshift(submission);
-  asg.submissionsCount += 1;
-  res.json({ success: true, message: "Assignment submitted successfully! Teacher will review it soon.", submission });
 });
 app.get("/api/batches/:batchId/announcements", async (req, res) => {
   try {
@@ -5812,7 +6582,7 @@ app.post("/api/payments/razorpay/order", async (req, res) => {
     if (!courseId) {
       return res.status(400).json({ error: "courseId is required to generate an order." });
     }
-    let course = (cmsContent.courses || []).find((c) => c.id === courseId || c.name && c.name.toLowerCase().trim() === courseId.toLowerCase().trim());
+    let course = await getCourseByIdDb(courseId);
     if (!course) {
       const clientCourseName = (req.body.courseName || courseId.replace(/^course-/, "").replace(/-\d+$/, "").replace(/-/g, " ")).trim();
       course = {
@@ -5825,11 +6595,8 @@ app.post("/api/payments/razorpay/order", async (req, res) => {
         badge: "Live",
         isPublished: true
       };
-      if (!Array.isArray(cmsContent.courses)) cmsContent.courses = [];
-      cmsContent.courses.push(course);
-      saveCmsContent();
     }
-    const batch = batchId ? batches.find((b) => b.id === batchId) : null;
+    const batch = batchId ? await getBatchByIdDb(batchId) : null;
     const { keyId, keySecret } = getRazorpayConfig();
     if (!keyId || !keySecret) {
       return res.status(503).json({
@@ -5927,11 +6694,12 @@ app.post("/api/payments/razorpay/verify", async (req, res) => {
         error: "Cryptographic payment verification failed. Invalid signature."
       });
     }
-    const batch = batches.find((b) => b.id === batchId);
+    const batch = await getBatchByIdDb(batchId);
     if (!batch) {
       return res.status(404).json({ error: "Selected batch not found." });
     }
-    const course = cmsContent.courses.find((c) => c.id === courseId) || { name: "Spoken English", fee: 1499 };
+    let course = await getCourseByIdDb(courseId);
+    const resolvedCourse = course || { id: courseId, name: "Spoken English", fee: 1499 };
     const pCode = phoneCountryCode || "+91";
     const cleanPhone = (phone || "").toString().replace(/\D/g, "").slice(-10);
     const fullPhoneFormatted = `${pCode} ${cleanPhone}`;
@@ -5940,10 +6708,40 @@ app.post("/api/payments/razorpay/verify", async (req, res) => {
     const fullWhatsappFormatted = `${wCode} ${cleanWhatsapp}`;
     const fullCountryDigits = wCode.replace(/\D/g, "") || "91";
     const whatsappCleanRecipient = `${fullCountryDigits}${cleanWhatsapp}`;
-    const batchYearMonth = batch.batchCode.replace(/[^A-Za-z0-9]/g, "");
+    const batchYearMonth = (batch.batchCode || "WL").replace(/[^A-Za-z0-9]/g, "");
     const randomSeq = Math.floor(1e3 + Math.random() * 9e3);
     const admissionId = `WL-${batchYearMonth}-${randomSeq}`;
-    const studentReg = {
+    const confirmationText = `\u{1F393} *WITS LINGO \u2014 OFFICIAL ADMISSION CONFIRMATION*
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+Dear *${name.trim()}*,
+Congratulations! Your seat has been successfully confirmed at *WITS LINGO \u2014 A Global Language Platform*.
+
+\u{1F4CB} *ADMISSION SUMMARY*
+\u2022 *Admission ID / Roll No:* ${admissionId}
+\u2022 *Student Name:* ${name.trim()}
+\u2022 *Father's Name:* ${fatherName.trim()}
+\u2022 *Enrolled Course:* ${resolvedCourse.name}
+\u2022 *Assigned Batch:* ${batch.name} (${batch.batchCode})
+\u2022 *Batch Timings:* ${batch.scheduleTime || "Daily 1-Hour Live Class"}
+\u2022 *Batch Start Date:* ${batch.startDate || "1st of the month"}
+\u2022 *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
+\u2022 *Fee Paid:* \u20B9${resolvedCourse.fee} (Verified via Razorpay)
+\u2022 *Payment Ref:* ${razorpayPaymentId}
+
+\u{1F510} *STUDENT PORTAL LOGIN*
+\u2022 *Portal URL:* https://witslingo.com/login
+\u2022 *Username:* ${email.trim().toLowerCase()} (or ${admissionId})
+\u2022 *Password:* ${(studentPassword || "WitsLingo@2026").trim()}
+
+\u{1F4F1} *BATCH WHATSAPP GROUP & SUPPORT*
+\u{1F4DE} *${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}*
+
+Welcome to WITS LINGO!
+www.witslingo.com`;
+    const encodedMsg = encodeURIComponent(confirmationText);
+    const whatsappStudentUrl = `https://api.whatsapp.com/send?phone=${whatsappCleanRecipient}&text=${encodedMsg}`;
+    const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
+    const studentReg = await createRegistrationDb({
       id: `reg-${Date.now()}`,
       admissionId,
       name: name.trim(),
@@ -5961,30 +6759,31 @@ app.post("/api/payments/razorpay/verify", async (req, res) => {
       qualification: qualification || "Undergraduate",
       currentEnglishLevel: currentEnglishLevel || "Beginner",
       courseId,
-      courseName: course.name,
+      courseName: resolvedCourse.name,
       batchId: batch.id,
       batchName: batch.name,
-      feeAmount: course.fee,
+      feeAmount: Number(resolvedCourse.fee),
       paymentStatus: "Paid",
       paymentMethod: "Razorpay",
       paymentCurrency: "INR",
-      paymentAmountFormatted: `\u20B9${course.fee.toLocaleString()}`,
+      paymentAmountFormatted: `\u20B9${Number(resolvedCourse.fee).toLocaleString()}`,
       paymentTxnId: razorpayPaymentId,
       razorpayOrderId,
       razorpayPaymentId,
       razorpaySignature,
       googleMeetLink: batch.googleMeetLink || "",
       whatsappDeliveryStatus: "pending",
+      whatsappConfirmationMessage: confirmationText,
+      whatsappStudentUrl,
+      whatsappAdminUrl,
       registeredAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    registrations.unshift(studentReg);
-    batch.currentStudentsCount = (batch.currentStudentsCount || 0) + 1;
-    const paymentRecord = {
+    });
+    const paymentRecord = await createPaymentDb({
       id: `pay-${Date.now()}`,
       orderId: razorpayOrderId,
       paymentId: razorpayPaymentId,
       signature: razorpaySignature,
-      amount: course.fee,
+      amount: Number(resolvedCourse.fee),
       currency: "INR",
       status: "Paid",
       studentName: studentReg.name,
@@ -5996,44 +6795,30 @@ app.post("/api/payments/razorpay/verify", async (req, res) => {
       batchName: studentReg.batchName,
       admissionId: studentReg.admissionId,
       method: "Razorpay",
-      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      verifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
       source: "razorpay_verify"
-    };
-    payments.unshift(paymentRecord);
+    });
     const assignedPassword = (studentPassword || "WitsLingo@2026").trim();
-    let user = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+    let user = await getUserByEmailDb(email.trim().toLowerCase());
     if (user) {
-      if (!user.batchIds.includes(batch.id)) {
-        user.batchIds.push(batch.id);
-      }
-      if (assignedPassword && assignedPassword !== "student123") {
-        user.passwordHash = assignedPassword;
-      }
-      if (!user.admissionId) {
-        user.admissionId = admissionId;
-      }
+      const currentBatchIds = user.batchIds || [];
+      const updatedBatchIds = currentBatchIds.includes(batch.id) ? currentBatchIds : [...currentBatchIds, batch.id];
+      user = await updateUserDb(user.id, {
+        batchIds: updatedBatchIds,
+        admissionId: user.admissionId || admissionId
+      }) || user;
     } else {
-      user = {
-        id: `usr-${Date.now()}`,
+      const passwordHash = await bcrypt2.hash(assignedPassword, 10);
+      user = await createUserDb({
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        passwordHash: assignedPassword,
+        passwordHash,
         role: "student",
         phone: fullPhoneFormatted,
-        batchIds: [],
-        admissionId,
-        registrationDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
-      };
-      users.push(user);
+        batchIds: [batch.id],
+        admissionId
+      });
     }
     const token = generateAuthToken(user);
-    await Promise.all([
-      saveRegistrations(),
-      saveUsers(),
-      saveBatches(),
-      savePayments()
-    ]);
     try {
       const waRes = await sendWhatsAppEnrollmentMessage({
         studentName: studentReg.name,
@@ -6042,65 +6827,27 @@ app.post("/api/payments/razorpay/verify", async (req, res) => {
         courseId: studentReg.courseId,
         batchId: studentReg.batchId,
         startDate: batch.startDate || "Upcoming",
-        classTiming: batch.classTime || batch.scheduleTime || "Daily Live Class",
-        googleMeetLink: batch.googleMeetLink || batch.meetLink,
+        classTiming: batch.scheduleTime || "Daily Live Class",
+        googleMeetLink: batch.googleMeetLink || "",
         amount: studentReg.feeAmount,
         admissionId: studentReg.admissionId,
         recipientPhone: studentReg.whatsapp || studentReg.phone,
-        facilities: course.facilities
+        facilities: resolvedCourse.facilities
       });
-      if (waRes.success) {
-        studentReg.whatsappDeliveryStatus = "sent";
-        if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
-      } else {
-        studentReg.whatsappDeliveryStatus = "failed";
-        if (waRes.error) studentReg.whatsappError = waRes.error;
-      }
-      saveRegistrations();
+      await updateRegistrationDb(studentReg.id, {
+        whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+        whatsappMessageId: waRes.messageId,
+        whatsappError: waRes.error
+      });
     } catch (err) {
       console.warn("[WhatsApp] Async dispatch error:", err);
-      studentReg.whatsappDeliveryStatus = "failed";
-      studentReg.whatsappError = err?.message || "Dispatch error";
-      saveRegistrations();
     }
-    const confirmationText = `\u{1F393} *WITS LINGO \u2014 OFFICIAL ADMISSION CONFIRMATION*
-\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
-Dear *${name.trim()}*,
-Congratulations! Your seat has been successfully confirmed at *WITS LINGO \u2014 A Global Language Platform*.
-
-\u{1F4CB} *ADMISSION SUMMARY*
-\u2022 *Admission ID / Roll No:* ${admissionId}
-\u2022 *Student Name:* ${name.trim()}
-\u2022 *Father's Name:* ${fatherName.trim()}
-\u2022 *Enrolled Course:* ${course.name}
-\u2022 *Assigned Batch:* ${batch.name} (${batch.batchCode})
-\u2022 *Batch Timings:* ${batch.scheduleTime || "Daily 1-Hour Live Class"}
-\u2022 *Batch Start Date:* ${batch.startDate || "1st of the month"}
-\u2022 *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
-\u2022 *Fee Paid:* \u20B9${course.fee} (Verified via Razorpay)
-\u2022 *Payment Ref:* ${razorpayPaymentId}
-
-\u{1F510} *STUDENT PORTAL LOGIN*
-\u2022 *Portal URL:* https://witslingo.com/login
-\u2022 *Username:* ${user.email} (or ${admissionId})
-\u2022 *Password:* ${user.passwordHash}
-
-\u{1F4F1} *BATCH WHATSAPP GROUP & SUPPORT*
-\u{1F4DE} *${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}*
-
-Welcome to WITS LINGO!
-www.witslingo.com`;
-    const encodedMsg = encodeURIComponent(confirmationText);
-    const whatsappStudentUrl = `https://api.whatsapp.com/send?phone=${whatsappCleanRecipient}&text=${encodedMsg}`;
-    const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
-    studentReg.whatsappConfirmationMessage = confirmationText;
-    studentReg.whatsappStudentUrl = whatsappStudentUrl;
-    studentReg.whatsappAdminUrl = whatsappAdminUrl;
-    res.json({
+    return res.json({
       success: true,
       message: "Payment verified and enrollment confirmed! Welcome to WITS LINGO.",
       admissionId,
       registration: studentReg,
+      payment: paymentRecord,
       token,
       user: {
         id: user.id,
@@ -6113,7 +6860,7 @@ www.witslingo.com`;
       credentials: {
         username: user.email,
         alternativeUsername: admissionId,
-        password: user.passwordHash
+        password: assignedPassword
       },
       whatsapp: {
         recipientNumber: fullWhatsappFormatted,
@@ -6124,8 +6871,8 @@ www.witslingo.com`;
       }
     });
   } catch (err) {
-    console.error("[Razorpay] Verification endpoint exception:", err);
-    res.status(500).json({ success: false, error: "Internal server error verifying payment." });
+    console.error("[Razorpay Verify] Error:", err);
+    return res.status(500).json({ success: false, error: "Internal server error verifying payment." });
   }
 });
 app.post("/api/webhooks/razorpay", async (req, res) => {
@@ -6149,23 +6896,23 @@ app.post("/api/webhooks/razorpay", async (req, res) => {
         const orderId = paymentEntity.order_id;
         const paymentId = paymentEntity.id;
         const amount = paymentEntity.amount ? paymentEntity.amount / 100 : 0;
-        const existingPayment = payments.find((p) => p.paymentId === paymentId);
+        const existingPayments = await getPaymentsDb();
+        const existingPayment = existingPayments.find((p) => p.paymentId === paymentId);
         if (existingPayment) {
           console.log(`[Razorpay Webhook] Payment ${paymentId} already recorded. Idempotent return.`);
           return res.json({ status: "already_processed" });
         }
-        const matchedOrder = orders.find((o) => o.razorpayOrderId === orderId || o.id === paymentEntity.notes?.orderId);
-        if (matchedOrder) {
-          matchedOrder.orderStatus = "paid";
-          matchedOrder.razorpayPaymentId = paymentId;
-          matchedOrder.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-          await saveOrders();
+        let matchedOrder = orderId ? await getOrderByRazorpayOrderIdDb(orderId) : null;
+        if (!matchedOrder && paymentEntity.notes?.orderId) {
+          matchedOrder = await getOrderByIdDb(paymentEntity.notes.orderId);
         }
-        const reg = registrations.find((r) => r.razorpayOrderId === orderId || matchedOrder && r.phone === matchedOrder.studentPhone);
+        if (matchedOrder) {
+          await updateOrderStatusDb(matchedOrder.id, "paid", paymentId, orderId);
+        }
+        const allRegs = await getRegistrationsDb();
+        const reg = allRegs.find((r) => r.razorpayOrderId === orderId || matchedOrder && r.phone === matchedOrder.studentPhone);
         if (reg) {
-          reg.paymentStatus = "Paid";
-          reg.razorpayPaymentId = paymentId;
-          await saveRegistrations();
+          await updateRegistrationDb(reg.id, { paymentStatus: "Paid", razorpayPaymentId: paymentId });
         }
         const studentName = reg?.name || matchedOrder?.studentName || paymentEntity.notes?.studentName || "Student";
         const studentEmail = reg?.email || matchedOrder?.studentEmail || paymentEntity.email || "";
@@ -6175,7 +6922,7 @@ app.post("/api/webhooks/razorpay", async (req, res) => {
         const batchId = reg?.batchId || matchedOrder?.batchId || paymentEntity.notes?.batchId || "batch-spoken-oct-2026";
         const batchName = reg?.batchName || matchedOrder?.batchName || paymentEntity.notes?.batchName || "Assigned Batch";
         const admissionId = reg?.admissionId || `WL-2026-${Date.now().toString().slice(-4)}`;
-        const newPaymentRecord = {
+        const newPaymentRecord = await createPaymentDb({
           id: `pay-${Date.now()}`,
           orderId: orderId || matchedOrder?.id || "",
           paymentId: paymentId || "",
@@ -6191,33 +6938,27 @@ app.post("/api/webhooks/razorpay", async (req, res) => {
           batchName,
           admissionId,
           method: paymentEntity.method || "Razorpay",
-          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-          verifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
           source: "razorpay_webhook",
           rawPayload: paymentEntity
-        };
-        payments.unshift(newPaymentRecord);
-        savePayments();
-        let userRecord = users.find((u) => u.phone === studentPhone || studentEmail && u.email.toLowerCase() === studentEmail.toLowerCase());
+        });
+        let userRecord = studentEmail ? await getUserByEmailDb(studentEmail) : null;
         if (!userRecord) {
-          userRecord = {
-            id: `usr-${Date.now()}`,
+          const passwordHash = await bcrypt2.hash((studentPhone || "").slice(-6) || "student123", 10);
+          await createUserDb({
             name: studentName,
             email: studentEmail || `${studentPhone}@student.witslingo.com`,
-            passwordHash: hashPassword(studentPhone.slice(-6) || "student123"),
+            passwordHash,
             role: "student",
             phone: studentPhone,
-            batchIds: [],
-            admissionId,
-            registrationDate: (/* @__PURE__ */ new Date()).toISOString()
-          };
-          users.push(userRecord);
+            batchIds: [batchId],
+            admissionId
+          });
         } else {
-          if (!userRecord.batchIds.includes(batchId)) {
-            userRecord.batchIds.push(batchId);
+          const curBatchIds = userRecord.batchIds || [];
+          if (!curBatchIds.includes(batchId)) {
+            await updateUserDb(userRecord.id, { batchIds: [...curBatchIds, batchId] });
           }
         }
-        saveUsers();
         const effectiveOrder = matchedOrder || {
           id: `ord_${orderId || paymentId}`,
           studentId: `std_${(studentPhone || "").replace(/\D/g, "")}`,
@@ -6239,8 +6980,7 @@ app.post("/api/webhooks/razorpay", async (req, res) => {
           updatedAt: (/* @__PURE__ */ new Date()).toISOString()
         };
         if (!matchedOrder) {
-          orders.unshift(effectiveOrder);
-          saveOrders();
+          await createOrderDb(effectiveOrder);
         }
         try {
           const waWebhookRes = await sendPaymentConfirmationWhatsApp(effectiveOrder, newPaymentRecord);
@@ -6253,11 +6993,9 @@ app.post("/api/webhooks/razorpay", async (req, res) => {
       const paymentEntity = payload?.payload?.payment?.entity;
       const orderId = paymentEntity?.order_id;
       if (orderId) {
-        const matchedOrder = orders.find((o) => o.razorpayOrderId === orderId || o.id === paymentEntity?.notes?.orderId);
+        const matchedOrder = await getOrderByRazorpayOrderIdDb(orderId) || (paymentEntity?.notes?.orderId ? await getOrderByIdDb(paymentEntity.notes.orderId) : null);
         if (matchedOrder) {
-          matchedOrder.orderStatus = "failed";
-          matchedOrder.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-          saveOrders();
+          await updateOrderStatusDb(matchedOrder.id, "failed");
           console.log(`[Razorpay Webhook] Order ${matchedOrder.id} marked as failed from webhook.`);
         }
       }
@@ -6281,25 +7019,7 @@ app.post("/api/orders/create", async (req, res) => {
     if (!courseId) {
       return res.status(400).json({ success: false, error: "Please select a course to continue." });
     }
-    let foundCourse = (cmsContent.courses || []).find(
-      (c) => c.id === courseId || courseId === "course-communication" && (c.id === "course-communication-skills" || c.id === "course-communication") || courseId === "course-communication-skills" && (c.id === "course-communication-skills" || c.id === "course-communication") || courseId === "course-advanced" && (c.id === "course-advanced-english" || c.id === "course-advanced") || courseId === "course-advanced-english" && (c.id === "course-advanced-english" || c.id === "course-advanced") || c.name && courseId && c.name.toLowerCase().trim() === courseId.toLowerCase().trim() || c.name && req.body.courseName && c.name.toLowerCase().trim() === req.body.courseName.toLowerCase().trim()
-    ) || (cmsContent.courses || []).find((c) => c.id === courseId);
-    if (!foundCourse) {
-      try {
-        const durableCms = await durableStorageService.getCollection("cmsContent", []);
-        if (Array.isArray(durableCms) && durableCms.length > 0 && durableCms[0]?.courses) {
-          cmsContent.courses = durableCms[0].courses;
-        }
-        const durableCourses = await durableStorageService.getCollection("courses", []);
-        if (Array.isArray(durableCourses) && durableCourses.length > 0) {
-          cmsContent.courses = [...cmsContent.courses || [], ...durableCourses];
-        }
-        foundCourse = (cmsContent.courses || []).find(
-          (c) => c.id === courseId || c.name && courseId && c.name.toLowerCase().trim() === courseId.toLowerCase().trim() || c.name && req.body.courseName && c.name.toLowerCase().trim() === req.body.courseName.toLowerCase().trim()
-        );
-      } catch (e) {
-      }
-    }
+    let foundCourse = await getCourseByIdDb(courseId);
     if (!foundCourse) {
       const clientCourseName = (req.body.courseName || req.body.courseTitle || courseId.replace(/^course-/, "").replace(/-\d+$/, "").replace(/-/g, " ")).trim();
       const clientFee = Number(req.body.courseFee || req.body.fee) || 1499;
@@ -6311,25 +7031,8 @@ app.post("/api/orders/create", async (req, res) => {
         duration: req.body.duration || "2 Months (40 Sessions)",
         learningFormat: req.body.learningFormat || "Live Online Classroom",
         badge: req.body.badge || "Live",
-        isPublished: true,
-        whatYouWillLearn: [
-          "Master natural conversational speaking",
-          "Overcome public hesitation and stage fear",
-          "Daily vocabulary in context",
-          "Pronunciation and accent clarity"
-        ],
-        facilities: [
-          "Live Interactive Online Classes on Google Meet",
-          "Digital PDF Study Notes & Practice Workbooks",
-          "Telegram & WhatsApp Student Practice Community",
-          "Course Completion Certificate",
-          "Class Recording Access for Revision"
-        ]
+        isPublished: true
       };
-      if (!Array.isArray(cmsContent.courses)) cmsContent.courses = [];
-      cmsContent.courses.push(foundCourse);
-      saveCmsContent();
-      console.log(`[Orders] Registered and cached new course "${foundCourse.name}" (${foundCourse.id}) dynamically.`);
     }
     const originalFee = Number(foundCourse.fee) || 1499;
     const finalPayable = originalFee;
@@ -6372,7 +7075,7 @@ app.post("/api/orders/create", async (req, res) => {
     if (!razorpayOrderId) {
       razorpayOrderId = `order_test_${orderId}`;
     }
-    const newOrder = {
+    const newOrder = await createOrderDb({
       id: orderId,
       studentId: `std_${cleanWhatsapp}`,
       studentName: studentName.trim(),
@@ -6382,17 +7085,12 @@ app.post("/api/orders/create", async (req, res) => {
       courseName: foundCourse.name,
       coursePrice: originalFee,
       discountAmount: 0,
-      discountCode: void 0,
       expectedAmount: finalPayable,
       currency: "INR",
       orderStatus: "pending",
-      razorpayOrderId,
-      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    orders.unshift(newOrder);
-    saveOrders();
-    res.json({
+      razorpayOrderId
+    });
+    return res.json({
       success: true,
       order: newOrder,
       keyId: keyId || "rzp_test_TxdOEl65TI6T87",
@@ -6408,29 +7106,36 @@ app.post("/api/orders/create", async (req, res) => {
     });
   } catch (err) {
     console.error("[Orders] Create order error:", err);
-    res.status(500).json({ success: false, error: "Internal server error creating order." });
+    return res.status(500).json({ success: false, error: "Internal server error creating order." });
   }
 });
-app.get("/api/orders/:orderId/status", (req, res) => {
+app.get("/api/orders/:orderId/status", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
   const { orderId } = req.params;
-  const order = orders.find((o) => o.id === orderId || o.razorpayOrderId === orderId);
-  if (!order) {
-    return res.status(404).json({ success: false, error: "Order not found." });
-  }
-  const payment = payments.find((p) => p.orderId === order.id || order.razorpayOrderId && p.orderId === order.razorpayOrderId || order.razorpayPaymentId && p.paymentId === order.razorpayPaymentId);
-  const allNotifs = whatsappNotificationService.getAllNotifications();
-  const notification = allNotifs.find((n) => n.orderId === order.id) || notifications.find((n) => n.orderId === order.id);
-  res.json({
-    success: true,
-    order,
-    payment: payment || null,
-    notification: notification || null,
-    joiningDetails: {
-      meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,
-      startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
-      scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME
+  try {
+    const order = await getOrderByIdDb(orderId) || await getOrderByRazorpayOrderIdDb(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: "Order not found." });
     }
-  });
+    const allPayments = await getPaymentsDb();
+    const payment = allPayments.find((p) => p.orderId === order.id || order.razorpayOrderId && p.orderId === order.razorpayOrderId || order.razorpayPaymentId && p.paymentId === order.razorpayPaymentId);
+    const allNotifs = whatsappNotificationService.getAllNotifications();
+    const notification = allNotifs.find((n) => n.orderId === order.id);
+    return res.json({
+      success: true,
+      order,
+      payment: payment || null,
+      notification: notification || null,
+      joiningDetails: {
+        meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,
+        startDate: WITS_LINGO_CONFIG.FALLBACK_START_DATE,
+        scheduleTime: WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME
+      }
+    });
+  } catch (err) {
+    console.error("[Orders Status] Database error:", err?.message || err);
+    return res.status(500).json({ success: false, error: "Failed to retrieve order status." });
+  }
 });
 app.post("/api/payments/razorpay/verify-order", async (req, res) => {
   try {
@@ -6438,12 +7143,13 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
     if (!orderId || !razorpayPaymentId) {
       return res.status(400).json({ success: false, error: "Missing required order verification parameters." });
     }
-    const order = orders.find((o) => o.id === orderId || o.razorpayOrderId === razorpayOrderId);
+    const order = await getOrderByIdDb(orderId) || await getOrderByRazorpayOrderIdDb(razorpayOrderId);
     if (!order) {
       return res.status(404).json({ success: false, error: "Order not found." });
     }
     if (order.orderStatus === "paid") {
-      const existingPayment = payments.find((p) => p.orderId === order.id || p.paymentId === razorpayPaymentId);
+      const allPayments = await getPaymentsDb();
+      const existingPayment = allPayments.find((p) => p.orderId === order.id || p.paymentId === razorpayPaymentId);
       return res.json({
         success: true,
         message: "Payment already verified (Idempotent).",
@@ -6461,13 +7167,9 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
         return res.status(400).json({ success: false, error: "Payment signature verification failed." });
       }
     }
-    order.orderStatus = "paid";
-    order.razorpayOrderId = razorpayOrderId || order.razorpayOrderId;
-    order.razorpayPaymentId = razorpayPaymentId;
-    order.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    saveOrders();
+    const updatedOrder = await updateOrderStatusDb(order.id, "paid", razorpayPaymentId, razorpayOrderId);
     const admissionId = `WL-2026-${Date.now().toString().slice(-4)}`;
-    const newPayment = {
+    const newPayment = await createPaymentDb({
       id: `pay-${Date.now()}`,
       orderId: order.id,
       paymentId: razorpayPaymentId,
@@ -6484,20 +7186,12 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
       batchName: order.batchName || "Assigned Batch",
       admissionId,
       method: "Razorpay",
-      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      verifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
       source: "razorpay_verify"
-    };
-    const existingPayIdx = payments.findIndex((p) => p.paymentId === razorpayPaymentId);
-    if (existingPayIdx >= 0) {
-      payments[existingPayIdx] = newPayment;
-    } else {
-      payments.unshift(newPayment);
-    }
-    savePayments();
-    let existingReg = registrations.find((r) => r.phone === order.studentPhone || r.whatsapp === order.studentPhone);
+    });
+    const allRegs = await getRegistrationsDb();
+    let existingReg = allRegs.find((r) => r.phone === order.studentPhone || r.whatsapp === order.studentPhone);
     if (!existingReg) {
-      existingReg = {
+      existingReg = await createRegistrationDb({
         id: `reg-${Date.now()}`,
         admissionId,
         name: order.studentName,
@@ -6521,41 +7215,39 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
         paymentMethod: "Razorpay",
         paymentTxnId: razorpayPaymentId,
         razorpayOrderId,
-        razorpayPaymentId,
-        registeredAt: (/* @__PURE__ */ new Date()).toISOString()
-      };
-      registrations.unshift(existingReg);
+        razorpayPaymentId
+      });
     } else {
-      existingReg.paymentStatus = "Paid";
-      existingReg.paymentTxnId = razorpayPaymentId;
-      existingReg.razorpayPaymentId = razorpayPaymentId;
-      existingReg.courseId = order.courseId;
-      existingReg.courseName = order.courseName;
+      await updateRegistrationDb(existingReg.id, {
+        paymentStatus: "Paid",
+        paymentTxnId: razorpayPaymentId,
+        razorpayPaymentId,
+        courseId: order.courseId,
+        courseName: order.courseName
+      });
     }
-    await saveRegistrations();
-    let existingUser = users.find((u) => u.phone === order.studentPhone || u.email.toLowerCase() === order.studentEmail.toLowerCase());
+    let existingUser = await getUserByEmailDb(order.studentEmail);
     if (!existingUser) {
-      existingUser = {
-        id: `usr-${Date.now()}`,
+      const passwordHash = await bcrypt2.hash((order.studentPhone || "").slice(-6) || "student123", 10);
+      await createUserDb({
         name: order.studentName,
         email: order.studentEmail,
-        passwordHash: hashPassword(order.studentPhone.slice(-6) || "student123"),
+        passwordHash,
         role: "student",
         phone: order.studentPhone,
-        batchIds: [],
-        admissionId,
-        registrationDate: (/* @__PURE__ */ new Date()).toISOString()
-      };
-      users.push(existingUser);
+        batchIds: [order.batchId || "batch-spoken-oct-2026"],
+        admissionId
+      });
     } else {
-      if (!existingUser.batchIds.includes(order.batchId || "batch-spoken-oct-2026")) {
-        existingUser.batchIds.push(order.batchId || "batch-spoken-oct-2026");
+      const curBatchIds = existingUser.batchIds || [];
+      const targetBatch = order.batchId || "batch-spoken-oct-2026";
+      if (!curBatchIds.includes(targetBatch)) {
+        await updateUserDb(existingUser.id, { batchIds: [...curBatchIds, targetBatch] });
       }
     }
-    await saveUsers();
     let waConfirmationResult = null;
     try {
-      waConfirmationResult = await sendPaymentConfirmationWhatsApp(order, newPayment);
+      waConfirmationResult = await sendPaymentConfirmationWhatsApp(updatedOrder || order, newPayment);
       console.log(`[WhatsApp] Payment confirmation dispatch to ${order.studentPhone}:`, waConfirmationResult);
     } catch (waErr) {
       console.warn("[WhatsApp] Async confirmation error:", waErr);
@@ -6579,7 +7271,7 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
     res.json({
       success: true,
       message: "Payment successfully verified! Your course access is activated.",
-      order,
+      order: updatedOrder || order,
       payment: newPayment,
       admissionId,
       whatsappConfirmation: waConfirmationResult,
@@ -6808,96 +7500,148 @@ app.post("/api/support/chat", async (req, res) => {
   }
 });
 app.use("/api/admin", requireAdminAuth);
-app.get("/api/admin/orders", (_req, res) => {
-  const total = orders.length;
-  const paid = orders.filter((o) => o.orderStatus === "paid").length;
-  const pending = orders.filter((o) => o.orderStatus === "pending").length;
-  const failed = orders.filter((o) => o.orderStatus === "failed" || o.orderStatus === "cancelled").length;
-  res.json({
-    success: true,
-    stats: { total, paid, pending, failed },
-    orders
-  });
+app.get("/api/admin/orders", async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const ordersList = await getOrdersDb();
+    const total = ordersList.length;
+    const paid = ordersList.filter((o) => o.orderStatus === "paid").length;
+    const pending = ordersList.filter((o) => o.orderStatus === "pending").length;
+    const failed = ordersList.filter((o) => o.orderStatus === "failed" || o.orderStatus === "cancelled").length;
+    res.json({
+      success: true,
+      stats: { total, paid, pending, failed },
+      orders: ordersList
+    });
+  } catch (err) {
+    console.error("[Admin Orders GET] Database error:", err?.message || err);
+    res.status(500).json({ success: false, error: "Failed to retrieve orders from database." });
+  }
 });
-app.get("/api/admin/payments", (_req, res) => {
-  res.json({
-    success: true,
-    payments
-  });
+app.get("/api/admin/payments", async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const paymentsList = await getPaymentsDb();
+    res.json({
+      success: true,
+      payments: paymentsList
+    });
+  } catch (err) {
+    console.error("[Admin Payments GET] Database error:", err?.message || err);
+    res.status(500).json({ success: false, error: "Failed to retrieve payments from database." });
+  }
 });
-app.get("/api/admin/notifications", (_req, res) => {
-  const allNotifs = whatsappNotificationService.getAllNotifications();
-  const total = allNotifs.length;
-  const sent = allNotifs.filter((n) => n.messageStatus === "sent" || n.messageStatus === "accepted" || n.messageStatus === "delivered" || n.messageStatus === "read").length;
-  const failed = allNotifs.filter((n) => n.messageStatus === "failed").length;
-  const pending = allNotifs.filter((n) => n.messageStatus === "pending").length;
-  res.json({
-    success: true,
-    stats: { total, sent, failed, pending },
-    notifications: allNotifs
-  });
+app.get("/api/admin/notifications", async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const allNotifs = whatsappNotificationService.getAllNotifications();
+    const dbNotifs = await getNotificationsDb();
+    const combinedNotifs = [...allNotifs, ...adminNotificationService.getAllNotifications()];
+    const total = combinedNotifs.length;
+    const sent = combinedNotifs.filter((n) => n.messageStatus === "sent" || n.messageStatus === "accepted" || n.messageStatus === "delivered" || n.messageStatus === "read").length;
+    const failed = combinedNotifs.filter((n) => n.messageStatus === "failed").length;
+    const pending = combinedNotifs.filter((n) => n.messageStatus === "pending").length;
+    res.json({
+      success: true,
+      stats: { total, sent, failed, pending },
+      notifications: combinedNotifs,
+      dbNotifications: dbNotifs
+    });
+  } catch (err) {
+    console.error("[Admin Notifications GET] Error:", err?.message || err);
+    res.status(500).json({ success: false, error: "Failed to retrieve notifications." });
+  }
 });
 app.post("/api/admin/notifications/:id/retry", async (req, res) => {
-  const notif = notifications.find((n) => n.id === req.params.id);
-  if (!notif) return res.status(404).json({ error: "Notification record not found." });
-  const order = orders.find((o) => o.id === notif.orderId);
-  const payment = payments.find((p) => p.orderId === notif.orderId);
-  if (!order) return res.status(400).json({ error: "Related order not found." });
-  const sendRes = await sendPaymentConfirmationWhatsApp(
-    order,
-    payment || { amount: order.expectedAmount, paymentId: "Manual Retry" },
-    true
-    // force resend
-  );
-  res.json({ success: sendRes.success, sendRes, notification: notif });
-});
-app.get("/api/admin/tickets", (_req, res) => {
-  const total = supportTickets.length;
-  const open = supportTickets.filter((t) => t.status === "Open").length;
-  const assigned = supportTickets.filter((t) => t.status === "Assigned").length;
-  const inProgress = supportTickets.filter((t) => t.status === "In Progress").length;
-  const waitingForStudent = supportTickets.filter((t) => t.status === "Waiting for Student").length;
-  const resolved = supportTickets.filter((t) => t.status === "Resolved" || t.status === "Closed").length;
-  res.json({
-    success: true,
-    stats: { total, open, assigned, inProgress, waitingForStudent, resolved },
-    tickets: supportTickets
-  });
-});
-app.patch("/api/admin/tickets/:id", (req, res) => {
-  const ticket = supportTickets.find((t) => t.id === req.params.id || t.ticketNumber === req.params.id);
-  if (!ticket) return res.status(404).json({ error: "Ticket not found." });
-  const { status, assignedAgentId, assignedAgentName, resolutionNotes, priority } = req.body;
-  if (status !== void 0) ticket.status = status;
-  if (assignedAgentId !== void 0) ticket.assignedAgentId = assignedAgentId;
-  if (assignedAgentName !== void 0) ticket.assignedAgentName = assignedAgentName;
-  if (resolutionNotes !== void 0) ticket.resolutionNotes = resolutionNotes;
-  if (priority !== void 0) ticket.priority = priority;
-  ticket.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  saveSupportTickets();
-  res.json({ success: true, ticket });
-});
-app.get("/api/admin/knowledge-base", (_req, res) => {
-  const items = getAiSupportService().getKnowledgeBase();
-  res.json({ success: true, items });
-});
-app.post("/api/admin/knowledge-base", (req, res) => {
-  const { id, title, category, keywords, content } = req.body;
-  if (!title || !content) {
-    return res.status(400).json({ error: "Title and content are required." });
+  try {
+    const notifs = whatsappNotificationService.getAllNotifications();
+    const notif = notifs.find((n) => n.id === req.params.id);
+    if (!notif) return res.status(404).json({ error: "Notification record not found." });
+    const order = notif.orderId ? await getOrderByIdDb(notif.orderId) || await getOrderByRazorpayOrderIdDb(notif.orderId) : null;
+    const allPayments = await getPaymentsDb();
+    const payment = notif.orderId ? allPayments.find((p) => p.orderId === notif.orderId) : null;
+    if (!order) return res.status(400).json({ error: "Related order not found." });
+    const sendRes = await sendPaymentConfirmationWhatsApp(
+      order,
+      payment ? payment : { amount: order.expectedAmount, paymentId: "Manual Retry" },
+      true
+      // force resend
+    );
+    res.json({ success: sendRes.success, sendRes, notification: notif });
+  } catch (err) {
+    console.error("[Admin Notification Retry] Error:", err?.message || err);
+    res.status(500).json({ error: "Failed to retry notification." });
   }
-  const item = getAiSupportService().addOrUpdateKnowledgeItem({
-    id: id || `kb_${Date.now()}`,
-    title,
-    category: category || "faq",
-    keywords: Array.isArray(keywords) ? keywords : (keywords || "").split(",").map((k) => k.trim()),
-    content
-  });
-  res.json({ success: true, item, items: getAiSupportService().getKnowledgeBase() });
 });
-app.delete("/api/admin/knowledge-base/:id", (req, res) => {
-  const deleted = getAiSupportService().deleteKnowledgeItem(req.params.id);
-  res.json({ success: deleted, items: getAiSupportService().getKnowledgeBase() });
+app.get("/api/admin/tickets", async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const ticketsList = await getSupportTicketsDb();
+    const total = ticketsList.length;
+    const open = ticketsList.filter((t) => t.status === "Open").length;
+    const assigned = ticketsList.filter((t) => t.status === "Assigned").length;
+    const inProgress = ticketsList.filter((t) => t.status === "In Progress").length;
+    const waitingForStudent = ticketsList.filter((t) => t.status === "Waiting for Student").length;
+    const resolved = ticketsList.filter((t) => t.status === "Resolved" || t.status === "Closed").length;
+    res.json({
+      success: true,
+      stats: { total, open, assigned, inProgress, waitingForStudent, resolved },
+      tickets: ticketsList
+    });
+  } catch (err) {
+    console.error("[Admin Tickets GET] Database error:", err?.message || err);
+    res.status(500).json({ error: "Failed to retrieve support tickets." });
+  }
+});
+app.patch("/api/admin/tickets/:id", async (req, res) => {
+  try {
+    const updated = await updateSupportTicketDb(req.params.id, req.body);
+    if (!updated) return res.status(404).json({ error: "Ticket not found." });
+    res.json({ success: true, ticket: updated });
+  } catch (err) {
+    console.error("[Admin Ticket PATCH] Database error:", err?.message || err);
+    res.status(500).json({ error: "Failed to update support ticket." });
+  }
+});
+app.get("/api/admin/knowledge-base", async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const items = await getKnowledgeBaseDb();
+    res.json({ success: true, items });
+  } catch (err) {
+    console.error("[Knowledge Base GET] Database error:", err?.message || err);
+    res.status(500).json({ error: "Failed to retrieve knowledge base items." });
+  }
+});
+app.post("/api/admin/knowledge-base", async (req, res) => {
+  try {
+    const { category, question, answer, title, content } = req.body;
+    const finalQuestion = question || title;
+    const finalAnswer = answer || content;
+    if (!finalQuestion || !finalAnswer) {
+      return res.status(400).json({ error: "Question/Title and Answer/Content are required." });
+    }
+    const item = await createKnowledgeBaseDb({
+      category: category || "General",
+      question: finalQuestion,
+      answer: finalAnswer
+    });
+    const items = await getKnowledgeBaseDb();
+    res.json({ success: true, item, items });
+  } catch (err) {
+    console.error("[Knowledge Base POST] Database error:", err?.message || err);
+    res.status(500).json({ error: "Failed to add knowledge base item." });
+  }
+});
+app.delete("/api/admin/knowledge-base/:id", async (req, res) => {
+  try {
+    const deleted = await deleteKnowledgeBaseDb(req.params.id);
+    const items = await getKnowledgeBaseDb();
+    res.json({ success: Boolean(deleted), items });
+  } catch (err) {
+    console.error("[Knowledge Base DELETE] Database error:", err?.message || err);
+    res.status(500).json({ error: "Failed to delete knowledge base item." });
+  }
 });
 app.get("/api/admin/conversations", (_req, res) => {
   res.json({
@@ -7504,16 +8248,77 @@ app.post("/api/admissions/register", async (req, res) => {
   }
   const fullPhoneFormatted = `${pCode} ${cleanPhone}`;
   const fullWhatsappFormatted = `${wCode} ${cleanWhatsapp}`;
-  const batch = batches.find((b) => b.id === batchId);
+  let batch = await getBatchByIdDb(batchId);
   if (!batch) {
     return res.status(404).json({ error: "Selected batch not found." });
   }
-  const course = cmsContent.courses.find((c) => c.id === courseId) || { name: "Spoken English", fee: 1499 };
+  let course = await getCourseByIdDb(courseId);
+  const resolvedCourse = course || { id: courseId, name: "Spoken English", fee: 1499 };
   const paymentStatus = isFeePaid && isAdmin || isFeePaid ? "Paid" : "Pending";
-  const batchYearMonth = batch.batchCode.replace(/[^A-Za-z0-9]/g, "");
+  const batchYearMonth = (batch.batchCode || "WL").replace(/[^A-Za-z0-9]/g, "");
   const randomSeq = Math.floor(1e3 + Math.random() * 9e3);
   const admissionId = `WL-${batchYearMonth}-${randomSeq}`;
-  const studentReg = {
+  const assignedPassword = (req.body.password || req.body.studentPassword || "WitsLingo@2026").trim();
+  let user = await getUserByEmailDb(email.trim().toLowerCase());
+  if (user) {
+    const currentBatchIds = user.batchIds || [];
+    const updatedBatchIds = currentBatchIds.includes(batch.id) ? currentBatchIds : [...currentBatchIds, batch.id];
+    user = await updateUserDb(user.id, {
+      batchIds: updatedBatchIds,
+      admissionId: user.admissionId || admissionId
+    }) || user;
+  } else {
+    const passwordHash = await bcrypt2.hash(assignedPassword, 10);
+    user = await createUserDb({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      passwordHash,
+      role: "student",
+      phone: fullPhoneFormatted,
+      batchIds: [batch.id],
+      admissionId
+    });
+  }
+  const token = generateAuthToken(user);
+  const fullCountryDigits = (wCodeDigits || "91").replace(/\D/g, "") || "91";
+  const whatsappCleanRecipient = `${fullCountryDigits}${cleanWhatsapp}`;
+  const whatsappConfirmationText = `\u{1F393} *WITS LINGO \u2014 OFFICIAL ADMISSION CONFIRMATION*
+\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+Dear *${name.trim()}*,
+Congratulations! Your seat has been successfully confirmed at *WITS LINGO \u2014 A Global Language Platform*.
+
+\u{1F4CB} *ADMISSION SUMMARY*
+\u2022 *Admission ID / Roll No:* ${admissionId}
+\u2022 *Student Name:* ${name.trim()}
+\u2022 *Father's Name:* ${fatherName.trim()}
+\u2022 *Enrolled Course:* ${resolvedCourse.name}
+\u2022 *Assigned Batch:* ${batch.name} (${batch.batchCode})
+\u2022 *Batch Timings:* ${batch.scheduleTime || "Daily 1-Hour Live Class"}
+\u2022 *Batch Start Date:* ${batch.startDate || "1st of the month"}
+\u2022 *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
+\u2022 *Fee Status:* ${paymentStatus} (${req.body.paymentAmountFormatted || "\u20B9" + resolvedCourse.fee})
+\u2022 *Payment Ref:* ${paymentTxnId || `adm_${Date.now()}`}
+
+\u{1F510} *PURCHASED BATCH PORTAL LOGIN*
+\u2022 *Portal URL:* https://witslingo.com/login
+\u2022 *Username:* ${user.email} (or ${admissionId})
+\u2022 *Password:* ${assignedPassword}
+
+\u{1F4F1} *BATCH WHATSAPP GROUP & SUPPORT*
+Save our official mentor helpline on WhatsApp:
+\u{1F4DE} *${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}*
+Our academic counsellor will add you to your exclusive batch WhatsApp group.
+
+Welcome to the journey of speaking English naturally!
+*WITS LINGO*
+_A Global Language Platform_
+www.witslingo.com`;
+  const encodedWhatsappMsg = encodeURIComponent(whatsappConfirmationText);
+  const whatsappStudentUrl = `https://api.whatsapp.com/send?phone=${whatsappCleanRecipient}&text=${encodedWhatsappMsg}`;
+  const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedWhatsappMsg}`;
+  const waMeStudentUrl = `https://wa.me/${whatsappCleanRecipient}?text=${encodedWhatsappMsg}`;
+  const waMeAdminUrl = `https://wa.me/${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}?text=${encodedWhatsappMsg}`;
+  const studentReg = await createRegistrationDb({
     id: `reg-${Date.now()}`,
     admissionId,
     name: name.trim(),
@@ -7531,97 +8336,21 @@ app.post("/api/admissions/register", async (req, res) => {
     qualification: qualification || "Undergraduate",
     currentEnglishLevel: currentEnglishLevel || "Beginner",
     courseId,
-    courseName: course.name,
+    courseName: resolvedCourse.name,
     batchId: batch.id,
     batchName: batch.name,
-    feeAmount: course.fee,
+    feeAmount: Number(resolvedCourse.fee),
     paymentStatus,
     paymentMethod: paymentMethod || "UPI / Direct",
     paymentCurrency: req.body.paymentCurrency || "INR",
-    paymentAmountFormatted: req.body.paymentAmountFormatted || `\u20B9${course.fee.toLocaleString()}`,
+    paymentAmountFormatted: req.body.paymentAmountFormatted || `\u20B9${resolvedCourse.fee.toLocaleString()}`,
     paymentTxnId: paymentTxnId || `adm_${Date.now()}`,
     googleMeetLink: batch.googleMeetLink || "",
-    registeredAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  registrations.unshift(studentReg);
+    whatsappConfirmationMessage: whatsappConfirmationText,
+    whatsappStudentUrl,
+    whatsappAdminUrl
+  });
   if (paymentStatus === "Paid") {
-    batch.currentStudentsCount = (batch.currentStudentsCount || 0) + 1;
-  }
-  const assignedPassword = (req.body.password || req.body.studentPassword || "WitsLingo@2026").trim();
-  let user = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
-  if (user) {
-    if (!user.batchIds.includes(batch.id)) {
-      user.batchIds.push(batch.id);
-    }
-    if (assignedPassword && assignedPassword !== "student123") {
-      user.passwordHash = assignedPassword;
-    }
-    if (!user.admissionId) {
-      user.admissionId = admissionId;
-    }
-  } else {
-    user = {
-      id: `usr-${Date.now()}`,
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      passwordHash: assignedPassword,
-      role: "student",
-      phone: fullPhoneFormatted,
-      batchIds: [],
-      admissionId,
-      registrationDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
-    };
-    users.push(user);
-  }
-  const token = generateAuthToken(user);
-  const fullCountryDigits = (wCodeDigits || "91").replace(/\D/g, "") || "91";
-  const whatsappCleanRecipient = `${fullCountryDigits}${cleanWhatsapp}`;
-  const whatsappConfirmationText = `\u{1F393} *WITS LINGO \u2014 OFFICIAL ADMISSION CONFIRMATION*
-\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
-Dear *${name.trim()}*,
-Congratulations! Your seat has been successfully confirmed at *WITS LINGO \u2014 A Global Language Platform*.
-
-\u{1F4CB} *ADMISSION SUMMARY*
-\u2022 *Admission ID / Roll No:* ${admissionId}
-\u2022 *Student Name:* ${name.trim()}
-\u2022 *Father's Name:* ${fatherName.trim()}
-\u2022 *Enrolled Course:* ${course.name}
-\u2022 *Assigned Batch:* ${batch.name} (${batch.batchCode})
-\u2022 *Batch Timings:* ${batch.scheduleTime || "Daily 1-Hour Live Class"}
-\u2022 *Batch Start Date:* ${batch.startDate || "1st of the month"}
-\u2022 *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
-\u2022 *Fee Status:* ${paymentStatus} (${studentReg.paymentAmountFormatted || "\u20B9" + course.fee})
-\u2022 *Payment Ref:* ${studentReg.paymentTxnId}
-
-\u{1F510} *PURCHASED BATCH PORTAL LOGIN*
-\u2022 *Portal URL:* https://witslingo.com/login
-\u2022 *Username:* ${user.email} (or ${admissionId})
-\u2022 *Password:* ${user.passwordHash}
-
-\u{1F4F1} *BATCH WHATSAPP GROUP & SUPPORT*
-Save our official mentor helpline on WhatsApp:
-\u{1F4DE} *${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}*
-Our academic counsellor will add you to your exclusive batch WhatsApp group.
-
-Welcome to the journey of speaking English naturally!
-*WITS LINGO*
-_A Global Language Platform_
-www.witslingo.com`;
-  const encodedWhatsappMsg = encodeURIComponent(whatsappConfirmationText);
-  const whatsappStudentUrl = `https://api.whatsapp.com/send?phone=${whatsappCleanRecipient}&text=${encodedWhatsappMsg}`;
-  const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedWhatsappMsg}`;
-  const waMeStudentUrl = `https://wa.me/${whatsappCleanRecipient}?text=${encodedWhatsappMsg}`;
-  const waMeAdminUrl = `https://wa.me/${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}?text=${encodedWhatsappMsg}`;
-  studentReg.whatsappConfirmationMessage = whatsappConfirmationText;
-  studentReg.whatsappStudentUrl = whatsappStudentUrl;
-  studentReg.whatsappAdminUrl = whatsappAdminUrl;
-  await Promise.all([
-    saveRegistrations(),
-    saveUsers(),
-    saveBatches()
-  ]);
-  if (paymentStatus === "Paid") {
-    const courseObj = (cmsContent.courses || []).find((c) => c.id === studentReg.courseId || c.name === studentReg.courseName);
     sendWhatsAppEnrollmentMessage({
       studentName: studentReg.name,
       courseName: studentReg.courseName,
@@ -7629,26 +8358,23 @@ www.witslingo.com`;
       courseId: studentReg.courseId,
       batchId: studentReg.batchId,
       startDate: batch.startDate || "Upcoming",
-      classTiming: batch.classTime || batch.scheduleTime || "Daily Live Session",
-      googleMeetLink: batch.googleMeetLink || batch.meetLink,
+      classTiming: batch.scheduleTime || "Daily Live Session",
+      googleMeetLink: batch.googleMeetLink || "",
       amount: studentReg.feeAmount,
       admissionId: studentReg.admissionId,
       recipientPhone: studentReg.whatsapp || studentReg.phone,
-      facilities: courseObj?.facilities
-    }).then((waRes) => {
-      if (waRes.success) {
-        studentReg.whatsappDeliveryStatus = "sent";
-        if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
-      } else {
-        studentReg.whatsappDeliveryStatus = "failed";
-        if (waRes.error) studentReg.whatsappError = waRes.error;
+      facilities: resolvedCourse.facilities
+    }).then(async (waRes) => {
+      try {
+        await updateRegistrationDb(studentReg.id, {
+          whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+          whatsappMessageId: waRes.messageId,
+          whatsappError: waRes.error
+        });
+      } catch {
       }
-      saveRegistrations();
     }).catch((err) => {
       console.warn("[WhatsApp] Async dispatch exception:", err);
-      studentReg.whatsappDeliveryStatus = "failed";
-      studentReg.whatsappError = err?.message || "Dispatch error";
-      saveRegistrations();
     });
   }
   res.json({
@@ -7668,9 +8394,9 @@ www.witslingo.com`;
     credentials: {
       username: user.email,
       alternativeUsername: admissionId,
-      password: user.passwordHash
+      password: assignedPassword
     },
-    defaultPasswordHint: user.passwordHash,
+    defaultPasswordHint: assignedPassword,
     whatsapp: {
       recipientNumber: fullWhatsappFormatted,
       cleanRecipient: whatsappCleanRecipient,
@@ -7682,22 +8408,29 @@ www.witslingo.com`;
     }
   });
 });
-app.get("/api/student/admission-slip", (req, res) => {
+app.get("/api/student/admission-slip", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
   const auth = verifyAuthToken(req);
   if (!auth) {
     return res.status(401).json({ error: "Authentication required" });
   }
-  const reg = registrations.find(
-    (r) => auth.admissionId && r.admissionId === auth.admissionId || r.email.toLowerCase() === auth.email.toLowerCase()
-  );
-  if (!reg) {
-    return res.status(404).json({ error: "No admission registration found for this student account." });
-  }
-  const batch = batches.find((b) => b.id === reg.batchId);
-  const rawCleanPhone = (reg.whatsapp || reg.phone || "").replace(/\D/g, "");
-  const recipientDigits = rawCleanPhone.length === 10 ? `91${rawCleanPhone}` : rawCleanPhone;
-  const encodedMsg = encodeURIComponent(
-    reg.whatsappConfirmationMessage || `\u{1F393} *WITS LINGO \u2014 OFFICIAL ADMISSION CONFIRMATION*
+  try {
+    let reg = null;
+    if (auth.admissionId) {
+      reg = await getRegistrationByAdmissionIdDb(auth.admissionId);
+    }
+    if (!reg && auth.email) {
+      const allRegs = await getRegistrationsDb();
+      reg = allRegs.find((r) => r.email.toLowerCase() === auth.email.toLowerCase()) || null;
+    }
+    if (!reg) {
+      return res.status(404).json({ error: "No admission registration found for this student account." });
+    }
+    const batch = reg.batchId ? await getBatchByIdDb(reg.batchId) : null;
+    const rawCleanPhone = (reg.whatsapp || reg.phone || "").replace(/\D/g, "");
+    const recipientDigits = rawCleanPhone.length === 10 ? `91${rawCleanPhone}` : rawCleanPhone;
+    const encodedMsg = encodeURIComponent(
+      reg.whatsappConfirmationMessage || `\u{1F393} *WITS LINGO \u2014 OFFICIAL ADMISSION CONFIRMATION*
 \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
 Dear *${reg.name}*,
 Your seat is confirmed at *WITS LINGO \u2014 A Global Language Platform*!
@@ -7711,126 +8444,139 @@ Your seat is confirmed at *WITS LINGO \u2014 A Global Language Platform*!
 
 Mentor WhatsApp Support: ${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}
 www.witslingo.com`
-  );
-  const studentUrl = reg.whatsappStudentUrl || `https://api.whatsapp.com/send?phone=${recipientDigits}&text=${encodedMsg}`;
-  const adminUrl = reg.whatsappAdminUrl || `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
-  res.json({
-    success: true,
-    slip: {
-      admissionId: reg.admissionId,
-      name: reg.name,
-      fatherName: reg.fatherName,
-      dob: reg.dob,
-      gender: reg.gender,
-      phone: reg.phone,
-      whatsapp: reg.whatsapp,
-      email: reg.email,
-      country: reg.country || "India",
-      state: reg.state,
-      district: reg.district,
-      pincode: reg.pincode,
-      address: reg.address,
+    );
+    const studentUrl = reg.whatsappStudentUrl || `https://api.whatsapp.com/send?phone=${recipientDigits}&text=${encodedMsg}`;
+    const adminUrl = reg.whatsappAdminUrl || `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
+    return res.json({
+      success: true,
+      slip: {
+        admissionId: reg.admissionId,
+        name: reg.name,
+        fatherName: reg.fatherName,
+        dob: reg.dob,
+        gender: reg.gender,
+        phone: reg.phone,
+        whatsapp: reg.whatsapp,
+        email: reg.email,
+        country: reg.country || "India",
+        state: reg.state,
+        district: reg.district,
+        pincode: reg.pincode,
+        address: reg.address,
+        courseName: reg.courseName,
+        batchName: reg.batchName,
+        batchCode: batch?.batchCode || "WL-2026",
+        batchTiming: batch?.scheduleTime || "Daily 1-Hour Live Class",
+        feeAmount: reg.feeAmount,
+        formattedAmount: reg.paymentAmountFormatted || `\u20B9${reg.feeAmount}`,
+        paymentStatus: reg.paymentStatus,
+        paymentMethod: reg.paymentMethod,
+        txnId: reg.paymentTxnId,
+        registeredAt: reg.registeredAt,
+        username: auth.email,
+        password: auth.role === "student" ? "WitsLingo@2026" : void 0,
+        whatsappConfirmationMessage: reg.whatsappConfirmationMessage,
+        whatsappStudentUrl: studentUrl,
+        whatsappAdminUrl: adminUrl
+      }
+    });
+  } catch (err) {
+    console.error("[Admission Slip] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to retrieve admission slip." });
+  }
+});
+app.get("/api/admin/students", requireAdmin, async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const { batchId } = req.query;
+    const list = await getRegistrationsDb(batchId && batchId !== "all" ? String(batchId) : void 0);
+    return res.json({ students: list, totalCount: list.length });
+  } catch (err) {
+    console.error("[Admin Students GET] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to retrieve registered students from database." });
+  }
+});
+app.post("/api/admin/students/:id/resend-whatsapp", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const reg = await getRegistrationByIdDb(id) || await getRegistrationByAdmissionIdDb(id);
+    if (!reg) {
+      return res.status(404).json({ error: "Student enrollment record not found." });
+    }
+    const batch = reg.batchId ? await getBatchByIdDb(reg.batchId) : null;
+    const course = reg.courseId ? await getCourseByIdDb(reg.courseId) : null;
+    const waRes = await sendWhatsAppEnrollmentMessage({
+      studentName: reg.name,
       courseName: reg.courseName,
       batchName: reg.batchName,
-      batchCode: batch?.batchCode || "WL-2026",
-      batchTiming: batch?.scheduleTime || "Daily 1-Hour Live Class",
-      feeAmount: reg.feeAmount,
-      formattedAmount: reg.paymentAmountFormatted || `\u20B9${reg.feeAmount}`,
-      paymentStatus: reg.paymentStatus,
-      paymentMethod: reg.paymentMethod,
-      txnId: reg.paymentTxnId,
-      registeredAt: reg.registeredAt,
-      username: auth.email,
-      password: auth.role === "student" ? "WitsLingo@2026" : void 0,
-      whatsappConfirmationMessage: reg.whatsappConfirmationMessage,
-      whatsappStudentUrl: studentUrl,
-      whatsappAdminUrl: adminUrl
+      courseId: reg.courseId,
+      batchId: reg.batchId,
+      startDate: batch?.startDate || "Upcoming",
+      classTiming: batch?.scheduleTime || "Daily Live Session",
+      googleMeetLink: batch?.googleMeetLink || "",
+      amount: reg.feeAmount,
+      admissionId: reg.admissionId,
+      recipientPhone: reg.whatsapp || reg.phone,
+      facilities: course?.facilities,
+      forceResend: true
+    });
+    await updateRegistrationDb(reg.id, {
+      whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+      whatsappMessageId: waRes.messageId,
+      whatsappError: waRes.error
+    });
+    return res.json({
+      success: waRes.success,
+      whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+      messageId: waRes.messageId,
+      error: waRes.error,
+      skipped: waRes.skipped
+    });
+  } catch (err) {
+    console.error("[Resend WhatsApp] Error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to resend WhatsApp notification." });
+  }
+});
+app.post("/api/admin/registrations/:id/resend-whatsapp", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const reg = await getRegistrationByIdDb(id) || await getRegistrationByAdmissionIdDb(id);
+    if (!reg) {
+      return res.status(404).json({ error: "Student enrollment record not found." });
     }
-  });
-});
-app.get("/api/admin/students", (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Access Denied: Admin authorization required." });
+    const batch = reg.batchId ? await getBatchByIdDb(reg.batchId) : null;
+    const course = reg.courseId ? await getCourseByIdDb(reg.courseId) : null;
+    const waRes = await sendWhatsAppEnrollmentMessage({
+      studentName: reg.name,
+      courseName: reg.courseName,
+      batchName: reg.batchName,
+      courseId: reg.courseId,
+      batchId: reg.batchId,
+      startDate: batch?.startDate || "Upcoming",
+      classTiming: batch?.scheduleTime || "Daily Live Session",
+      googleMeetLink: batch?.googleMeetLink || "",
+      amount: reg.feeAmount,
+      admissionId: reg.admissionId,
+      recipientPhone: reg.whatsapp || reg.phone,
+      facilities: course?.facilities,
+      forceResend: true
+    });
+    await updateRegistrationDb(reg.id, {
+      whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+      whatsappMessageId: waRes.messageId,
+      whatsappError: waRes.error
+    });
+    return res.json({
+      success: waRes.success,
+      whatsappDeliveryStatus: waRes.success ? "sent" : "failed",
+      messageId: waRes.messageId,
+      error: waRes.error,
+      skipped: waRes.skipped
+    });
+  } catch (err) {
+    console.error("[Resend WhatsApp] Error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to resend WhatsApp notification." });
   }
-  const { batchId } = req.query;
-  let list = registrations;
-  if (batchId && typeof batchId === "string" && batchId !== "all") {
-    list = list.filter((r) => r.batchId === batchId);
-  }
-  res.json({ students: list, totalCount: list.length });
-});
-app.post("/api/admin/students/:id/resend-whatsapp", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Access Denied: Admin authorization required." });
-  }
-  const { id } = req.params;
-  const reg = registrations.find((r) => r.id === id || r.admissionId === id);
-  if (!reg) {
-    return res.status(404).json({ error: "Student enrollment record not found." });
-  }
-  const batch = batches.find((b) => b.id === reg.batchId);
-  const course = (cmsContent.courses || []).find((c) => c.id === reg.courseId || c.name === reg.courseName);
-  const waRes = await sendWhatsAppEnrollmentMessage({
-    studentName: reg.name,
-    courseName: reg.courseName,
-    batchName: reg.batchName,
-    courseId: reg.courseId,
-    batchId: reg.batchId,
-    startDate: batch?.startDate || "Upcoming",
-    classTiming: batch?.classTime || batch?.scheduleTime || "Daily Live Session",
-    googleMeetLink: batch?.googleMeetLink || batch?.meetLink,
-    amount: reg.feeAmount,
-    admissionId: reg.admissionId,
-    recipientPhone: reg.whatsapp || reg.phone,
-    facilities: course?.facilities,
-    forceResend: true
-  });
-  await saveRegistrations();
-  res.json({
-    success: waRes.success,
-    whatsappDeliveryStatus: reg.whatsappDeliveryStatus,
-    messageId: reg.whatsappMessageId,
-    error: waRes.error,
-    skipped: waRes.skipped
-  });
-});
-app.post("/api/admin/registrations/:id/resend-whatsapp", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Access Denied: Admin authorization required." });
-  }
-  const { id } = req.params;
-  const reg = registrations.find((r) => r.id === id || r.admissionId === id);
-  if (!reg) {
-    return res.status(404).json({ error: "Student enrollment record not found." });
-  }
-  const batch = batches.find((b) => b.id === reg.batchId);
-  const course = (cmsContent.courses || []).find((c) => c.id === reg.courseId || c.name === reg.courseName);
-  const waRes = await sendWhatsAppEnrollmentMessage({
-    studentName: reg.name,
-    courseName: reg.courseName,
-    batchName: reg.batchName,
-    courseId: reg.courseId,
-    batchId: reg.batchId,
-    startDate: batch?.startDate || "Upcoming",
-    classTiming: batch?.classTime || batch?.scheduleTime || "Daily Live Session",
-    googleMeetLink: batch?.googleMeetLink || batch?.meetLink,
-    amount: reg.feeAmount,
-    admissionId: reg.admissionId,
-    recipientPhone: reg.whatsapp || reg.phone,
-    facilities: course?.facilities,
-    forceResend: true
-  });
-  await saveRegistrations();
-  res.json({
-    success: waRes.success,
-    whatsappDeliveryStatus: reg.whatsappDeliveryStatus,
-    messageId: reg.whatsappMessageId,
-    error: waRes.error,
-    skipped: waRes.skipped
-  });
 });
 app.post("/api/admin/batches", requireAdmin, async (req, res) => {
   try {
@@ -7860,124 +8606,112 @@ app.post("/api/admin/batches", requireAdmin, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to create batch in database." });
   }
 });
-app.post("/api/admin/schedule-class", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Access Denied: Admin authorization required." });
-  }
-  const { batchId, title, topic, classNumber, date, startTime, endTime, durationMinutes, teacherName, description, status } = req.body;
-  const batch = batches.find((b) => b.id === batchId);
-  if (!batch) return res.status(400).json({ error: "Invalid batch." });
-  const newClass = {
-    id: `cls-${Date.now()}`,
-    batchId,
-    batchName: batch.name,
-    title: title || `Class ${classNumber || classes.length + 1} \u2014 ${topic || "English Session"}`,
-    topic: topic || "English Practice",
-    classNumber: Number(classNumber) || classes.length + 1,
-    date: date || (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB"),
-    startTime: startTime || "7:00 PM",
-    endTime: endTime || "8:00 PM",
-    durationMinutes: Number(durationMinutes) || 60,
-    teacherName: teacherName || "Ziyaur Rehman Zia",
-    description: description || "Interactive class session.",
-    status: status || "Upcoming",
-    hasStudyMaterial: false,
-    hasAssignment: false
-  };
-  classes.push(newClass);
-  if (status === "Live") {
-    announcements.unshift({
-      id: `ann-${Date.now()}`,
-      batchId: batch.id,
+app.post("/api/admin/schedule-class", requireAdmin, async (req, res) => {
+  try {
+    const { batchId, title, topic, classNumber, date, startTime, endTime, durationMinutes, teacherName, description, status } = req.body;
+    const batch = await getBatchByIdDb(batchId);
+    if (!batch) return res.status(400).json({ error: "Invalid batch." });
+    const existingClasses = await getClassesDb(batchId);
+    const nextNum = Number(classNumber) || existingClasses.length + 1;
+    const newClass = await createClassDb({
+      batchId,
       batchName: batch.name,
-      title: `\u{1F534} Class is LIVE: ${newClass.title}`,
-      message: `Instructor ${newClass.teacherName} has started the live class. Click 'Join Live Class' in your student dashboard to attend now!`,
-      date: (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB"),
-      author: newClass.teacherName,
-      priority: "Urgent"
+      title: title || `Class ${nextNum} \u2014 ${topic || "English Session"}`,
+      topic: topic || "English Practice",
+      classNumber: nextNum,
+      date: date || (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB"),
+      startTime: startTime || "7:00 PM",
+      endTime: endTime || "8:00 PM",
+      durationMinutes: Number(durationMinutes) || 60,
+      teacherName: teacherName || "Ziyaur Rehman Zia",
+      description: description || "Interactive class session.",
+      status: status || "Upcoming"
     });
-    await saveAnnouncements();
+    if (status === "Live") {
+      await createAnnouncementDb({
+        batchId: batch.id,
+        batchName: batch.name,
+        title: `\u{1F534} Class is LIVE: ${newClass.title}`,
+        message: `Instructor ${newClass.teacherName} has started the live class. Click 'Join Live Class' in your student dashboard to attend now!`,
+        date: (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB"),
+        author: newClass.teacherName,
+        priority: "Urgent"
+      });
+    }
+    return res.json({ success: true, class: newClass });
+  } catch (err) {
+    console.error("[Schedule Class] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to schedule class in database." });
   }
-  await saveClasses();
-  res.json({ success: true, class: newClass });
 });
-app.post("/api/admin/classes/:classId/status", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Access Denied: Admin authorization required." });
-  }
+app.post("/api/admin/classes/:classId/status", requireAdmin, async (req, res) => {
   const { classId } = req.params;
   const { status, autoRecord } = req.body;
-  const cls = classes.find((c) => c.id === classId);
-  if (!cls) return res.status(404).json({ error: "Class not found." });
-  const oldStatus = cls.status;
-  cls.status = status;
-  if (oldStatus === "Live" && status === "Completed" && autoRecord !== false) {
-    const recId = `rec-${cls.id}`;
-    let rec = recordings.find((r) => r.classId === cls.id);
-    if (!rec) {
-      rec = {
-        id: recId,
-        classId: cls.id,
+  try {
+    const cls = await getClassByIdDb(classId);
+    if (!cls) return res.status(404).json({ error: "Class not found." });
+    const oldStatus = cls.status;
+    const updatedClass = await updateClassDb(classId, { status });
+    if (oldStatus === "Live" && status === "Completed" && autoRecord !== false) {
+      const batchRecordings = await getRecordingsDb(cls.batchId);
+      let rec = batchRecordings.find((r) => r.classId === cls.id);
+      if (!rec) {
+        rec = await createRecordingDb({
+          id: `rec-${cls.id}`,
+          classId: cls.id,
+          batchId: cls.batchId,
+          batchName: cls.batchName,
+          title: cls.title,
+          topic: cls.topic,
+          classNumber: cls.classNumber,
+          date: cls.date,
+          duration: `${cls.durationMinutes || 60} min`,
+          status: "Available",
+          videoKey: `video_rec_${cls.batchId}_${cls.id}`,
+          notesSummary: `Auto-recorded session for ${cls.title}. Complete recording available for authorized batch students.`
+        });
+        await updateClassDb(classId, { recordingId: rec.id });
+      }
+      await createAnnouncementDb({
         batchId: cls.batchId,
         batchName: cls.batchName,
-        title: cls.title,
-        topic: cls.topic,
-        classNumber: cls.classNumber,
-        date: cls.date,
-        duration: `${cls.durationMinutes || 60} min`,
-        status: "Available",
-        videoKey: `video_rec_${cls.batchId}_${cls.id}`,
-        notesSummary: `Auto-recorded session for ${cls.title}. Complete recording available for authorized batch students.`
-      };
-      recordings.unshift(rec);
-      cls.recordingId = rec.id;
+        title: `\u25B6 Recording Available: ${cls.title}`,
+        message: `The recording for ${cls.title} has completed processing and is now available in your Recorded Classes section.`,
+        date: (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB"),
+        author: "Wits Lingo Academy",
+        priority: "Normal"
+      });
     }
-    announcements.unshift({
-      id: `ann-${Date.now()}`,
+    return res.json({ success: true, class: updatedClass || cls });
+  } catch (err) {
+    console.error("[Class Status] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to update class status." });
+  }
+});
+app.post("/api/admin/recordings", requireAdmin, async (req, res) => {
+  try {
+    const { classId, title, topic, duration, notesSummary } = req.body;
+    const cls = await getClassByIdDb(classId);
+    if (!cls) return res.status(400).json({ error: "Valid class ID is required." });
+    const newRec = await createRecordingDb({
+      classId: cls.id,
       batchId: cls.batchId,
       batchName: cls.batchName,
-      title: `\u25B6 Recording Available: ${cls.title}`,
-      message: `The recording for ${cls.title} has completed processing and is now available in your Recorded Classes section.`,
-      date: (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB"),
-      author: "Wits Lingo Academy",
-      priority: "Normal"
+      title: title || cls.title,
+      topic: topic || cls.topic,
+      classNumber: cls.classNumber,
+      date: cls.date,
+      duration: duration || "60 min",
+      status: "Available",
+      videoKey: `video_${cls.batchId}_manual_${Date.now()}`,
+      notesSummary: notesSummary || `Recorded lecture for ${cls.title}.`
     });
-    await saveAnnouncements();
+    await updateClassDb(cls.id, { recordingId: newRec.id, status: "Completed" });
+    return res.json({ success: true, recording: newRec });
+  } catch (err) {
+    console.error("[Recordings POST] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to create recording in database." });
   }
-  await saveClasses();
-  await saveRecordings();
-  res.json({ success: true, class: cls });
-});
-app.post("/api/admin/recordings", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
-  const { classId, title, topic, duration, notesSummary } = req.body;
-  const cls = classes.find((c) => c.id === classId);
-  if (!cls) return res.status(400).json({ error: "Valid class ID is required." });
-  const newRec = {
-    id: `rec-${Date.now()}`,
-    classId: cls.id,
-    batchId: cls.batchId,
-    batchName: cls.batchName,
-    title: title || cls.title,
-    topic: topic || cls.topic,
-    classNumber: cls.classNumber,
-    date: cls.date,
-    duration: duration || "60 min",
-    status: "Available",
-    videoKey: `video_${cls.batchId}_manual_${Date.now()}`,
-    notesSummary: notesSummary || `Recorded lecture for ${cls.title}.`
-  };
-  recordings.unshift(newRec);
-  cls.recordingId = newRec.id;
-  cls.status = "Completed";
-  await saveRecordings();
-  await saveClasses();
-  res.json({ success: true, recording: newRec });
 });
 function extractYouTubeVideoId(url) {
   if (!url || typeof url !== "string") return null;
@@ -8547,8 +9281,8 @@ app.post("/api/admin/announcements", requireAdmin, async (req, res) => {
       effectiveDate: effectiveDate || void 0,
       isPinned: Boolean(isPinned)
     });
-    const announcements2 = await getAnnouncementsDb();
-    res.json({ success: true, announcement: newAnn, announcements: announcements2 });
+    const announcements = await getAnnouncementsDb();
+    res.json({ success: true, announcement: newAnn, announcements });
   } catch (err) {
     console.error("Error creating announcement in Neon:", err);
     res.status(500).json({ error: "Failed to create announcement." });
@@ -8557,8 +9291,8 @@ app.post("/api/admin/announcements", requireAdmin, async (req, res) => {
 app.get(["/api/announcements", "/api/admin/announcements"], async (_req, res) => {
   try {
     res.setHeader("Cache-Control", "no-store");
-    const announcements2 = await getAnnouncementsDb();
-    res.json({ announcements: announcements2 });
+    const announcements = await getAnnouncementsDb();
+    res.json({ announcements });
   } catch (err) {
     console.error("Error fetching announcements from Neon:", err);
     res.status(500).json({ error: "Failed to fetch announcements." });
@@ -8590,8 +9324,8 @@ app.put("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "Announcement not found." });
     }
-    const announcements2 = await getAnnouncementsDb();
-    res.json({ success: true, announcement: updated, announcements: announcements2 });
+    const announcements = await getAnnouncementsDb();
+    res.json({ success: true, announcement: updated, announcements });
   } catch (err) {
     console.error("Error updating announcement in Neon:", err);
     res.status(500).json({ error: "Failed to update announcement." });
@@ -8604,120 +9338,106 @@ app.delete("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: "Announcement not found." });
     }
-    const announcements2 = await getAnnouncementsDb();
-    res.json({ success: true, announcements: announcements2 });
+    const announcements = await getAnnouncementsDb();
+    res.json({ success: true, announcements });
   } catch (err) {
     console.error("Error deleting announcement in Neon:", err);
     res.status(500).json({ error: "Failed to delete announcement." });
   }
 });
-app.get("/api/admin/attendance", (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.get("/api/admin/attendance", requireAdmin, async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const { batchId, classId } = req.query;
+    const records = await getAttendanceRecordsDb({
+      batchId: batchId && batchId !== "all" ? String(batchId) : void 0,
+      classId: classId ? String(classId) : void 0
+    });
+    return res.json({ attendance: records, totalCount: records.length });
+  } catch (err) {
+    console.error("[Attendance GET] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to retrieve attendance records." });
   }
-  const { batchId, classId } = req.query;
-  let list = attendanceRecords;
-  if (batchId && typeof batchId === "string" && batchId !== "all") {
-    list = list.filter((a) => a.batchId === batchId);
-  }
-  if (classId && typeof classId === "string") {
-    list = list.filter((a) => a.classId === classId);
-  }
-  res.json({ attendance: list, totalCount: list.length });
 });
-app.post("/api/admin/students", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
+app.post("/api/admin/students", requireAdmin, async (req, res) => {
   const studentData = req.body;
   if (!studentData.name || !studentData.phone) {
     return res.status(400).json({ error: "Student name and phone are required." });
   }
-  const id = studentData.id || `reg-${Date.now()}`;
-  const randomSeq = Math.floor(1e3 + Math.random() * 9e3);
-  const admissionId = studentData.admissionId || `WL-OCT26-${randomSeq}`;
-  const record = {
-    ...studentData,
-    id,
-    admissionId,
-    registeredAt: studentData.registeredAt || (/* @__PURE__ */ new Date()).toISOString()
-  };
-  registrations.unshift(record);
-  if (record.email) {
-    let existingUser = users.find((u) => u.email.toLowerCase() === record.email.toLowerCase());
-    if (existingUser) {
-      if (record.batchId && !existingUser.batchIds.includes(record.batchId)) {
-        existingUser.batchIds.push(record.batchId);
-      }
-      if (!existingUser.admissionId) existingUser.admissionId = record.admissionId;
-    } else {
-      users.push({
-        id: `usr-${Date.now()}`,
+  try {
+    const id = studentData.id || `reg-${Date.now()}`;
+    const randomSeq = Math.floor(1e3 + Math.random() * 9e3);
+    const admissionId = studentData.admissionId || `WL-${(/* @__PURE__ */ new Date()).getFullYear()}-${randomSeq}`;
+    const record = await createRegistrationDb({
+      ...studentData,
+      id,
+      admissionId,
+      registeredAt: studentData.registeredAt || (/* @__PURE__ */ new Date()).toISOString()
+    });
+    if (record.email) {
+      const passwordHash = await bcrypt2.hash("student123", 10);
+      await createUserDb({
         name: record.name,
         email: record.email.toLowerCase(),
-        passwordHash: "student123",
+        passwordHash,
         role: "student",
         phone: record.phone,
         batchIds: record.batchId ? [record.batchId] : [],
-        admissionId: record.admissionId,
-        registrationDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
+        admissionId: record.admissionId
       });
     }
-    await saveUsers();
+    return res.json({ success: true, student: record });
+  } catch (err) {
+    console.error("[Admin Students POST] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to create student registration." });
   }
-  await saveRegistrations();
-  res.json({ success: true, student: record });
 });
-app.delete("/api/admin/students/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
+app.delete("/api/admin/students/:id", requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const target = String(id).toLowerCase().trim();
-  const regIdx = registrations.findIndex(
-    (r) => r.id && r.id.toLowerCase().trim() === target || r.admissionId && r.admissionId.toLowerCase().trim() === target
-  );
-  if (regIdx !== -1) {
-    const reg = registrations[regIdx];
-    registrations.splice(regIdx, 1);
-    const userIdx2 = users.findIndex(
-      (u) => reg.admissionId && u.admissionId && u.admissionId.toLowerCase().trim() === reg.admissionId.toLowerCase().trim() || reg.email && u.email && u.email.toLowerCase().trim() === reg.email.toLowerCase().trim()
-    );
-    if (userIdx2 !== -1 && users[userIdx2].role !== "admin") {
-      users.splice(userIdx2, 1);
-      await saveUsers();
+  try {
+    const deleted = await deleteRegistrationDb(id);
+    if (deleted) {
+      if (deleted.email) {
+        const user2 = await getUserByEmailDb(deleted.email);
+        if (user2 && user2.role !== "admin") {
+          await deleteUserDb(user2.id);
+        }
+      }
+      const freshStudents = await getRegistrationsDb();
+      return res.json({
+        success: true,
+        message: "Student admission deleted successfully.",
+        remainingCount: freshStudents.length,
+        students: freshStudents
+      });
     }
-    await saveRegistrations();
-    return res.json({ success: true, message: "Student admission deleted successfully.", remainingCount: registrations.length, students: registrations });
+    const user = await getUserByIdDb(id);
+    if (user && user.role !== "admin") {
+      await deleteUserDb(user.id);
+      const freshStudents = await getRegistrationsDb();
+      return res.json({
+        success: true,
+        message: "Student user deleted successfully.",
+        remainingCount: freshStudents.length,
+        students: freshStudents
+      });
+    }
+    return res.status(404).json({ error: "Student registration not found." });
+  } catch (err) {
+    console.error("[Admin Students DELETE] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to delete student registration." });
   }
-  const userIdx = users.findIndex(
-    (u) => u.admissionId && u.admissionId.toLowerCase().trim() === target || u.id && u.id.toLowerCase().trim() === target
-  );
-  if (userIdx !== -1 && users[userIdx].role !== "admin") {
-    users.splice(userIdx, 1);
-    await saveUsers();
-    await saveRegistrations();
-    return res.json({ success: true, message: "Student user deleted successfully.", remainingCount: registrations.length, students: registrations });
-  }
-  res.status(404).json({ error: "Student registration not found." });
 });
-app.put("/api/admin/students/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
-  }
+app.put("/api/admin/students/:id", requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const target = String(id).toLowerCase().trim();
-  const reg = registrations.find(
-    (r) => r.id && r.id.toLowerCase().trim() === target || r.admissionId && r.admissionId.toLowerCase().trim() === target
-  );
-  if (!reg) return res.status(404).json({ error: "Student registration not found." });
-  Object.assign(reg, req.body);
-  await saveRegistrations();
-  res.json({ success: true, student: reg });
+  try {
+    const updated = await updateRegistrationDb(id, req.body);
+    if (!updated) return res.status(404).json({ error: "Student registration not found." });
+    return res.json({ success: true, student: updated });
+  } catch (err) {
+    console.error("[Admin Students PUT] Database error:", err?.message || err);
+    return res.status(500).json({ error: "Failed to update student registration." });
+  }
 });
 app.put("/api/admin/batches/:id", requireAdmin, async (req, res) => {
   try {
@@ -8747,57 +9467,53 @@ app.delete("/api/admin/batches/:id", requireAdmin, async (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to delete batch from database." });
   }
 });
-app.put("/api/admin/classes/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.put("/api/admin/classes/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await updateClassDb(id, req.body);
+    if (!updated) return res.status(404).json({ error: "Class not found." });
+    const allClasses = await getClassesDb();
+    res.json({ success: true, class: updated, classes: allClasses });
+  } catch (err) {
+    console.error("[Classes PUT] Database error:", err?.message || err);
+    res.status(500).json({ error: "Failed to update class in database." });
   }
-  const { id } = req.params;
-  const cls = classes.find((c) => c.id === id);
-  if (!cls) return res.status(404).json({ error: "Class not found." });
-  Object.assign(cls, req.body);
-  await saveClasses();
-  res.json({ success: true, class: cls, classes });
 });
-app.delete("/api/admin/classes/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.delete("/api/admin/classes/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await deleteClassDb(id);
+    if (!deleted) return res.status(404).json({ error: "Class not found." });
+    const allClasses = await getClassesDb();
+    return res.json({ success: true, message: "Class deleted successfully.", classes: allClasses });
+  } catch (err) {
+    console.error("[Classes DELETE] Database error:", err?.message || err);
+    res.status(500).json({ error: "Failed to delete class from database." });
   }
-  const { id } = req.params;
-  const idx = classes.findIndex((c) => c.id === id);
-  if (idx !== -1) {
-    classes.splice(idx, 1);
-    await saveClasses();
-    return res.json({ success: true, message: "Class deleted successfully.", classes });
-  }
-  res.status(404).json({ error: "Class not found." });
 });
-app.put("/api/admin/recordings/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.put("/api/admin/recordings/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await updateRecordingDb(id, req.body);
+    if (!updated) return res.status(404).json({ error: "Recording not found." });
+    const allRecordings = await getRecordingsDb();
+    res.json({ success: true, recording: updated, recordings: allRecordings });
+  } catch (err) {
+    console.error("[Recordings PUT] Database error:", err?.message || err);
+    res.status(500).json({ error: "Failed to update recording in database." });
   }
-  const { id } = req.params;
-  const rec = recordings.find((r) => r.id === id);
-  if (!rec) return res.status(404).json({ error: "Recording not found." });
-  Object.assign(rec, req.body);
-  await saveRecordings();
-  res.json({ success: true, recording: rec, recordings });
 });
-app.delete("/api/admin/recordings/:id", async (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin authorization required." });
+app.delete("/api/admin/recordings/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await deleteRecordingDb(id);
+    if (!deleted) return res.status(404).json({ error: "Recording not found." });
+    const allRecordings = await getRecordingsDb();
+    return res.json({ success: true, message: "Recording deleted successfully.", recordings: allRecordings });
+  } catch (err) {
+    console.error("[Recordings DELETE] Database error:", err?.message || err);
+    res.status(500).json({ error: "Failed to delete recording from database." });
   }
-  const { id } = req.params;
-  const idx = recordings.findIndex((r) => r.id === id);
-  if (idx !== -1) {
-    recordings.splice(idx, 1);
-    await saveRecordings();
-    return res.json({ success: true, message: "Recording deleted successfully.", recordings });
-  }
-  res.status(404).json({ error: "Recording not found." });
 });
 app.get("/api/cms/content", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
@@ -9121,13 +9837,6 @@ app.delete("/api/reviews/:id", async (req, res) => {
     console.error("[Reviews DELETE] Database deletion failed:", err?.message || err);
     return res.status(500).json({ success: false, error: "Failed to delete review from database." });
   }
-});
-app.get("/api/admin/notifications", (req, res) => {
-  const auth = verifyAuthToken(req);
-  if (!auth || auth.role !== "admin") {
-    return res.status(403).json({ error: "Admin access required." });
-  }
-  res.json({ success: true, notifications: adminNotificationService.getAllNotifications() });
 });
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
