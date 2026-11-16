@@ -8,7 +8,7 @@ import {
   Megaphone, Pin, Clock, Calendar, Tag, Lock, Sparkles, Link as LinkIcon, BookOpen, Bell,
   CreditCard, Cloud, Film, UploadCloud, Copy, PlayCircle,
   Image as ImageIcon, Images, ArrowUp, ArrowDown, FolderPlus, Youtube,
-  AlertCircle
+  AlertCircle, Upload, Loader2
 } from 'lucide-react';
 import { AdminAutomationTabs } from './AdminAutomationTabs';
 import { AnnouncementModal } from './AnnouncementModal';
@@ -308,8 +308,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     duration: '2 Months (40 Sessions)',
     learningFormat: 'Live Online Classroom',
     fee: 1499,
-    badge: 'Live'
+    badge: 'Live',
+    imageUrl: ''
   });
+
+  const [isUploadingCourseImage, setIsUploadingCourseImage] = useState<boolean>(false);
+  const [courseImageUploadError, setCourseImageUploadError] = useState<string | null>(null);
+  const [courseImageUploadProgress, setCourseImageUploadProgress] = useState<string>('');
 
   const [newBatch, setNewBatch] = useState<Partial<Batch>>({
     name: '',
@@ -790,6 +795,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       learningFormat: newCourse.learningFormat || 'Live Online Classroom',
       fee: Number(newCourse.fee) || 1499,
       badge: newCourse.badge || '',
+      imageUrl: newCourse.imageUrl ? newCourse.imageUrl.trim() : undefined,
       isPublished: newCourse.isPublished !== false
     };
 
@@ -823,6 +829,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       console.error('Failed to sync course addition to backend:', e);
       onUpdateCourses(prevCourses);
       triggerFeedback(`Failed to save course "${courseToAdd.name}". Reverting changes.`);
+    }
+  };
+
+  const handleUploadCourseImage = async (file: File, isEdit: boolean) => {
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setCourseImageUploadError('Please select a valid image file (PNG, JPG, WEBP, SVG, AVIF).');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      setCourseImageUploadError('Image size exceeds 15MB limit. Please choose a smaller image.');
+      return;
+    }
+
+    setCourseImageUploadError(null);
+    setIsUploadingCourseImage(true);
+    setCourseImageUploadProgress('Reading image...');
+
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Show immediate local preview
+      if (isEdit) {
+        setEditingCourse(prev => prev ? { ...prev, imageUrl: base64Data } : null);
+      } else {
+        setNewCourse(prev => ({ ...prev, imageUrl: base64Data }));
+      }
+
+      setCourseImageUploadProgress('Uploading to Backblaze B2 cloud storage...');
+
+      const res = await adminFetch('/api/admin/courses/upload-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({
+          dataBase64: base64Data,
+          filename: file.name,
+          mimeType: file.type || 'image/jpeg',
+          courseId: isEdit ? editingCourse?.id : undefined
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.imageUrl) {
+        throw new Error(data.error || 'Failed to upload image.');
+      }
+
+      // Update with permanent B2 cloud URL
+      if (isEdit) {
+        setEditingCourse(prev => prev ? { ...prev, imageUrl: data.imageUrl } : null);
+      } else {
+        setNewCourse(prev => ({ ...prev, imageUrl: data.imageUrl }));
+      }
+
+      triggerFeedback('Course cover image uploaded and saved to cloud!');
+    } catch (err: any) {
+      console.error('Course image upload error:', err);
+      setCourseImageUploadError(err.message || 'Failed to upload course image.');
+      triggerFeedback('Could not upload image to cloud.');
+    } finally {
+      setIsUploadingCourseImage(false);
+      setCourseImageUploadProgress('');
     }
   };
 
@@ -2853,8 +2930,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         learningFormat: 'Live Online Classroom',
                         fee: 1499,
                         badge: 'Live',
+                        imageUrl: '',
                         isPublished: true
                       });
+                      setCourseImageUploadError(null);
                       setNewBulletPointForAdd('');
                       setShowAddCourseModal(true);
                     }}
@@ -3004,6 +3083,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           >
                             {isLive ? 'Unpublish' : 'Publish Now'}
                           </button>
+                        </div>
+
+                        {/* Course Cover Photo Thumbnail Banner */}
+                        <div className="h-36 w-full bg-slate-100 relative overflow-hidden border-b border-slate-100 group/img">
+                          {course.imageUrl ? (
+                            <img
+                              src={course.imageUrl}
+                              alt={course.name}
+                              className="w-full h-full object-cover object-center group-hover/img:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50/80 to-purple-100/50 text-purple-400 gap-1.5 p-3 text-center">
+                              <ImageIcon className="w-7 h-7 stroke-[1.5] text-purple-300" />
+                              <span className="text-[10px] font-semibold text-purple-600/70">Default Stock Photo</span>
+                            </div>
+                          )}
+                          {course.imageUrl && (
+                            <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-white text-[10px] font-semibold flex items-center gap-1 shadow-xs">
+                              <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                              Custom Cover Photo
+                            </span>
+                          )}
                         </div>
 
                         {/* Card Body */}
@@ -5572,6 +5673,123 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
+                {/* Course Cover Image (Custom Preferred Photo) */}
+                <div className="p-4 rounded-2xl bg-[#FAF9FC] border border-purple-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="font-bold text-slate-800 block text-xs flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4 text-[#4A1D96]" />
+                        <span>Course Cover Image</span>
+                        <span className="text-slate-400 font-normal">(Replaces default stock photo)</span>
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        Upload your preferred course banner or photo (PNG, JPG, WEBP, up to 15MB).
+                      </p>
+                    </div>
+                    {newCourse.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setNewCourse({ ...newCourse, imageUrl: '' })}
+                        className="text-[11px] text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove Image</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {newCourse.imageUrl ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-purple-200 bg-white group shadow-xs">
+                      <div className="h-44 w-full bg-slate-900 relative">
+                        <img
+                          src={newCourse.imageUrl}
+                          alt="Course Cover Preview"
+                          className="w-full h-full object-cover object-center"
+                        />
+                        {isUploadingCourseImage && (
+                          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white gap-2">
+                            <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+                            <span className="text-xs font-semibold">{courseImageUploadProgress || 'Uploading image...'}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-3 bg-white flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 text-emerald-700 font-semibold text-[11px]">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                          <span>Custom Photo Attached</span>
+                        </div>
+                        <label className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#4A1D96] font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Change Photo</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleUploadCourseImage(f, false);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
+                        isUploadingCourseImage
+                          ? 'border-purple-300 bg-purple-50/40 pointer-events-none'
+                          : 'border-purple-200 bg-white hover:bg-purple-50/30 hover:border-[#4A1D96]'
+                      }`}>
+                        {isUploadingCourseImage ? (
+                          <div className="flex flex-col items-center gap-2 py-2">
+                            <Loader2 className="w-8 h-8 animate-spin text-[#4A1D96]" />
+                            <span className="text-xs font-bold text-[#4A1D96]">{courseImageUploadProgress || 'Uploading cover photo...'}</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-[#4A1D96] flex items-center justify-center mb-2 shadow-2xs">
+                              <UploadCloud className="w-6 h-6" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-800">
+                              Click or Drag & Drop to Upload Custom Photo
+                            </span>
+                            <span className="text-[11px] text-slate-400 mt-0.5">
+                              Recommended: 800x500 (16:10 or 16:9 ratio) • PNG, JPG, WEBP, AVIF up to 15MB
+                            </span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={isUploadingCourseImage}
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleUploadCourseImage(f, false);
+                          }}
+                        />
+                      </label>
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[11px] text-slate-400 font-semibold shrink-0">Or Image URL:</span>
+                        <input
+                          type="url"
+                          placeholder="https://example.com/course-photo.jpg"
+                          value={newCourse.imageUrl || ''}
+                          onChange={(e) => setNewCourse({ ...newCourse, imageUrl: e.target.value })}
+                          className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-[#4A1D96]"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {courseImageUploadError && (
+                    <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                      <span>{courseImageUploadError}</span>
+                    </div>
+                  )}
+                </div>
+
                 {/* Course Name */}
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Course Name *</label>
@@ -5953,6 +6171,123 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </div>
                     </button>
                   </div>
+                </div>
+
+                {/* Course Cover Image (Custom Preferred Photo) */}
+                <div className="p-4 rounded-2xl bg-[#FAF9FC] border border-purple-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="font-bold text-slate-800 block text-xs flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4 text-[#4A1D96]" />
+                        <span>Course Cover Image</span>
+                        <span className="text-slate-400 font-normal">(Replaces default stock photo)</span>
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        Upload your preferred course banner or photo (PNG, JPG, WEBP, up to 15MB).
+                      </p>
+                    </div>
+                    {editingCourse.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingCourse({ ...editingCourse, imageUrl: '' })}
+                        className="text-[11px] text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove Image</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {editingCourse.imageUrl ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-purple-200 bg-white group shadow-xs">
+                      <div className="h-44 w-full bg-slate-900 relative">
+                        <img
+                          src={editingCourse.imageUrl}
+                          alt="Course Cover Preview"
+                          className="w-full h-full object-cover object-center"
+                        />
+                        {isUploadingCourseImage && (
+                          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white gap-2">
+                            <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+                            <span className="text-xs font-semibold">{courseImageUploadProgress || 'Uploading image...'}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-3 bg-white flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 text-emerald-700 font-semibold text-[11px]">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                          <span>Custom Photo Attached</span>
+                        </div>
+                        <label className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#4A1D96] font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Change Photo</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleUploadCourseImage(f, true);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
+                        isUploadingCourseImage
+                          ? 'border-purple-300 bg-purple-50/40 pointer-events-none'
+                          : 'border-purple-200 bg-white hover:bg-purple-50/30 hover:border-[#4A1D96]'
+                      }`}>
+                        {isUploadingCourseImage ? (
+                          <div className="flex flex-col items-center gap-2 py-2">
+                            <Loader2 className="w-8 h-8 animate-spin text-[#4A1D96]" />
+                            <span className="text-xs font-bold text-[#4A1D96]">{courseImageUploadProgress || 'Uploading cover photo...'}</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-[#4A1D96] flex items-center justify-center mb-2 shadow-2xs">
+                              <UploadCloud className="w-6 h-6" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-800">
+                              Click or Drag & Drop to Upload Custom Photo
+                            </span>
+                            <span className="text-[11px] text-slate-400 mt-0.5">
+                              Recommended: 800x500 (16:10 or 16:9 ratio) • PNG, JPG, WEBP, AVIF up to 15MB
+                            </span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={isUploadingCourseImage}
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleUploadCourseImage(f, true);
+                          }}
+                        />
+                      </label>
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[11px] text-slate-400 font-semibold shrink-0">Or Image URL:</span>
+                        <input
+                          type="url"
+                          placeholder="https://example.com/course-photo.jpg"
+                          value={editingCourse.imageUrl || ''}
+                          onChange={(e) => setEditingCourse({ ...editingCourse, imageUrl: e.target.value })}
+                          className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-[#4A1D96]"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {courseImageUploadError && (
+                    <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                      <span>{courseImageUploadError}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Course Name */}

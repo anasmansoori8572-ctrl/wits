@@ -6465,7 +6465,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
 
   app.post(["/api/courses", "/api/admin/courses"], requireAdmin, async (req, res) => {
     try {
-      const { name, level, shortDescription, whatYouWillLearn, facilities, duration, learningFormat, fee, badge, isPublished, order } = req.body;
+      const { name, level, shortDescription, whatYouWillLearn, facilities, duration, learningFormat, fee, badge, imageUrl, isPublished, order } = req.body;
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, error: "Course name is required." });
       }
@@ -6481,6 +6481,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
         learningFormat: learningFormat || "Live Online Classroom",
         fee: Number(fee) || 0,
         badge: badge || undefined,
+        imageUrl: imageUrl || req.body.imageUrl || undefined,
         isPublished: isPublished !== false,
         order: typeof order === "number" ? order : 0,
       });
@@ -6491,6 +6492,119 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
       console.error("[Courses POST] Database insertion failed:", err?.message || err);
       return res.status(500).json({ success: false, error: "Failed to create course in database." });
     }
+  });
+
+  // Upload custom course cover image to Backblaze B2 (with disk cache & fallback)
+  app.post(["/api/admin/courses/upload-image", "/api/courses/upload-image"], requireAdmin, async (req, res) => {
+    try {
+      const { dataBase64, filename, mimeType, courseId } = req.body;
+      if (!dataBase64) {
+        return res.status(400).json({ success: false, error: "Course image data is required." });
+      }
+
+      const validMimeTypes = [
+        "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/avif", "image/svg+xml"
+      ];
+
+      const cleanMime = (mimeType || "image/jpeg").toLowerCase();
+      if (!validMimeTypes.includes(cleanMime) && !cleanMime.startsWith("image/")) {
+        return res.status(400).json({ success: false, error: "Invalid image format. Supported formats: JPG, PNG, WEBP, GIF, SVG, AVIF." });
+      }
+
+      const rawBase64 = dataBase64.includes(",") ? dataBase64.split(",")[1] : dataBase64;
+      const buffer = Buffer.from(rawBase64, "base64");
+
+      if (buffer.length === 0) {
+        return res.status(400).json({ success: false, error: "Uploaded file is empty." });
+      }
+      if (buffer.length > 15 * 1024 * 1024) {
+        return res.status(400).json({ success: false, error: "Image file size exceeds 15MB limit." });
+      }
+
+      const ext = path.extname(filename || "cover.jpg") || (cleanMime.includes("png") ? ".png" : ".jpg");
+      const id = courseId || `course-img-${Date.now()}`;
+      const safeOriginalName = (filename || `course-cover-${Date.now()}${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+      const diskFilename = `${id}-${safeOriginalName}`;
+      const diskPath = path.join(uploadsDir, diskFilename);
+
+      try {
+        fs.writeFileSync(diskPath, buffer);
+      } catch (diskErr) {
+        console.warn("[Course Image] Could not cache image on disk:", diskErr);
+      }
+
+      let imageUrl = `/api/files/courses/${id}/${encodeURIComponent(safeOriginalName)}`;
+      let b2FileId: string | undefined;
+      let b2FileName: string | undefined;
+
+      try {
+        const b2Key = `courses/${id}-${safeOriginalName}`;
+        const b2Res = await uploadBufferToB2(b2Key, buffer, cleanMime);
+        if (b2Res.success && b2Res.url) {
+          imageUrl = b2Res.url;
+          b2FileId = b2Res.fileId;
+          b2FileName = b2Res.fileName || b2Key;
+        }
+      } catch (b2Err: any) {
+        console.warn("[Course Image] Backblaze B2 upload error, falling back to local stream:", b2Err?.message);
+      }
+
+      return res.json({
+        success: true,
+        imageUrl,
+        b2FileId,
+        b2FileName,
+        message: "Course image uploaded successfully."
+      });
+    } catch (err: any) {
+      console.error("[Course Image] Error uploading image:", err);
+      return res.status(500).json({ success: false, error: err.message || "Failed to process course image upload." });
+    }
+  });
+
+  // Stream Course Image (Local disk cache or B2 fallback)
+  app.get("/api/files/courses/:id/:filename?", async (req, res) => {
+    const { id, filename } = req.params;
+
+    // Check local disk cache
+    let foundPath: string | null = null;
+    try {
+      if (fs.existsSync(uploadsDir)) {
+        const files = fs.readdirSync(uploadsDir);
+        for (const f of files) {
+          if (f.startsWith(id)) {
+            foundPath = path.join(uploadsDir, f);
+            break;
+          }
+        }
+      }
+    } catch (e) {}
+
+    if (foundPath && fs.existsSync(foundPath)) {
+      const ext = path.extname(foundPath).toLowerCase();
+      const mimeTypes: Record<string, string> = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+        ".avif": "image/avif"
+      };
+      res.setHeader("Content-Type", mimeTypes[ext] || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      return fs.createReadStream(foundPath).pipe(res);
+    }
+
+    // If not on disk, check courses table in Neon DB
+    try {
+      const course = await getCourseByIdDb(id);
+      if (course && course.imageUrl && (course.imageUrl.startsWith("http://") || course.imageUrl.startsWith("https://"))) {
+        return res.redirect(302, course.imageUrl);
+      }
+    } catch (e) {}
+
+    return res.status(404).json({ error: "Course image not found." });
   });
 
   app.put(["/api/courses/:id", "/api/admin/courses/:id"], requireAdmin, async (req, res) => {
