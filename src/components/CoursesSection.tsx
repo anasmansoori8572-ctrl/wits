@@ -58,24 +58,24 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* =========================================================================
-            SECTION HEADER (Only Heading & Filters - Clean & Compact)
+            SECTION HEADER (Only Heading & Filters - Clean, Large & Attractive)
             ========================================================================= */}
-        <div className="max-w-3xl mx-auto text-center mb-6 sm:mb-8">
-          <h2 className="font-['Outfit'] text-3xl sm:text-4xl font-extrabold text-[#1E1B26] tracking-tight mb-4">
-            Our Courses
+        <div className="max-w-3xl mx-auto text-center mb-7 sm:mb-10">
+          <h2 className="font-['Outfit'] text-4xl sm:text-5xl lg:text-[56px] font-black text-[#1E1B26] tracking-tight leading-[1.1] mb-5 sm:mb-6">
+            Our <span className="text-[#6D28D9]">Courses.</span>
           </h2>
 
           {/* Filter Pills */}
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-2 sm:gap-2.5">
             {(['All', 'Live', 'Upcoming'] as const).map((filter) => (
               <button
                 key={filter}
                 type="button"
                 onClick={() => setSelectedTagFilter(filter)}
-                className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                className={`px-4 sm:px-6 py-2 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-xs ${
                   selectedTagFilter === filter
-                    ? 'bg-[#281648] text-white shadow-md shadow-purple-950/20'
-                    : 'bg-white text-slate-600 hover:text-[#281648] border border-slate-200 hover:border-purple-200'
+                    ? 'bg-[#281648] text-white shadow-md shadow-purple-950/20 scale-[1.02]'
+                    : 'bg-white text-slate-600 hover:text-[#281648] border border-slate-200/90 hover:border-purple-300'
                 }`}
               >
                 {filter === 'All' ? 'All Courses' : `${filter} Courses`}
