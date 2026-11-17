@@ -764,27 +764,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           </div>
 
-          {/* Benefits Bullet Points (Dynamic from Course Facilities in Admin Dashboard) */}
-          {(() => {
-            const courseFacilities = currentCourse?.facilities && currentCourse.facilities.length > 0
-              ? currentCourse.facilities
-              : [
-                  'Live Google Meet Sessions',
-                  '60-Day Class Replays',
-                  'Free Study Material (PDF)',
-                  '7-Day 100% Money-Back'
-                ];
-            return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600">
-                {courseFacilities.map((benefit, idx) => (
-                  <div key={idx} className="flex items-center gap-1.5 min-w-0">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span className="leading-tight break-words">{benefit}</span>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
+          {/* Benefits Bullet Points (Strictly follows Course Facilities in Admin Dashboard) */}
+          {Boolean(currentCourse?.facilities && currentCourse.facilities.length > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600">
+              {currentCourse!.facilities!.map((benefit, idx) => (
+                <div key={idx} className="flex items-center gap-1.5 min-w-0">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="leading-tight break-words">{benefit}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Submit Button */}
           <button
