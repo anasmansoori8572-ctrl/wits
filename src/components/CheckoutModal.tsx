@@ -70,7 +70,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [state, setState] = useState<string>('Uttar Pradesh');
   const [district, setDistrict] = useState<string>('Amroha');
   const [pincode, setPincode] = useState<string>('');
-  const [address, setAddress] = useState<string>('');
 
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -242,7 +241,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     const fullPhone = `${phoneCountry.dialCode} ${cleanPhone}`;
     const fullWhatsapp = `${whatsappCountry.dialCode} ${cleanWhatsapp}`;
-    const fullAddress = address.trim() || `${district.trim()}, ${state.trim()}, ${country.trim()}${pincode.trim() ? ' - ' + pincode.trim() : ''}`;
+    const fullAddress = `${district.trim()}, ${state.trim()}, ${country.trim()}${pincode.trim() ? ' - ' + pincode.trim() : ''}`;
 
     const studentDetails = {
       name: fullName.trim(),
@@ -740,8 +739,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               onDistrictChange={setDistrict}
               pincode={pincode}
               onPincodeChange={setPincode}
-              address={address}
-              onAddressChange={setAddress}
+              showResidentialAddress={false}
               required={true}
             />
           </div>

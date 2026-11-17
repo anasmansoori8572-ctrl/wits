@@ -16,8 +16,9 @@ interface AddressHierarchySelectorProps {
   onDistrictChange: (district: string) => void;
   pincode: string;
   onPincodeChange: (pincode: string) => void;
-  address: string;
-  onAddressChange: (address: string) => void;
+  address?: string;
+  onAddressChange?: (address: string) => void;
+  showResidentialAddress?: boolean;
   required?: boolean;
 }
 
@@ -30,8 +31,9 @@ export const AddressHierarchySelector: React.FC<AddressHierarchySelectorProps> =
   onDistrictChange,
   pincode,
   onPincodeChange,
-  address,
+  address = '',
   onAddressChange,
+  showResidentialAddress = true,
   required = true
 }) => {
   // Country Dropdown Modal/Search state
@@ -448,18 +450,20 @@ export const AddressHierarchySelector: React.FC<AddressHierarchySelectorProps> =
       </div>
 
       {/* 5. RESIDENTIAL / STREET ADDRESS (Optional detailed line) */}
-      <div>
-        <label className="text-xs font-bold text-slate-700 block mb-1">
-          Residential Street Address <span className="text-slate-400 font-normal">(House / Flat / Street / Landmark)</span>
-        </label>
-        <textarea
-          rows={2}
-          value={address}
-          onChange={(e) => onAddressChange(e.target.value)}
-          placeholder="e.g. House No. 42, Street 3, Near Civil Lines"
-          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 focus:outline-hidden focus:border-[#4A1D96]"
-        />
-      </div>
+      {showResidentialAddress && onAddressChange && (
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">
+            Residential Street Address <span className="text-slate-400 font-normal">(House / Flat / Street / Landmark)</span>
+          </label>
+          <textarea
+            rows={2}
+            value={address}
+            onChange={(e) => onAddressChange(e.target.value)}
+            placeholder="e.g. House No. 42, Street 3, Near Civil Lines"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 focus:outline-hidden focus:border-[#4A1D96]"
+          />
+        </div>
+      )}
     </div>
   );
 };
