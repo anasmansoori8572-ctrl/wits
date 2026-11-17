@@ -3314,16 +3314,30 @@ www.witslingo.com`;
 
   app.post("/api/orders/create", async (req, res) => {
     try {
-      const { studentName, whatsapp, email, courseId } = req.body;
+      const {
+        studentName,
+        whatsapp,
+        phone,
+        email,
+        courseId,
+        gender,
+        dob,
+        country,
+        state,
+        district,
+        pincode,
+        address
+      } = req.body;
 
       if (!studentName || !studentName.trim()) {
         return res.status(400).json({ success: false, error: "Full Name is required." });
       }
 
-      const cleanWhatsapp = (whatsapp || "").replace(/\D/g, "");
+      const cleanWhatsapp = (whatsapp || phone || "").replace(/\D/g, "");
       if (!cleanWhatsapp || cleanWhatsapp.length < 10) {
         return res.status(400).json({ success: false, error: "A valid 10-digit WhatsApp number is required." });
       }
+      const cleanPhone = (phone || whatsapp || "").replace(/\D/g, "");
 
       if (!courseId) {
         return res.status(400).json({ success: false, error: "Please select a course to continue." });
@@ -3370,8 +3384,15 @@ www.witslingo.com`;
                 courseId: foundCourse.id,
                 courseName: foundCourse.name,
                 studentName: studentName.trim(),
-                studentPhone: cleanWhatsapp,
-                studentEmail: email ? email.trim() : ""
+                studentPhone: cleanPhone || cleanWhatsapp,
+                studentWhatsapp: cleanWhatsapp,
+                studentEmail: email ? email.trim() : "",
+                gender: gender || "",
+                dob: dob || "",
+                country: country || "India",
+                state: state || "",
+                district: district || "",
+                pincode: pincode || ""
               }
             })
           });
@@ -3395,8 +3416,16 @@ www.witslingo.com`;
         id: orderId,
         studentId: `std_${cleanWhatsapp}`,
         studentName: studentName.trim(),
-        studentPhone: cleanWhatsapp,
+        studentPhone: cleanPhone || cleanWhatsapp,
         studentEmail: email ? email.trim() : `${cleanWhatsapp}@student.witslingo.com`,
+        gender: gender ? String(gender).trim() : undefined,
+        dob: dob ? String(dob).trim() : undefined,
+        whatsapp: cleanWhatsapp,
+        country: country ? String(country).trim() : 'India',
+        state: state ? String(state).trim() : undefined,
+        district: district ? String(district).trim() : undefined,
+        pincode: pincode ? String(pincode).trim() : undefined,
+        address: address ? String(address).trim() : undefined,
         courseId: foundCourse.id,
         courseName: foundCourse.name,
         coursePrice: originalFee,
@@ -3528,22 +3557,37 @@ www.witslingo.com`;
       });
 
       // 3. Activate Course Enrolment in Neon
+      const studentDetails = req.body.studentDetails || {};
+      const regName = (studentDetails.name || order.studentName || "").trim();
+      const regGender = studentDetails.gender || order.gender || "Not specified";
+      const regDob = studentDetails.dob || order.dob || "2000-01-01";
+      const regPhone = studentDetails.phone || order.studentPhone;
+      const regWhatsapp = studentDetails.whatsapp || order.whatsapp || order.studentPhone;
+      const regEmail = studentDetails.email || order.studentEmail;
+      const regCountry = studentDetails.country || order.country || "India";
+      const regState = studentDetails.state || order.state || "Not specified";
+      const regDistrict = studentDetails.district || order.district || "Not specified";
+      const regPincode = studentDetails.pincode || order.pincode || "";
+      const regAddress = studentDetails.address || order.address || (regDistrict !== "Not specified" ? `${regDistrict}, ${regState}, ${regCountry}${regPincode ? ' - ' + regPincode : ''}` : "Online Enrolment");
+
       const allRegs = await getRegistrationsDb();
-      let existingReg = allRegs.find(r => r.phone === order.studentPhone || r.whatsapp === order.studentPhone);
+      let existingReg = allRegs.find(r => r.phone === order.studentPhone || r.whatsapp === order.studentPhone || (order.whatsapp && (r.phone === order.whatsapp || r.whatsapp === order.whatsapp)));
       if (!existingReg) {
         existingReg = await createRegistrationDb({
           id: `reg-${Date.now()}`,
           admissionId,
-          name: order.studentName,
+          name: regName || order.studentName,
           fatherName: "Parent/Guardian",
-          dob: "2000-01-01",
-          gender: "Not specified",
-          district: "Not specified",
-          state: "Not specified",
-          phone: order.studentPhone,
-          whatsapp: order.studentPhone,
-          email: order.studentEmail,
-          address: "Online Enrolment",
+          dob: regDob,
+          gender: regGender,
+          country: regCountry,
+          district: regDistrict,
+          state: regState,
+          pincode: regPincode,
+          phone: regPhone,
+          whatsapp: regWhatsapp,
+          email: regEmail,
+          address: regAddress,
           qualification: "Student",
           currentEnglishLevel: "All Levels",
           courseId: order.courseId,
@@ -3563,7 +3607,14 @@ www.witslingo.com`;
           paymentTxnId: razorpayPaymentId,
           razorpayPaymentId,
           courseId: order.courseId,
-          courseName: order.courseName
+          courseName: order.courseName,
+          dob: regDob !== "2000-01-01" ? regDob : existingReg.dob,
+          gender: regGender !== "Not specified" ? regGender : existingReg.gender,
+          district: regDistrict !== "Not specified" ? regDistrict : existingReg.district,
+          state: regState !== "Not specified" ? regState : existingReg.state,
+          pincode: regPincode || existingReg.pincode,
+          address: regAddress || existingReg.address,
+          whatsapp: regWhatsapp || existingReg.whatsapp
         });
       }
 

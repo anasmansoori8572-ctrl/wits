@@ -2387,6 +2387,14 @@ export interface DbOrderRecord {
   studentName: string;
   studentPhone: string;
   studentEmail: string;
+  gender?: string;
+  dob?: string;
+  whatsapp?: string;
+  country?: string;
+  state?: string;
+  district?: string;
+  pincode?: string;
+  address?: string;
   courseId?: string;
   courseName: string;
   batchId?: string;
@@ -2410,6 +2418,14 @@ function rowToOrder(row: any): DbOrderRecord {
     studentName: row.student_name,
     studentPhone: row.student_phone,
     studentEmail: row.student_email,
+    gender: row.gender || undefined,
+    dob: row.dob || undefined,
+    whatsapp: row.whatsapp || undefined,
+    country: row.country || undefined,
+    state: row.state || undefined,
+    district: row.district || undefined,
+    pincode: row.pincode || undefined,
+    address: row.address || undefined,
     courseId: row.course_id || undefined,
     courseName: row.course_name,
     batchId: row.batch_id || undefined,
@@ -2434,11 +2450,13 @@ export async function createOrderDb(data: Partial<DbOrderRecord>): Promise<DbOrd
   const rows = await sql`
     INSERT INTO orders (
       id, student_id, student_name, student_phone, student_email,
+      gender, dob, whatsapp, country, state, district, pincode, address,
       course_id, course_name, batch_id, batch_name, course_price,
       discount_amount, discount_code, expected_amount, currency,
       order_status, razorpay_order_id, razorpay_payment_id
     ) VALUES (
       ${id}, ${data.studentId || null}, ${data.studentName || ''}, ${data.studentPhone || ''}, ${data.studentEmail || ''},
+      ${data.gender || null}, ${data.dob || null}, ${data.whatsapp || null}, ${data.country || 'India'}, ${data.state || null}, ${data.district || null}, ${data.pincode || null}, ${data.address || null},
       ${data.courseId || null}, ${data.courseName || ''}, ${data.batchId || null}, ${data.batchName || null},
       ${Number(data.coursePrice || 0)}, ${Number(data.discountAmount || 0)}, ${data.discountCode || null},
       ${Number(data.expectedAmount || 0)}, ${data.currency || 'INR'},
@@ -2448,6 +2466,14 @@ export async function createOrderDb(data: Partial<DbOrderRecord>): Promise<DbOrd
       order_status = EXCLUDED.order_status,
       razorpay_order_id = COALESCE(EXCLUDED.razorpay_order_id, orders.razorpay_order_id),
       razorpay_payment_id = COALESCE(EXCLUDED.razorpay_payment_id, orders.razorpay_payment_id),
+      gender = COALESCE(EXCLUDED.gender, orders.gender),
+      dob = COALESCE(EXCLUDED.dob, orders.dob),
+      whatsapp = COALESCE(EXCLUDED.whatsapp, orders.whatsapp),
+      country = COALESCE(EXCLUDED.country, orders.country),
+      state = COALESCE(EXCLUDED.state, orders.state),
+      district = COALESCE(EXCLUDED.district, orders.district),
+      pincode = COALESCE(EXCLUDED.pincode, orders.pincode),
+      address = COALESCE(EXCLUDED.address, orders.address),
       updated_at = CURRENT_TIMESTAMP
     RETURNING *;
   `;

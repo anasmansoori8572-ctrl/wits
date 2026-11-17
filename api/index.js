@@ -4638,6 +4638,14 @@ function rowToOrder(row) {
     studentName: row.student_name,
     studentPhone: row.student_phone,
     studentEmail: row.student_email,
+    gender: row.gender || void 0,
+    dob: row.dob || void 0,
+    whatsapp: row.whatsapp || void 0,
+    country: row.country || void 0,
+    state: row.state || void 0,
+    district: row.district || void 0,
+    pincode: row.pincode || void 0,
+    address: row.address || void 0,
     courseId: row.course_id || void 0,
     courseName: row.course_name,
     batchId: row.batch_id || void 0,
@@ -4660,11 +4668,13 @@ async function createOrderDb(data) {
   const rows = await sql`
     INSERT INTO orders (
       id, student_id, student_name, student_phone, student_email,
+      gender, dob, whatsapp, country, state, district, pincode, address,
       course_id, course_name, batch_id, batch_name, course_price,
       discount_amount, discount_code, expected_amount, currency,
       order_status, razorpay_order_id, razorpay_payment_id
     ) VALUES (
       ${id}, ${data.studentId || null}, ${data.studentName || ""}, ${data.studentPhone || ""}, ${data.studentEmail || ""},
+      ${data.gender || null}, ${data.dob || null}, ${data.whatsapp || null}, ${data.country || "India"}, ${data.state || null}, ${data.district || null}, ${data.pincode || null}, ${data.address || null},
       ${data.courseId || null}, ${data.courseName || ""}, ${data.batchId || null}, ${data.batchName || null},
       ${Number(data.coursePrice || 0)}, ${Number(data.discountAmount || 0)}, ${data.discountCode || null},
       ${Number(data.expectedAmount || 0)}, ${data.currency || "INR"},
@@ -4674,6 +4684,14 @@ async function createOrderDb(data) {
       order_status = EXCLUDED.order_status,
       razorpay_order_id = COALESCE(EXCLUDED.razorpay_order_id, orders.razorpay_order_id),
       razorpay_payment_id = COALESCE(EXCLUDED.razorpay_payment_id, orders.razorpay_payment_id),
+      gender = COALESCE(EXCLUDED.gender, orders.gender),
+      dob = COALESCE(EXCLUDED.dob, orders.dob),
+      whatsapp = COALESCE(EXCLUDED.whatsapp, orders.whatsapp),
+      country = COALESCE(EXCLUDED.country, orders.country),
+      state = COALESCE(EXCLUDED.state, orders.state),
+      district = COALESCE(EXCLUDED.district, orders.district),
+      pincode = COALESCE(EXCLUDED.pincode, orders.pincode),
+      address = COALESCE(EXCLUDED.address, orders.address),
       updated_at = CURRENT_TIMESTAMP
     RETURNING *;
   `;
@@ -7108,14 +7126,28 @@ app.post("/api/webhooks/razorpay", async (req, res) => {
 });
 app.post("/api/orders/create", async (req, res) => {
   try {
-    const { studentName, whatsapp, email, courseId } = req.body;
+    const {
+      studentName,
+      whatsapp,
+      phone,
+      email,
+      courseId,
+      gender,
+      dob,
+      country,
+      state,
+      district,
+      pincode,
+      address
+    } = req.body;
     if (!studentName || !studentName.trim()) {
       return res.status(400).json({ success: false, error: "Full Name is required." });
     }
-    const cleanWhatsapp = (whatsapp || "").replace(/\D/g, "");
+    const cleanWhatsapp = (whatsapp || phone || "").replace(/\D/g, "");
     if (!cleanWhatsapp || cleanWhatsapp.length < 10) {
       return res.status(400).json({ success: false, error: "A valid 10-digit WhatsApp number is required." });
     }
+    const cleanPhone = (phone || whatsapp || "").replace(/\D/g, "");
     if (!courseId) {
       return res.status(400).json({ success: false, error: "Please select a course to continue." });
     }
@@ -7157,8 +7189,15 @@ app.post("/api/orders/create", async (req, res) => {
               courseId: foundCourse.id,
               courseName: foundCourse.name,
               studentName: studentName.trim(),
-              studentPhone: cleanWhatsapp,
-              studentEmail: email ? email.trim() : ""
+              studentPhone: cleanPhone || cleanWhatsapp,
+              studentWhatsapp: cleanWhatsapp,
+              studentEmail: email ? email.trim() : "",
+              gender: gender || "",
+              dob: dob || "",
+              country: country || "India",
+              state: state || "",
+              district: district || "",
+              pincode: pincode || ""
             }
           })
         });
@@ -7179,8 +7218,16 @@ app.post("/api/orders/create", async (req, res) => {
       id: orderId,
       studentId: `std_${cleanWhatsapp}`,
       studentName: studentName.trim(),
-      studentPhone: cleanWhatsapp,
+      studentPhone: cleanPhone || cleanWhatsapp,
       studentEmail: email ? email.trim() : `${cleanWhatsapp}@student.witslingo.com`,
+      gender: gender ? String(gender).trim() : void 0,
+      dob: dob ? String(dob).trim() : void 0,
+      whatsapp: cleanWhatsapp,
+      country: country ? String(country).trim() : "India",
+      state: state ? String(state).trim() : void 0,
+      district: district ? String(district).trim() : void 0,
+      pincode: pincode ? String(pincode).trim() : void 0,
+      address: address ? String(address).trim() : void 0,
       courseId: foundCourse.id,
       courseName: foundCourse.name,
       coursePrice: originalFee,
@@ -7288,22 +7335,36 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
       method: "Razorpay",
       source: "razorpay_verify"
     });
+    const studentDetails = req.body.studentDetails || {};
+    const regName = (studentDetails.name || order.studentName || "").trim();
+    const regGender = studentDetails.gender || order.gender || "Not specified";
+    const regDob = studentDetails.dob || order.dob || "2000-01-01";
+    const regPhone = studentDetails.phone || order.studentPhone;
+    const regWhatsapp = studentDetails.whatsapp || order.whatsapp || order.studentPhone;
+    const regEmail = studentDetails.email || order.studentEmail;
+    const regCountry = studentDetails.country || order.country || "India";
+    const regState = studentDetails.state || order.state || "Not specified";
+    const regDistrict = studentDetails.district || order.district || "Not specified";
+    const regPincode = studentDetails.pincode || order.pincode || "";
+    const regAddress = studentDetails.address || order.address || (regDistrict !== "Not specified" ? `${regDistrict}, ${regState}, ${regCountry}${regPincode ? " - " + regPincode : ""}` : "Online Enrolment");
     const allRegs = await getRegistrationsDb();
-    let existingReg = allRegs.find((r) => r.phone === order.studentPhone || r.whatsapp === order.studentPhone);
+    let existingReg = allRegs.find((r) => r.phone === order.studentPhone || r.whatsapp === order.studentPhone || order.whatsapp && (r.phone === order.whatsapp || r.whatsapp === order.whatsapp));
     if (!existingReg) {
       existingReg = await createRegistrationDb({
         id: `reg-${Date.now()}`,
         admissionId,
-        name: order.studentName,
+        name: regName || order.studentName,
         fatherName: "Parent/Guardian",
-        dob: "2000-01-01",
-        gender: "Not specified",
-        district: "Not specified",
-        state: "Not specified",
-        phone: order.studentPhone,
-        whatsapp: order.studentPhone,
-        email: order.studentEmail,
-        address: "Online Enrolment",
+        dob: regDob,
+        gender: regGender,
+        country: regCountry,
+        district: regDistrict,
+        state: regState,
+        pincode: regPincode,
+        phone: regPhone,
+        whatsapp: regWhatsapp,
+        email: regEmail,
+        address: regAddress,
         qualification: "Student",
         currentEnglishLevel: "All Levels",
         courseId: order.courseId,
@@ -7323,7 +7384,14 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
         paymentTxnId: razorpayPaymentId,
         razorpayPaymentId,
         courseId: order.courseId,
-        courseName: order.courseName
+        courseName: order.courseName,
+        dob: regDob !== "2000-01-01" ? regDob : existingReg.dob,
+        gender: regGender !== "Not specified" ? regGender : existingReg.gender,
+        district: regDistrict !== "Not specified" ? regDistrict : existingReg.district,
+        state: regState !== "Not specified" ? regState : existingReg.state,
+        pincode: regPincode || existingReg.pincode,
+        address: regAddress || existingReg.address,
+        whatsapp: regWhatsapp || existingReg.whatsapp
       });
     }
     let existingUser = await getUserByEmailDb(order.studentEmail);
