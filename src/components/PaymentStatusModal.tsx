@@ -163,7 +163,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
                 Verifying your payment...
               </h3>
               <p className="text-xs sm:text-sm text-slate-500 mt-2 max-w-sm mx-auto">
-                Communicating with Razorpay to confirm your transaction signature and activate your course seat.
+                Securely confirming your transaction and activating your course enrollment...
               </p>
             </div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
@@ -319,7 +319,7 @@ export const PaymentStatusModal: React.FC<PaymentStatusModalProps> = ({
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-500 text-left space-y-1">
-              <p>• If funds were debited, Razorpay will automatically reconcile your account or refund within 24-48 hours.</p>
+              <p>• If funds were debited, your bank will automatically reconcile your account or reverse the transaction within 24-48 hours.</p>
               <p>• You can safely retry or reach out to our admission desk directly.</p>
             </div>
 

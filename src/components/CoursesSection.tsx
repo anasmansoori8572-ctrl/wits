@@ -213,7 +213,7 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
                 Instant Seat Allocation &amp; Payment Verification
               </p>
               <p className="text-slate-500 mt-0.5 leading-relaxed">
-                Seats are confirmed immediately upon successful fee payment via Razorpay, UPI, or Direct Bank Transfer.
+                Seats are confirmed immediately upon course purchase via UPI, Debit/Credit Card, or NetBanking.
               </p>
             </div>
           </div>

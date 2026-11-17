@@ -454,7 +454,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             {(gatewayConfig?.isTestMode || gatewayConfig?.keyId?.startsWith('rzp_test_')) && (
               <span className="px-2 py-0.5 rounded-full bg-amber-400 text-purple-950 text-[10px] font-extrabold uppercase tracking-wide flex items-center gap-1 shadow-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-purple-950 animate-pulse" />
-                Razorpay Test Mode
+                Test Payment Mode
               </span>
             )}
           </div>
@@ -793,12 +793,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             {isLoading ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Opening Secure Razorpay Portal...</span>
+                <span>Opening Secure Payment Portal...</span>
               </>
             ) : (
               <>
                 <CreditCard className="w-4 h-4" />
-                <span>Pay ₹{finalPayable.toLocaleString()} via Razorpay (UPI, Cards, NetBanking)</span>
+                <span>Buy Course • Pay ₹{finalPayable.toLocaleString()} (UPI, Cards, NetBanking)</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
@@ -824,7 +824,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* Security footnote */}
           <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 text-center">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Encrypted 256-Bit SSL • Official Razorpay Gateway • Instant WhatsApp Dispatch</span>
+            <span>Encrypted 256-Bit SSL • 100% Safe & Secure Payment • Instant WhatsApp Dispatch</span>
           </div>
         </form>
 

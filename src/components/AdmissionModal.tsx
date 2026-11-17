@@ -1692,7 +1692,7 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
                               rel="noopener noreferrer"
                               className="text-[#4A1D96] font-bold hover:underline flex items-center gap-1"
                             >
-                              <span>Official Razorpay Portal</span>
+                              <span>Official Payment Portal</span>
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           )}
@@ -1869,9 +1869,9 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
                         {/* Online International Option - Razorpay */}
                         <div className="p-3 bg-white rounded-2xl border border-slate-200 flex items-center justify-between">
                           <div>
-                            <span className="font-bold text-slate-800 block">2. Razorpay / International Cards</span>
+                            <span className="font-bold text-slate-800 block">2. Online Cards & Global Payment</span>
                             <span className="text-[10px] text-slate-500">
-                              Pay in {selectedCurrency.code} ({selectedCurrency.symbol}{convertedAmount}) instantly via Razorpay
+                              Pay in {selectedCurrency.code} ({selectedCurrency.symbol}{convertedAmount}) instantly via Credit / Debit Card
                             </span>
                           </div>
                           {razorpayLink && (
@@ -1881,7 +1881,7 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
                               rel="noopener noreferrer"
                               className="px-3 py-1.5 rounded-lg bg-[#0c2340] hover:bg-[#07172b] text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-colors"
                             >
-                              <span>Razorpay Portal</span>
+                              <span>Pay Online</span>
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           )}
@@ -1890,13 +1890,13 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
                         {/* Wire Transaction Reference Input */}
                         <div>
                           <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                            Foreign Wire Reference / Razorpay Transaction ID:
+                            Payment Reference ID / Transaction ID:
                           </label>
                           <input
                             type="text"
                             value={customUtr}
                             onChange={(e) => setCustomUtr(e.target.value)}
-                            placeholder="e.g. SWIFT Ref or Razorpay Payment ID (pay_xxxx)"
+                            placeholder="e.g. UTR Number, SWIFT Ref, or Transaction ID"
                             className="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-white font-mono text-xs text-slate-900"
                           />
                         </div>

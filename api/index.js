@@ -6843,7 +6843,7 @@ Congratulations! Your seat has been successfully confirmed at *WITS LINGO \u2014
 \u2022 *Batch Timings:* ${batch.scheduleTime || "Daily 1-Hour Live Class"}
 \u2022 *Batch Start Date:* ${batch.startDate || "1st of the month"}
 \u2022 *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
-\u2022 *Fee Paid:* \u20B9${resolvedCourse.fee} (Verified via Razorpay)
+\u2022 *Fee Paid:* \u20B9${resolvedCourse.fee} (Payment Confirmed)
 \u2022 *Payment Ref:* ${razorpayPaymentId}
 
 \u{1F510} *STUDENT PORTAL LOGIN*
