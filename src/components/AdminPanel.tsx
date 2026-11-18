@@ -779,18 +779,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       name: newCourse.name,
       level: newCourse.level || 'Beginner to Intermediate',
       shortDescription: newCourse.shortDescription || 'Practical language training.',
-      whatYouWillLearn: Array.isArray(newCourse.whatYouWillLearn) && newCourse.whatYouWillLearn.length > 0
-        ? newCourse.whatYouWillLearn
-        : ['Master natural conversational speaking', 'Overcome public hesitation and stage fear', 'Daily vocabulary in context', 'Pronunciation and accent clarity'],
-      facilities: Array.isArray(newCourse.facilities) && newCourse.facilities.length > 0
-        ? newCourse.facilities
-        : [
+      whatYouWillLearn: Array.isArray(newCourse.whatYouWillLearn)
+        ? (newBulletPointForAdd.trim() ? [...newCourse.whatYouWillLearn, newBulletPointForAdd.trim()] : newCourse.whatYouWillLearn)
+        : (newBulletPointForAdd.trim() ? [newBulletPointForAdd.trim()] : ['Master natural conversational speaking', 'Overcome public hesitation and stage fear', 'Daily vocabulary in context', 'Pronunciation and accent clarity']),
+      facilities: Array.isArray(newCourse.facilities)
+        ? (newFacilityForAdd.trim() ? [...newCourse.facilities, newFacilityForAdd.trim()] : newCourse.facilities)
+        : (newFacilityForAdd.trim() ? [newFacilityForAdd.trim()] : [
             'Live Interactive Online Classes on Google Meet',
             'Digital PDF Study Notes & Practice Workbooks',
             'Telegram & WhatsApp Student Practice Community',
             'Course Completion Certificate',
             'Class Recording Access for Revision'
-          ],
+          ]),
       duration: newCourse.duration || '2 Months (40 Sessions)',
       learningFormat: newCourse.learningFormat || 'Live Online Classroom',
       fee: Number(newCourse.fee) || 1499,
@@ -907,7 +907,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     if (!editingCourse) return;
     const prevCourses = [...courses];
-    const targetCourse = { ...editingCourse };
+
+    // Auto-append any typed bullet or facility if admin didn't click "+" button before saving
+    let finalBulletList = Array.isArray(editingCourse.whatYouWillLearn) ? [...editingCourse.whatYouWillLearn] : [];
+    if (newBulletPointForEdit.trim()) {
+      finalBulletList.push(newBulletPointForEdit.trim());
+    }
+
+    let finalFacilityList = Array.isArray(editingCourse.facilities) ? [...editingCourse.facilities] : [];
+    if (newFacilityForEdit.trim()) {
+      finalFacilityList.push(newFacilityForEdit.trim());
+    }
+
+    const targetCourse: CourseData = {
+      ...editingCourse,
+      whatYouWillLearn: finalBulletList,
+      facilities: finalFacilityList
+    };
+
     const updated = courses.map(c => c.id === targetCourse.id ? targetCourse : c);
     onUpdateCourses(updated);
     setEditingCourse(null);
@@ -3174,6 +3191,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </div>
                           </div>
 
+                            {/* Course Facilities & Inclusions */}
+                            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                                  Course Facilities &amp; Inclusions ({course.facilities?.length || 0})
+                                </span>
+                              </div>
+                              {Array.isArray(course.facilities) && course.facilities.length > 0 ? (
+                                <ul className="space-y-1">
+                                  {course.facilities.map((fac, i) => (
+                                    <li key={i} className="flex items-start gap-1.5 text-xs text-emerald-900 leading-tight">
+                                      <span className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                        ✓
+                                      </span>
+                                      <span className="line-clamp-2">{fac}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-[11px] text-slate-400 italic">No facilities configured.</p>
+                              )}
+                            </div>
+
                           {/* Price & Actions */}
                           <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between">
                             <div>
@@ -3192,9 +3232,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                     ...course,
                                     whatYouWillLearn: Array.isArray(course.whatYouWillLearn)
                                       ? [...course.whatYouWillLearn]
+                                      : [],
+                                    facilities: Array.isArray(course.facilities)
+                                      ? [...course.facilities]
                                       : []
                                   });
                                   setNewBulletPointForEdit('');
+                                  setNewFacilityForEdit('');
                                 }}
                                 className="px-3 py-1.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-xs font-bold text-[#4A1D96] transition-colors flex items-center gap-1 cursor-pointer"
                               >
@@ -5975,6 +6019,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </label>
                       <p className="text-[10px] text-slate-500">Included in admission confirmation & WhatsApp messages</p>
                     </div>
+                    {newCourse.facilities && newCourse.facilities.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setNewCourse({ ...newCourse, facilities: [] })}
+                        className="text-[10px] text-red-600 hover:text-red-700 font-bold hover:underline cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
@@ -6473,6 +6526,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </label>
                       <p className="text-[10px] text-slate-500">Included in admission confirmation & WhatsApp messages</p>
                     </div>
+                    {editingCourse.facilities && editingCourse.facilities.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingCourse({ ...editingCourse, facilities: [] })}
+                        className="text-[10px] text-red-600 hover:text-red-700 font-bold hover:underline cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">

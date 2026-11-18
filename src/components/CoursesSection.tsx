@@ -200,40 +200,6 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
         )}
         </div>
 
-        {/* =========================================================================
-            PAYMENT CONFIRMATION BANNER
-            ========================================================================= */}
-        <div className="mt-14 bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-xs">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#4A1D96] flex items-center justify-center font-bold flex-shrink-0 shadow-2xs">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="font-bold text-slate-900 text-sm sm:text-base">
-                Instant Seat Allocation &amp; Payment Verification
-              </p>
-              <p className="text-slate-500 mt-0.5 leading-relaxed">
-                Seats are confirmed immediately upon course purchase via UPI, Debit/Credit Card, or NetBanking.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                const firstLive = courses.find(c => (c.badge || '').toLowerCase() === 'live') || courses[0];
-                if (firstLive) {
-                  if (onBuyNow) onBuyNow(firstLive.id);
-                  else onEnroll(firstLive.id);
-                }
-              }}
-              className="px-6 py-2.5 bg-[#281648] hover:bg-[#3C166D] text-white font-bold rounded-full transition-colors whitespace-nowrap cursor-pointer shadow-md shadow-purple-950/20 flex items-center gap-2"
-            >
-              <span>Buy Course Now</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
       </div>
 
       {/* =========================================================================
@@ -321,21 +287,42 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({ courses, onEnrol
               </div>
 
               {/* What You Will Learn (Syllabus Checklist) */}
-              <div className="space-y-3">
-                <h4 className="font-['Outfit'] text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-[#6D28D9]" />
-                  <span>What You Will Learn in This Course:</span>
-                </h4>
+              {Array.isArray(selectedCourseForDetails.whatYouWillLearn) && selectedCourseForDetails.whatYouWillLearn.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-['Outfit'] text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-[#6D28D9]" />
+                    <span>What You Will Learn in This Course:</span>
+                  </h4>
 
-                <ul className="grid grid-cols-1 gap-2.5">
-                  {selectedCourseForDetails.whatYouWillLearn.map((item, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-xs sm:text-[13px] text-slate-700 bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
-                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                      <span className="leading-snug">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                  <ul className="grid grid-cols-1 gap-2.5">
+                    {selectedCourseForDetails.whatYouWillLearn.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2.5 text-xs sm:text-[13px] text-slate-700 bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+                        <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span className="leading-snug">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Course Facilities & Inclusions */}
+              {Array.isArray(selectedCourseForDetails.facilities) && selectedCourseForDetails.facilities.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-['Outfit'] text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <span>Course Facilities & Inclusions:</span>
+                  </h4>
+
+                  <ul className="grid grid-cols-1 gap-2.5">
+                    {selectedCourseForDetails.facilities.map((facility, i) => (
+                      <li key={i} className="flex items-start gap-2.5 text-xs sm:text-[13px] text-slate-700 bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-100/90 shadow-2xs">
+                        <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <span className="leading-snug">{facility}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Academy Key Guarantees */}
               <div className="pt-2 border-t border-slate-100 text-xs text-slate-500 space-y-2">

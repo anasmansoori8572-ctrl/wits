@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Logo } from './Logo';
 import { User, SiteSettings } from '../types';
-import { useScrollLock } from '../hooks/useScrollLock';
 import { Menu, X, Search, ChevronRight, BookOpen, LogOut } from 'lucide-react';
 
 interface NavbarProps {
@@ -16,6 +15,8 @@ interface NavbarProps {
   onNavigateAbout?: () => void;
   onNavigateResources?: () => void;
   onNavigateHome?: () => void;
+  onNavigateCourses?: () => void;
+  onNavigateContact?: () => void;
   activeSection: string;
   onBuyCourse?: () => void;
 }
@@ -32,6 +33,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigateAbout,
   onNavigateResources,
   onNavigateHome,
+  onNavigateCourses,
+  onNavigateContact,
   activeSection,
   onBuyCourse,
 }) => {
@@ -40,8 +43,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const headerRef = useRef<HTMLElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  useScrollLock(mobileMenuOpen);
 
   // Notice bar is permanently stuck with the header when active (no user dismiss option)
   const showTopAnnouncement =
@@ -77,14 +78,88 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   }, [searchOpen]);
 
-  const handleNavClick = (e: React.MouseEvent, targetId: string) => {
-    if (targetId === 'about' && onNavigateAbout) {
-      e.preventDefault();
-      onNavigateAbout();
+  const handleNavClick = (e: React.MouseEvent | undefined, targetId: string) => {
+    if (e && e.preventDefault) e.preventDefault();
+
+    if (targetId === 'home') {
+      if (activeSection !== 'home' && onNavigateHome) {
+        onNavigateHome();
+      }
+      try {
+        window.history.pushState(null, '', '/');
+      } catch (err) {}
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+
+    if (targetId === 'courses') {
+      if (onNavigateCourses) {
+        onNavigateCourses();
+        return;
+      }
+      if (activeSection !== 'home' && onNavigateHome) {
+        onNavigateHome();
+      }
+      try {
+        window.history.pushState(null, '', '/#courses');
+      } catch (err) {}
+      setTimeout(() => {
+        const el = document.getElementById('courses');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, activeSection !== 'home' ? 120 : 20);
+      return;
+    }
+
+    if ((targetId === 'learning-resources' || targetId === 'resources') && onNavigateResources) {
+      onNavigateResources();
+      try {
+        window.history.pushState(null, '', '/resources');
+      } catch (err) {}
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (targetId === 'about' && onNavigateAbout) {
+      onNavigateAbout();
+      try {
+        window.history.pushState(null, '', '/about');
+      } catch (err) {}
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (targetId === 'gallery' && onNavigateGallery) {
+      onNavigateGallery();
+      try {
+        window.history.pushState(null, '', '/gallery');
+      } catch (err) {}
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (targetId === 'contact') {
+      if (onNavigateContact) {
+        onNavigateContact();
+        return;
+      }
+      if (activeSection !== 'home' && onNavigateHome) {
+        onNavigateHome();
+      }
+      try {
+        window.history.pushState(null, '', '/#contact');
+      } catch (err) {}
+      setTimeout(() => {
+        const el = document.getElementById('contact');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, activeSection !== 'home' ? 120 : 20);
+      return;
+    }
+
     if ((targetId === 'testimonials' || targetId === 'reviews' || targetId === 'about-reviews') && onNavigateAbout) {
-      e.preventDefault();
       onNavigateAbout();
       setTimeout(() => {
         const el = document.getElementById('about-reviews');
@@ -92,13 +167,8 @@ export const Navbar: React.FC<NavbarProps> = ({
       }, 150);
       return;
     }
-    if ((targetId === 'learning-resources' || targetId === 'resources') && onNavigateResources) {
-      e.preventDefault();
-      onNavigateResources();
-      return;
-    }
+
     if ((activeSection === 'gallery' || activeSection === 'about' || activeSection === 'resources' || activeSection === 'policy') && onNavigateHome) {
-      e.preventDefault();
       onNavigateHome();
       setTimeout(() => {
         const el = document.getElementById(targetId);
@@ -106,9 +176,9 @@ export const Navbar: React.FC<NavbarProps> = ({
       }, 100);
       return;
     }
+
     const el = document.getElementById(targetId);
     if (el) {
-      e.preventDefault();
       el.scrollIntoView({ behavior: 'smooth' });
       try {
         window.history.pushState(null, '', `#${targetId}`);
@@ -377,87 +447,90 @@ export const Navbar: React.FC<NavbarProps> = ({
         {mobileMenuOpen && (
           <div className="lg:hidden mt-2 rounded-2xl border border-purple-100/90 bg-white/98 backdrop-blur-xl px-5 pt-3 pb-6 shadow-2xl animate-in slide-in-from-top-2 duration-200 max-h-[calc(100vh-6rem)] overflow-y-auto overscroll-contain pointer-events-auto">
             <div className="space-y-1 pb-4 border-b border-slate-100 text-sm font-semibold">
-              <a
-                href="#home"
+              <button
+                type="button"
                 onClick={(e) => {
                   setMobileMenuOpen(false);
                   handleNavClick(e, 'home');
                 }}
-                className="block px-3 py-2.5 rounded-xl text-[#1E123B] hover:bg-purple-50"
+                className={`w-full text-left px-3 py-2.5 rounded-xl font-semibold transition-colors cursor-pointer ${
+                  activeSection === 'home'
+                    ? 'bg-purple-100 text-[#281648] font-bold'
+                    : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+                }`}
               >
                 Home
-              </a>
-              <a
-                href="#courses"
+              </button>
+              <button
+                type="button"
                 onClick={(e) => {
                   setMobileMenuOpen(false);
                   handleNavClick(e, 'courses');
                 }}
-                className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
+                className={`w-full text-left px-3 py-2.5 rounded-xl font-semibold transition-colors cursor-pointer ${
+                  activeSection === 'courses'
+                    ? 'bg-purple-100 text-[#281648] font-bold'
+                    : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+                }`}
               >
                 Courses
-              </a>
-              <a
-                href="/resources"
+              </button>
+              <button
+                type="button"
                 onClick={(e) => {
-                  e.preventDefault();
                   setMobileMenuOpen(false);
-                  if (onNavigateResources) {
-                    onNavigateResources();
-                  } else {
-                    handleNavClick(e, 'resources');
-                  }
+                  handleNavClick(e, 'resources');
                 }}
-                className={`block px-3 py-2.5 rounded-xl ${
+                className={`w-full text-left px-3 py-2.5 rounded-xl font-semibold transition-colors cursor-pointer ${
                   activeSection === 'resources'
                     ? 'bg-purple-100 text-[#281648] font-bold'
                     : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
                 }`}
               >
                 Learning Resources
-              </a>
-              <a
-                href="/about"
+              </button>
+              <button
+                type="button"
                 onClick={(e) => {
-                  e.preventDefault();
                   setMobileMenuOpen(false);
-                  if (onNavigateAbout) {
-                    onNavigateAbout();
-                  } else {
-                    handleNavClick(e, 'about');
-                  }
+                  handleNavClick(e, 'about');
                 }}
-                className={`block px-3 py-2.5 rounded-xl ${
+                className={`w-full text-left px-3 py-2.5 rounded-xl font-semibold transition-colors cursor-pointer ${
                   activeSection === 'about'
                     ? 'bg-purple-100 text-[#281648] font-bold'
                     : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
                 }`}
               >
                 About
-              </a>
-              <a
-                href="/gallery"
+              </button>
+              <button
+                type="button"
                 onClick={(e) => {
-                  e.preventDefault();
                   setMobileMenuOpen(false);
-                  if (onNavigateGallery) onNavigateGallery();
+                  handleNavClick(e, 'gallery');
                 }}
-                className={`block px-3 py-2.5 rounded-xl ${
-                  activeSection === 'gallery' ? 'text-[#1E123B] font-semibold bg-purple-50' : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+                className={`w-full text-left px-3 py-2.5 rounded-xl font-semibold transition-colors cursor-pointer ${
+                  activeSection === 'gallery'
+                    ? 'bg-purple-100 text-[#281648] font-bold'
+                    : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
                 }`}
               >
                 Gallery
-              </a>
-              <a
-                href="#contact"
+              </button>
+              <button
+                type="button"
                 onClick={(e) => {
                   setMobileMenuOpen(false);
                   handleNavClick(e, 'contact');
                 }}
-                className="block px-3 py-2.5 rounded-xl text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]"
+                className={`w-full text-left px-3 py-2.5 rounded-xl font-semibold transition-colors cursor-pointer ${
+                  activeSection === 'contact'
+                    ? 'bg-purple-100 text-[#281648] font-bold'
+                    : 'text-[#5A526E] hover:bg-purple-50 hover:text-[#1E123B]'
+                }`}
               >
                 Contact
-              </a>
+              </button>
             </div>
 
             <div className="pt-4 space-y-3">

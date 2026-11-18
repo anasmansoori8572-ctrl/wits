@@ -458,8 +458,14 @@ export default function App() {
         setCurrentView('about');
       } else if (hash === '#resources' || hash === '#learning-resources' || path === '/resources' || path === '/learning-resources' || path.startsWith('/resources') || path.startsWith('/learning-resources')) {
         setCurrentView('resources');
-      } else if (hash === '#home' || path === '/') {
+      } else if (hash === '#courses' || hash === '#contact' || hash === '#home' || path === '/') {
         setCurrentView(prev => (prev === 'gallery' || prev === 'about' || prev === 'resources' || prev === 'admin-login' || prev === 'policy' ? 'home' : prev));
+        if (hash === '#courses' || hash === '#contact') {
+          setTimeout(() => {
+            const el = document.getElementById(hash.replace('#', ''));
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }, 120);
+        }
       }
 
       // Check URL query parameters for instant checkout and payment confirmation
@@ -648,6 +654,7 @@ export default function App() {
         onNavigateGallery={() => {
           try { window.history.pushState(null, '', '/gallery'); } catch (e) {}
           setCurrentView('gallery');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onNavigateAbout={() => {
           try { window.history.pushState(null, '', '/about'); } catch (e) {}
@@ -662,6 +669,23 @@ export default function App() {
         onNavigateHome={() => {
           try { window.history.pushState(null, '', '/'); } catch (e) {}
           setCurrentView('home');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onNavigateCourses={() => {
+          try { window.history.pushState(null, '', '/#courses'); } catch (e) {}
+          setCurrentView('home');
+          setTimeout(() => {
+            const el = document.getElementById('courses');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }}
+        onNavigateContact={() => {
+          try { window.history.pushState(null, '', '/#contact'); } catch (e) {}
+          setCurrentView('home');
+          setTimeout(() => {
+            const el = document.getElementById('contact');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
         }}
         activeSection={currentView}
       />
