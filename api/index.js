@@ -4665,6 +4665,24 @@ function rowToOrder(row) {
 async function createOrderDb(data) {
   const sql = getDb();
   const id = data.id || `ord-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  let course_id = data.courseId && data.courseId !== "all" ? data.courseId : null;
+  if (course_id) {
+    try {
+      const courseRows = await sql`SELECT id FROM courses WHERE id = ${course_id} LIMIT 1;`;
+      if (!courseRows || courseRows.length === 0) course_id = null;
+    } catch {
+      course_id = null;
+    }
+  }
+  let batch_id = data.batchId && data.batchId !== "all" ? data.batchId : null;
+  if (batch_id) {
+    try {
+      const batchRows = await sql`SELECT id FROM batches WHERE id = ${batch_id} LIMIT 1;`;
+      if (!batchRows || batchRows.length === 0) batch_id = null;
+    } catch {
+      batch_id = null;
+    }
+  }
   const rows = await sql`
     INSERT INTO orders (
       id, student_id, student_name, student_phone, student_email,
@@ -4755,7 +4773,34 @@ async function createPaymentDb(data) {
   const sql = getDb();
   const id = data.id || `pay-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const paymentId = data.paymentId || data.razorpayPaymentId || `pay_manual_${Date.now()}`;
-  const rawPayload = data.rawPayload ? JSON.stringify(data.rawPayload) : null;
+  const rawPayload = JSON.stringify(data.rawPayload || {});
+  let course_id = data.courseId && data.courseId !== "all" ? data.courseId : null;
+  if (course_id) {
+    try {
+      const courseRows = await sql`SELECT id FROM courses WHERE id = ${course_id} LIMIT 1;`;
+      if (!courseRows || courseRows.length === 0) course_id = null;
+    } catch {
+      course_id = null;
+    }
+  }
+  let batch_id = data.batchId && data.batchId !== "all" ? data.batchId : null;
+  if (batch_id) {
+    try {
+      const batchRows = await sql`SELECT id FROM batches WHERE id = ${batch_id} LIMIT 1;`;
+      if (!batchRows || batchRows.length === 0) batch_id = null;
+    } catch {
+      batch_id = null;
+    }
+  }
+  let order_id = data.orderId || null;
+  if (order_id) {
+    try {
+      const orderRows = await sql`SELECT id FROM orders WHERE id = ${order_id} LIMIT 1;`;
+      if (!orderRows || orderRows.length === 0) order_id = null;
+    } catch {
+      order_id = null;
+    }
+  }
   const rows = await sql`
     INSERT INTO payments (
       id, order_id, payment_id, razorpay_payment_id, razorpay_order_id,
@@ -4763,13 +4808,13 @@ async function createPaymentDb(data) {
       student_phone, course_id, course_name, batch_id, batch_name,
       admission_id, method, source, raw_payload, verified_at
     ) VALUES (
-      ${id}, ${data.orderId || null}, ${paymentId}, ${data.razorpayPaymentId || null},
+      ${id}, ${order_id}, ${paymentId}, ${data.razorpayPaymentId || null},
       ${data.razorpayOrderId || null}, ${data.signature || null}, ${Number(data.amount || 0)},
       ${data.currency || "INR"}, ${data.status || "Paid"}, ${data.studentName || null},
-      ${data.studentEmail || null}, ${data.studentPhone || null}, ${data.courseId || null},
-      ${data.courseName || null}, ${data.batchId || null}, ${data.batchName || null},
+      ${data.studentEmail || null}, ${data.studentPhone || null}, ${course_id},
+      ${data.courseName || null}, ${batch_id}, ${data.batchName || null},
       ${data.admissionId || null}, ${data.method || "online"}, ${data.source || "razorpay_verify"},
-      ${rawPayload}::jsonb, ${data.verifiedAt ? new Date(data.verifiedAt).toISOString() : (/* @__PURE__ */ new Date()).toISOString()}
+      ${rawPayload}::jsonb, CURRENT_TIMESTAMP
     )
     ON CONFLICT (payment_id) DO UPDATE SET
       status = EXCLUDED.status,
@@ -7314,27 +7359,48 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
         return res.status(400).json({ success: false, error: "Payment signature verification failed." });
       }
     }
-    const updatedOrder = await updateOrderStatusDb(order.id, "paid", razorpayPaymentId, razorpayOrderId);
-    const admissionId = `WL-2026-${Date.now().toString().slice(-4)}`;
-    const newPayment = await createPaymentDb({
-      id: `pay-${Date.now()}`,
-      orderId: order.id,
-      paymentId: razorpayPaymentId,
-      signature: razorpaySignature,
-      amount: order.expectedAmount,
-      currency: order.currency,
-      status: "Paid",
-      studentName: order.studentName,
-      studentEmail: order.studentEmail,
-      studentPhone: order.studentPhone,
-      courseId: order.courseId,
-      courseName: order.courseName,
-      batchId: order.batchId || "batch-spoken-oct-2026",
-      batchName: order.batchName || "Assigned Batch",
-      admissionId,
-      method: "Razorpay",
-      source: "razorpay_verify"
-    });
+    let updatedOrder = null;
+    try {
+      updatedOrder = await updateOrderStatusDb(order.id, "paid", razorpayPaymentId, razorpayOrderId);
+    } catch (orderUpdateErr) {
+      console.warn("[Razorpay Verify] updateOrderStatusDb warning:", orderUpdateErr);
+    }
+    let validBatchId = null;
+    let validBatchName = order.batchName || "Assigned Batch";
+    try {
+      const allBatches = await getBatchesDb().catch(() => []);
+      const matchedBatch = allBatches.find((b) => b.id === order.batchId || b.courseId === order.courseId) || allBatches[0];
+      if (matchedBatch) {
+        validBatchId = matchedBatch.id;
+        validBatchName = matchedBatch.name;
+      }
+    } catch {
+    }
+    const admissionId = `WL-${(/* @__PURE__ */ new Date()).getFullYear()}-${Date.now().toString().slice(-4)}`;
+    let newPayment = null;
+    try {
+      newPayment = await createPaymentDb({
+        id: `pay-${Date.now()}`,
+        orderId: order.id,
+        paymentId: razorpayPaymentId,
+        signature: razorpaySignature,
+        amount: order.expectedAmount,
+        currency: order.currency,
+        status: "Paid",
+        studentName: order.studentName,
+        studentEmail: order.studentEmail,
+        studentPhone: order.studentPhone,
+        courseId: order.courseId,
+        courseName: order.courseName,
+        batchId: validBatchId,
+        batchName: validBatchName,
+        admissionId,
+        method: "Razorpay",
+        source: "razorpay_verify"
+      });
+    } catch (payDbErr) {
+      console.warn("[Razorpay Verify] createPaymentDb warning:", payDbErr);
+    }
     const studentDetails = req.body.studentDetails || {};
     const regName = (studentDetails.name || order.studentName || "").trim();
     const regGender = studentDetails.gender || order.gender || "Not specified";
@@ -7347,75 +7413,83 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
     const regDistrict = studentDetails.district || order.district || "Not specified";
     const regPincode = studentDetails.pincode || order.pincode || "";
     const regAddress = studentDetails.address || order.address || (regDistrict !== "Not specified" ? `${regDistrict}, ${regState}, ${regCountry}${regPincode ? " - " + regPincode : ""}` : "Online Enrolment");
-    const allRegs = await getRegistrationsDb();
-    let existingReg = allRegs.find((r) => r.phone === order.studentPhone || r.whatsapp === order.studentPhone || order.whatsapp && (r.phone === order.whatsapp || r.whatsapp === order.whatsapp));
-    if (!existingReg) {
-      existingReg = await createRegistrationDb({
-        id: `reg-${Date.now()}`,
-        admissionId,
-        name: regName || order.studentName,
-        fatherName: "Parent/Guardian",
-        dob: regDob,
-        gender: regGender,
-        country: regCountry,
-        district: regDistrict,
-        state: regState,
-        pincode: regPincode,
-        phone: regPhone,
-        whatsapp: regWhatsapp,
-        email: regEmail,
-        address: regAddress,
-        qualification: "Student",
-        currentEnglishLevel: "All Levels",
-        courseId: order.courseId,
-        courseName: order.courseName,
-        batchId: order.batchId || "batch-spoken-oct-2026",
-        batchName: order.batchName || "Active Batch",
-        feeAmount: order.expectedAmount,
-        paymentStatus: "Paid",
-        paymentMethod: "Razorpay",
-        paymentTxnId: razorpayPaymentId,
-        razorpayOrderId,
-        razorpayPaymentId
-      });
-    } else {
-      await updateRegistrationDb(existingReg.id, {
-        paymentStatus: "Paid",
-        paymentTxnId: razorpayPaymentId,
-        razorpayPaymentId,
-        courseId: order.courseId,
-        courseName: order.courseName,
-        dob: regDob !== "2000-01-01" ? regDob : existingReg.dob,
-        gender: regGender !== "Not specified" ? regGender : existingReg.gender,
-        district: regDistrict !== "Not specified" ? regDistrict : existingReg.district,
-        state: regState !== "Not specified" ? regState : existingReg.state,
-        pincode: regPincode || existingReg.pincode,
-        address: regAddress || existingReg.address,
-        whatsapp: regWhatsapp || existingReg.whatsapp
-      });
-    }
-    let existingUser = await getUserByEmailDb(order.studentEmail);
-    if (!existingUser) {
-      const passwordHash = await bcrypt2.hash((order.studentPhone || "").slice(-6) || "student123", 10);
-      await createUserDb({
-        name: order.studentName,
-        email: order.studentEmail,
-        passwordHash,
-        role: "student",
-        phone: order.studentPhone,
-        batchIds: [order.batchId || "batch-spoken-oct-2026"],
-        admissionId
-      });
-    } else {
-      const curBatchIds = existingUser.batchIds || [];
-      const targetBatch = order.batchId || "batch-spoken-oct-2026";
-      if (!curBatchIds.includes(targetBatch)) {
-        await updateUserDb(existingUser.id, { batchIds: [...curBatchIds, targetBatch] });
+    try {
+      const allRegs = await getRegistrationsDb().catch(() => []);
+      let existingReg = allRegs.find((r) => r.phone === order.studentPhone || r.whatsapp === order.studentPhone || order.whatsapp && (r.phone === order.whatsapp || r.whatsapp === order.whatsapp));
+      if (!existingReg) {
+        await createRegistrationDb({
+          id: `reg-${Date.now()}`,
+          admissionId,
+          name: regName || order.studentName,
+          fatherName: "Parent/Guardian",
+          dob: regDob,
+          gender: regGender,
+          country: regCountry,
+          district: regDistrict,
+          state: regState,
+          pincode: regPincode,
+          phone: regPhone,
+          whatsapp: regWhatsapp,
+          email: regEmail,
+          address: regAddress,
+          qualification: "Student",
+          currentEnglishLevel: "All Levels",
+          courseId: order.courseId,
+          courseName: order.courseName,
+          batchId: validBatchId,
+          batchName: validBatchName,
+          feeAmount: order.expectedAmount,
+          paymentStatus: "Paid",
+          paymentMethod: "Razorpay",
+          paymentTxnId: razorpayPaymentId,
+          razorpayOrderId,
+          razorpayPaymentId
+        });
+      } else {
+        await updateRegistrationDb(existingReg.id, {
+          paymentStatus: "Paid",
+          paymentTxnId: razorpayPaymentId,
+          courseId: order.courseId,
+          courseName: order.courseName,
+          batchId: validBatchId,
+          batchName: validBatchName,
+          dob: regDob !== "2000-01-01" ? regDob : existingReg.dob,
+          gender: regGender !== "Not specified" ? regGender : existingReg.gender,
+          district: regDistrict !== "Not specified" ? regDistrict : existingReg.district,
+          state: regState !== "Not specified" ? regState : existingReg.state,
+          pincode: regPincode || existingReg.pincode,
+          address: regAddress || existingReg.address,
+          whatsapp: regWhatsapp || existingReg.whatsapp
+        });
       }
+    } catch (regErr) {
+      console.warn("[Razorpay Verify] Registration update error:", regErr);
+    }
+    try {
+      let existingUser = await getUserByEmailDb(order.studentEmail).catch(() => null);
+      if (!existingUser) {
+        const passwordHash = await bcrypt2.hash((order.studentPhone || "").slice(-6) || "student123", 10);
+        await createUserDb({
+          name: order.studentName,
+          email: order.studentEmail,
+          passwordHash,
+          role: "student",
+          phone: order.studentPhone,
+          batchIds: validBatchId ? [validBatchId] : [],
+          admissionId
+        });
+      } else if (validBatchId) {
+        const curBatchIds = existingUser.batchIds || [];
+        if (!curBatchIds.includes(validBatchId)) {
+          await updateUserDb(existingUser.id, { batchIds: [...curBatchIds, validBatchId] });
+        }
+      }
+    } catch (userErr) {
+      console.warn("[Razorpay Verify] Student account creation warning:", userErr);
     }
     let waConfirmationResult = null;
     try {
-      waConfirmationResult = await sendPaymentConfirmationWhatsApp(updatedOrder || order, newPayment);
+      waConfirmationResult = await sendPaymentConfirmationWhatsApp(updatedOrder || order, newPayment || { admissionId, paymentId: razorpayPaymentId });
       console.log(`[WhatsApp] Payment confirmation dispatch to ${order.studentPhone}:`, waConfirmationResult);
     } catch (waErr) {
       console.warn("[WhatsApp] Async confirmation error:", waErr);
@@ -7429,18 +7503,26 @@ app.post("/api/payments/razorpay/verify-order", async (req, res) => {
         courseId: order.courseId,
         courseName: order.courseName,
         amount: order.expectedAmount,
-        razorpayPaymentId: order.razorpayPaymentId,
-        razorpayOrderId: order.razorpayOrderId,
+        razorpayPaymentId,
+        razorpayOrderId,
         purchaseDate: (/* @__PURE__ */ new Date()).toISOString()
       });
     } catch (adminMailErr) {
       console.warn("[AdminNotification] Could not dispatch admin purchase email:", adminMailErr);
     }
-    res.json({
+    return res.json({
       success: true,
       message: "Payment successfully verified! Your course access is activated.",
       order: updatedOrder || order,
-      payment: newPayment,
+      payment: newPayment || {
+        id: `pay-${Date.now()}`,
+        orderId: order.id,
+        paymentId: razorpayPaymentId,
+        amount: order.expectedAmount,
+        currency: order.currency,
+        status: "Paid",
+        admissionId
+      },
       admissionId,
       whatsappConfirmation: waConfirmationResult,
       meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,

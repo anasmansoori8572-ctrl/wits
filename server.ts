@@ -3532,31 +3532,53 @@ www.witslingo.com`;
       }
 
       // 1. Mark Order as Paid in Neon
-      const updatedOrder = await updateOrderStatusDb(order.id, "paid", razorpayPaymentId, razorpayOrderId);
+      let updatedOrder: any = null;
+      try {
+        updatedOrder = await updateOrderStatusDb(order.id, "paid", razorpayPaymentId, razorpayOrderId);
+      } catch (orderUpdateErr) {
+        console.warn("[Razorpay Verify] updateOrderStatusDb warning:", orderUpdateErr);
+      }
 
-      // 2. Record Payment in Neon
-      const admissionId = `WL-2026-${Date.now().toString().slice(-4)}`;
-      const newPayment = await createPaymentDb({
-        id: `pay-${Date.now()}`,
-        orderId: order.id,
-        paymentId: razorpayPaymentId,
-        signature: razorpaySignature,
-        amount: order.expectedAmount,
-        currency: order.currency,
-        status: "Paid",
-        studentName: order.studentName,
-        studentEmail: order.studentEmail,
-        studentPhone: order.studentPhone,
-        courseId: order.courseId,
-        courseName: order.courseName,
-        batchId: order.batchId || "batch-spoken-oct-2026",
-        batchName: order.batchName || "Assigned Batch",
-        admissionId,
-        method: "Razorpay",
-        source: "razorpay_verify"
-      });
+      // 2. Resolve Valid Batch from Neon (or null)
+      let validBatchId: string | null = null;
+      let validBatchName: string = order.batchName || "Assigned Batch";
+      try {
+        const allBatches = await getBatchesDb().catch(() => []);
+        const matchedBatch = allBatches.find(b => b.id === order.batchId || b.courseId === order.courseId) || allBatches[0];
+        if (matchedBatch) {
+          validBatchId = matchedBatch.id;
+          validBatchName = matchedBatch.name;
+        }
+      } catch {}
 
-      // 3. Activate Course Enrolment in Neon
+      // 3. Record Payment in Neon
+      const admissionId = `WL-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+      let newPayment: any = null;
+      try {
+        newPayment = await createPaymentDb({
+          id: `pay-${Date.now()}`,
+          orderId: order.id,
+          paymentId: razorpayPaymentId,
+          signature: razorpaySignature,
+          amount: order.expectedAmount,
+          currency: order.currency,
+          status: "Paid",
+          studentName: order.studentName,
+          studentEmail: order.studentEmail,
+          studentPhone: order.studentPhone,
+          courseId: order.courseId,
+          courseName: order.courseName,
+          batchId: validBatchId,
+          batchName: validBatchName,
+          admissionId,
+          method: "Razorpay",
+          source: "razorpay_verify"
+        });
+      } catch (payDbErr) {
+        console.warn("[Razorpay Verify] createPaymentDb warning:", payDbErr);
+      }
+
+      // 4. Activate Course Enrolment in Neon
       const studentDetails = req.body.studentDetails || {};
       const regName = (studentDetails.name || order.studentName || "").trim();
       const regGender = studentDetails.gender || order.gender || "Not specified";
@@ -3570,85 +3592,93 @@ www.witslingo.com`;
       const regPincode = studentDetails.pincode || order.pincode || "";
       const regAddress = studentDetails.address || order.address || (regDistrict !== "Not specified" ? `${regDistrict}, ${regState}, ${regCountry}${regPincode ? ' - ' + regPincode : ''}` : "Online Enrolment");
 
-      const allRegs = await getRegistrationsDb();
-      let existingReg = allRegs.find(r => r.phone === order.studentPhone || r.whatsapp === order.studentPhone || (order.whatsapp && (r.phone === order.whatsapp || r.whatsapp === order.whatsapp)));
-      if (!existingReg) {
-        existingReg = await createRegistrationDb({
-          id: `reg-${Date.now()}`,
-          admissionId,
-          name: regName || order.studentName,
-          fatherName: "Parent/Guardian",
-          dob: regDob,
-          gender: regGender,
-          country: regCountry,
-          district: regDistrict,
-          state: regState,
-          pincode: regPincode,
-          phone: regPhone,
-          whatsapp: regWhatsapp,
-          email: regEmail,
-          address: regAddress,
-          qualification: "Student",
-          currentEnglishLevel: "All Levels",
-          courseId: order.courseId,
-          courseName: order.courseName,
-          batchId: order.batchId || "batch-spoken-oct-2026",
-          batchName: order.batchName || "Active Batch",
-          feeAmount: order.expectedAmount,
-          paymentStatus: "Paid",
-          paymentMethod: "Razorpay",
-          paymentTxnId: razorpayPaymentId,
-          razorpayOrderId,
-          razorpayPaymentId
-        });
-      } else {
-        await updateRegistrationDb(existingReg.id, {
-          paymentStatus: "Paid",
-          paymentTxnId: razorpayPaymentId,
-          razorpayPaymentId,
-          courseId: order.courseId,
-          courseName: order.courseName,
-          dob: regDob !== "2000-01-01" ? regDob : existingReg.dob,
-          gender: regGender !== "Not specified" ? regGender : existingReg.gender,
-          district: regDistrict !== "Not specified" ? regDistrict : existingReg.district,
-          state: regState !== "Not specified" ? regState : existingReg.state,
-          pincode: regPincode || existingReg.pincode,
-          address: regAddress || existingReg.address,
-          whatsapp: regWhatsapp || existingReg.whatsapp
-        });
-      }
-
-      // 4. Ensure Student Login Account in Neon
-      let existingUser = await getUserByEmailDb(order.studentEmail);
-      if (!existingUser) {
-        const passwordHash = await bcrypt.hash((order.studentPhone || "").slice(-6) || "student123", 10);
-        await createUserDb({
-          name: order.studentName,
-          email: order.studentEmail,
-          passwordHash,
-          role: "student",
-          phone: order.studentPhone,
-          batchIds: [order.batchId || "batch-spoken-oct-2026"],
-          admissionId
-        });
-      } else {
-        const curBatchIds = existingUser.batchIds || [];
-        const targetBatch = order.batchId || "batch-spoken-oct-2026";
-        if (!curBatchIds.includes(targetBatch)) {
-          await updateUserDb(existingUser.id, { batchIds: [...curBatchIds, targetBatch] });
+      try {
+        const allRegs = await getRegistrationsDb().catch(() => []);
+        let existingReg = allRegs.find(r => r.phone === order.studentPhone || r.whatsapp === order.studentPhone || (order.whatsapp && (r.phone === order.whatsapp || r.whatsapp === order.whatsapp)));
+        if (!existingReg) {
+          await createRegistrationDb({
+            id: `reg-${Date.now()}`,
+            admissionId,
+            name: regName || order.studentName,
+            fatherName: "Parent/Guardian",
+            dob: regDob,
+            gender: regGender,
+            country: regCountry,
+            district: regDistrict,
+            state: regState,
+            pincode: regPincode,
+            phone: regPhone,
+            whatsapp: regWhatsapp,
+            email: regEmail,
+            address: regAddress,
+            qualification: "Student",
+            currentEnglishLevel: "All Levels",
+            courseId: order.courseId,
+            courseName: order.courseName,
+            batchId: validBatchId,
+            batchName: validBatchName,
+            feeAmount: order.expectedAmount,
+            paymentStatus: "Paid",
+            paymentMethod: "Razorpay",
+            paymentTxnId: razorpayPaymentId,
+            razorpayOrderId,
+            razorpayPaymentId
+          });
+        } else {
+          await updateRegistrationDb(existingReg.id, {
+            paymentStatus: "Paid",
+            paymentTxnId: razorpayPaymentId,
+            courseId: order.courseId,
+            courseName: order.courseName,
+            batchId: validBatchId,
+            batchName: validBatchName,
+            dob: regDob !== "2000-01-01" ? regDob : existingReg.dob,
+            gender: regGender !== "Not specified" ? regGender : existingReg.gender,
+            district: regDistrict !== "Not specified" ? regDistrict : existingReg.district,
+            state: regState !== "Not specified" ? regState : existingReg.state,
+            pincode: regPincode || existingReg.pincode,
+            address: regAddress || existingReg.address,
+            whatsapp: regWhatsapp || existingReg.whatsapp
+          });
         }
+      } catch (regErr) {
+        console.warn("[Razorpay Verify] Registration update error:", regErr);
       }
 
-      // 5. Send Automatic WhatsApp Confirmation (Awaited for Vercel serverless execution)
+      // 5. Ensure Student Login Account in Neon
+      try {
+        let existingUser = await getUserByEmailDb(order.studentEmail).catch(() => null);
+        if (!existingUser) {
+          const passwordHash = await bcrypt.hash((order.studentPhone || "").slice(-6) || "student123", 10);
+          await createUserDb({
+            name: order.studentName,
+            email: order.studentEmail,
+            passwordHash,
+            role: "student",
+            phone: order.studentPhone,
+            batchIds: validBatchId ? [validBatchId] : [],
+            admissionId
+          });
+        } else if (validBatchId) {
+          const curBatchIds = existingUser.batchIds || [];
+          if (!curBatchIds.includes(validBatchId)) {
+            await updateUserDb(existingUser.id, { batchIds: [...curBatchIds, validBatchId] });
+          }
+        }
+      } catch (userErr) {
+        console.warn("[Razorpay Verify] Student account creation warning:", userErr);
+      }
+
+      // 6. Send Automatic WhatsApp Confirmation
       let waConfirmationResult: any = null;
       try {
-        waConfirmationResult = await sendPaymentConfirmationWhatsApp((updatedOrder || order) as any, newPayment as any);
+        waConfirmationResult = await sendPaymentConfirmationWhatsApp((updatedOrder || order) as any, (newPayment || { admissionId, paymentId: razorpayPaymentId }) as any);
         console.log(`[WhatsApp] Payment confirmation dispatch to ${order.studentPhone}:`, waConfirmationResult);
       } catch (waErr) {
         console.warn("[WhatsApp] Async confirmation error:", waErr);
       }
 
-      // 6. Send Automatic Admin Email Notification
+      // 7. Send Automatic Admin Email Notification
       try {
         await adminNotificationService.notifyAdminOnPurchase({
           orderId: order.id,
@@ -3658,19 +3688,27 @@ www.witslingo.com`;
           courseId: order.courseId,
           courseName: order.courseName,
           amount: order.expectedAmount,
-          razorpayPaymentId: order.razorpayPaymentId,
-          razorpayOrderId: order.razorpayOrderId,
+          razorpayPaymentId,
+          razorpayOrderId,
           purchaseDate: new Date().toISOString()
         });
       } catch (adminMailErr) {
         console.warn("[AdminNotification] Could not dispatch admin purchase email:", adminMailErr);
       }
 
-      res.json({
+      return res.json({
         success: true,
         message: "Payment successfully verified! Your course access is activated.",
         order: updatedOrder || order,
-        payment: newPayment,
+        payment: newPayment || {
+          id: `pay-${Date.now()}`,
+          orderId: order.id,
+          paymentId: razorpayPaymentId,
+          amount: order.expectedAmount,
+          currency: order.currency,
+          status: "Paid",
+          admissionId
+        },
         admissionId,
         whatsappConfirmation: waConfirmationResult,
         meetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK,

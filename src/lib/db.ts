@@ -2447,6 +2447,28 @@ export async function createOrderDb(data: Partial<DbOrderRecord>): Promise<DbOrd
   const sql = getDb();
   const id = data.id || `ord-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
+  // Safe Foreign Key resolution for course_id
+  let course_id = (data.courseId && data.courseId !== "all") ? data.courseId : null;
+  if (course_id) {
+    try {
+      const courseRows = await sql`SELECT id FROM courses WHERE id = ${course_id} LIMIT 1;`;
+      if (!courseRows || courseRows.length === 0) course_id = null;
+    } catch {
+      course_id = null;
+    }
+  }
+
+  // Safe Foreign Key resolution for batch_id
+  let batch_id = (data.batchId && data.batchId !== "all") ? data.batchId : null;
+  if (batch_id) {
+    try {
+      const batchRows = await sql`SELECT id FROM batches WHERE id = ${batch_id} LIMIT 1;`;
+      if (!batchRows || batchRows.length === 0) batch_id = null;
+    } catch {
+      batch_id = null;
+    }
+  }
+
   const rows = await sql`
     INSERT INTO orders (
       id, student_id, student_name, student_phone, student_email,
@@ -2577,7 +2599,40 @@ export async function createPaymentDb(data: Partial<DbPaymentRecord>): Promise<D
   const sql = getDb();
   const id = data.id || `pay-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const paymentId = data.paymentId || data.razorpayPaymentId || `pay_manual_${Date.now()}`;
-  const rawPayload = data.rawPayload ? JSON.stringify(data.rawPayload) : null;
+  const rawPayload = JSON.stringify(data.rawPayload || {});
+
+  // Safe Foreign Key resolution for course_id
+  let course_id = (data.courseId && data.courseId !== "all") ? data.courseId : null;
+  if (course_id) {
+    try {
+      const courseRows = await sql`SELECT id FROM courses WHERE id = ${course_id} LIMIT 1;`;
+      if (!courseRows || courseRows.length === 0) course_id = null;
+    } catch {
+      course_id = null;
+    }
+  }
+
+  // Safe Foreign Key resolution for batch_id
+  let batch_id = (data.batchId && data.batchId !== "all") ? data.batchId : null;
+  if (batch_id) {
+    try {
+      const batchRows = await sql`SELECT id FROM batches WHERE id = ${batch_id} LIMIT 1;`;
+      if (!batchRows || batchRows.length === 0) batch_id = null;
+    } catch {
+      batch_id = null;
+    }
+  }
+
+  // Safe Foreign Key resolution for order_id
+  let order_id = data.orderId || null;
+  if (order_id) {
+    try {
+      const orderRows = await sql`SELECT id FROM orders WHERE id = ${order_id} LIMIT 1;`;
+      if (!orderRows || orderRows.length === 0) order_id = null;
+    } catch {
+      order_id = null;
+    }
+  }
 
   const rows = await sql`
     INSERT INTO payments (
@@ -2586,13 +2641,13 @@ export async function createPaymentDb(data: Partial<DbPaymentRecord>): Promise<D
       student_phone, course_id, course_name, batch_id, batch_name,
       admission_id, method, source, raw_payload, verified_at
     ) VALUES (
-      ${id}, ${data.orderId || null}, ${paymentId}, ${data.razorpayPaymentId || null},
+      ${id}, ${order_id}, ${paymentId}, ${data.razorpayPaymentId || null},
       ${data.razorpayOrderId || null}, ${data.signature || null}, ${Number(data.amount || 0)},
       ${data.currency || 'INR'}, ${data.status || 'Paid'}, ${data.studentName || null},
-      ${data.studentEmail || null}, ${data.studentPhone || null}, ${data.courseId || null},
-      ${data.courseName || null}, ${data.batchId || null}, ${data.batchName || null},
+      ${data.studentEmail || null}, ${data.studentPhone || null}, ${course_id},
+      ${data.courseName || null}, ${batch_id}, ${data.batchName || null},
       ${data.admissionId || null}, ${data.method || 'online'}, ${data.source || 'razorpay_verify'},
-      ${rawPayload}::jsonb, ${data.verifiedAt ? new Date(data.verifiedAt).toISOString() : new Date().toISOString()}
+      ${rawPayload}::jsonb, CURRENT_TIMESTAMP
     )
     ON CONFLICT (payment_id) DO UPDATE SET
       status = EXCLUDED.status,
